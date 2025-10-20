@@ -1,4 +1,3 @@
-// src/services/database.js
 import { 
   collection, 
   addDoc, 
@@ -12,7 +11,7 @@ import {
   deleteDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db } from './firebase'; // Make sure this imports db, not firestore
 
 // ========== JOB FUNCTIONS ==========
 
@@ -22,7 +21,7 @@ export const createJob = async (jobData) => {
       ...jobData,
       status: 'open',
       createdAt: serverTimestamp(),
-      applications: 0
+      applications: []
     });
     return { success: true, jobId: docRef.id };
   } catch (error) {
@@ -125,14 +124,11 @@ export const createApplication = async (applicationData) => {
       appliedAt: serverTimestamp()
     });
     
-    // Increment application count on job
+    // Update job applications array
     const jobRef = doc(db, 'jobs', applicationData.jobId);
-    const jobSnap = await getDoc(jobRef);
-    if (jobSnap.exists()) {
-      await updateDoc(jobRef, {
-        applications: (jobSnap.data().applications || 0) + 1
-      });
-    }
+    await updateDoc(jobRef, {
+      applications: arrayUnion(applicationData.workerId)
+    });
     
     return { success: true, applicationId: docRef.id };
   } catch (error) {
@@ -214,6 +210,42 @@ export const fetchUserProfile = async (userId) => {
     }
   } catch (error) {
     console.error('Fetch Profile Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const updateUserProfile = async (userId, profileData) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      ...profileData,
+      updatedAt: serverTimestamp()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Update Profile Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ========== HELPER FUNCTIONS ==========
+
+export const checkIfApplied = async (jobId, workerId) => {
+  try {
+    const q = query(
+      collection(db, 'applications'),
+      where('jobId', '==', jobId),
+      where('workerId', '==', workerId)
+    );
+    
+    const snapshot = await getDocs(q);
+    return { 
+      success: true, 
+      hasApplied: !snapshot.empty,
+      applicationId: snapshot.empty ? null : snapshot.docs[0].id 
+    };
+  } catch (error) {
+    console.error('Check Application Error:', error);
     return { success: false, error: error.message };
   }
 };

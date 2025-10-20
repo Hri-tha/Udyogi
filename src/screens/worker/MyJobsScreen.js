@@ -8,19 +8,40 @@ import {
   Alert,
   TouchableOpacity,
 } from 'react-native';
-import { JobContext } from '../../context/JobContext';
-import { AuthContext } from '../../context/AuthContext';
+import { useJob } from '../../context/JobContext';
+import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
 
 const MyJobsScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [myApplications, setMyApplications] = useState([]);
-  const { jobs, fetchJobs } = useContext(JobContext);
-  const { user } = useContext(AuthContext);
+  const { jobs, fetchJobs } = useJob();
+  const { user, userProfile, logout } = useAuth();
 
   useEffect(() => {
     loadApplications();
   }, [jobs]);
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Logout', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logout();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to logout');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const loadApplications = async () => {
     try {
@@ -51,8 +72,19 @@ const MyJobsScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>My Applications</Text>
+        <View>
+          <Text style={styles.welcomeText}>My Applications</Text>
+          <Text style={styles.nameText}>{userProfile?.name || 'Worker'}</Text>
+        </View>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.contentHeader}>
+        <Text style={styles.title}>Job Applications</Text>
         <Text style={styles.subtitle}>
           {myApplications.length} job applications
         </Text>
@@ -76,7 +108,7 @@ const MyJobsScreen = ({ navigation }) => {
             <TouchableOpacity
               key={job.id}
               style={styles.applicationCard}
-              onPress={() => navigation.navigate('JobDetail', { jobId: job.id })}
+              onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
             >
               <View style={styles.applicationHeader}>
                 <Text style={styles.jobTitle}>{job.title}</Text>
@@ -105,18 +137,47 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 20,
     paddingTop: 60,
     backgroundColor: colors.primary,
   },
+  welcomeText: {
+    fontSize: 16,
+    color: colors.white,
+    opacity: 0.9,
+  },
+  nameText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.white,
+    marginTop: 2,
+  },
+  logoutButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  logoutButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  contentHeader: {
+    padding: 20,
+    backgroundColor: colors.primary,
+  },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.white,
     marginBottom: 5,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.white,
     opacity: 0.9,
   },
