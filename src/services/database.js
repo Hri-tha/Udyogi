@@ -9,9 +9,10 @@ import {
   orderBy,
   updateDoc,
   deleteDoc,
-  serverTimestamp 
+  serverTimestamp,
+  arrayUnion
 } from 'firebase/firestore';
-import { db } from './firebase'; // Make sure this imports db, not firestore
+import { db } from './firebase';
 
 // ========== JOB FUNCTIONS ==========
 
@@ -38,13 +39,18 @@ export const fetchJobs = async (filters = {}) => {
       q = query(q, where('location', '==', filters.location));
     }
     
-    q = query(q, orderBy('createdAt', 'desc'));
-    
     const snapshot = await getDocs(q);
     const jobs = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Sort in memory instead of using orderBy to avoid index requirement
+    jobs.sort((a, b) => {
+      const aTime = a.createdAt?.toMillis() || 0;
+      const bTime = b.createdAt?.toMillis() || 0;
+      return bTime - aTime;
+    });
     
     return { success: true, jobs };
   } catch (error) {
@@ -74,10 +80,10 @@ export const fetchJobById = async (jobId) => {
 
 export const fetchEmployerJobs = async (employerId) => {
   try {
+    // Simple query without orderBy to avoid index requirement
     const q = query(
       collection(db, 'jobs'),
-      where('employerId', '==', employerId),
-      orderBy('createdAt', 'desc')
+      where('employerId', '==', employerId)
     );
     
     const snapshot = await getDocs(q);
@@ -85,6 +91,13 @@ export const fetchEmployerJobs = async (employerId) => {
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Sort in memory instead
+    jobs.sort((a, b) => {
+      const aTime = a.createdAt?.toMillis() || 0;
+      const bTime = b.createdAt?.toMillis() || 0;
+      return bTime - aTime;
+    });
     
     return { success: true, jobs };
   } catch (error) {
@@ -141,8 +154,7 @@ export const fetchWorkerApplications = async (workerId) => {
   try {
     const q = query(
       collection(db, 'applications'),
-      where('workerId', '==', workerId),
-      orderBy('appliedAt', 'desc')
+      where('workerId', '==', workerId)
     );
     
     const snapshot = await getDocs(q);
@@ -150,6 +162,13 @@ export const fetchWorkerApplications = async (workerId) => {
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Sort in memory
+    applications.sort((a, b) => {
+      const aTime = a.appliedAt?.toMillis() || 0;
+      const bTime = b.appliedAt?.toMillis() || 0;
+      return bTime - aTime;
+    });
     
     return { success: true, applications };
   } catch (error) {
@@ -162,8 +181,7 @@ export const fetchJobApplications = async (jobId) => {
   try {
     const q = query(
       collection(db, 'applications'),
-      where('jobId', '==', jobId),
-      orderBy('appliedAt', 'desc')
+      where('jobId', '==', jobId)
     );
     
     const snapshot = await getDocs(q);
@@ -171,6 +189,13 @@ export const fetchJobApplications = async (jobId) => {
       id: doc.id,
       ...doc.data()
     }));
+    
+    // Sort in memory
+    applications.sort((a, b) => {
+      const aTime = a.appliedAt?.toMillis() || 0;
+      const bTime = b.appliedAt?.toMillis() || 0;
+      return bTime - aTime;
+    });
     
     return { success: true, applications };
   } catch (error) {

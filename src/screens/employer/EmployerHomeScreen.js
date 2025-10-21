@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { signOut } from '../../services/auth';
@@ -39,11 +40,30 @@ export default function EmployerHomeScreen({ navigation }) {
   };
 
   const handleLogout = async () => {
-    await signOut();
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await signOut();
+            if (!result.success) {
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const activeJobs = jobs.filter(j => j.status === 'open').length;
-  const totalApplications = jobs.reduce((sum, j) => sum + (j.applications || 0), 0);
+  const totalApplications = jobs.reduce((sum, j) => sum + (j.applications?.length || 0), 0);
 
   return (
     <View style={styles.container}>
@@ -56,10 +76,11 @@ export default function EmployerHomeScreen({ navigation }) {
           </Text>
           <Text style={styles.subGreeting}>Manage your workforce</Text>
         </View>
-        <TouchableOpacity onPress={handleLogout}>
-          <View style={styles.profileIcon}>
-            <Text style={styles.profileIconText}>👤</Text>
-          </View>
+        <TouchableOpacity 
+          style={styles.logoutButton}
+          onPress={handleLogout}
+        >
+          <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
 
@@ -110,7 +131,11 @@ export default function EmployerHomeScreen({ navigation }) {
           </View>
         ) : (
           jobs.map((job) => (
-            <View key={job.id} style={styles.jobCard}>
+            <TouchableOpacity 
+              key={job.id} 
+              style={styles.jobCard}
+              onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
+            >
               <View style={styles.jobHeader}>
                 <Text style={styles.jobTitle}>{job.title}</Text>
                 <View style={[
@@ -127,10 +152,10 @@ export default function EmployerHomeScreen({ navigation }) {
               <View style={styles.jobFooter}>
                 <Text style={styles.jobDetail}>₹{job.rate}/hr • {job.hours}hrs</Text>
                 <Text style={styles.jobApplications}>
-                  {job.applications || 0} applications
+                  {job.applications?.length || 0} applications
                 </Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -163,16 +188,16 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
-  profileIcon: {
-    width: 40,
-    height: 40,
+  logoutButton: {
+    backgroundColor: '#ff3b30',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#007AFF',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  profileIconText: {
-    fontSize: 20,
+  logoutButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   scrollContent: {
     flex: 1,
