@@ -10,6 +10,12 @@ import {
   where
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { 
+  createApplication, 
+  createNotification,
+  fetchJobApplications,
+  updateApplicationStatus 
+} from '../services/database';
 
 const JobContext = createContext();
 
@@ -59,22 +65,106 @@ export const JobProvider = ({ children }) => {
     }
   };
 
-  const applyForJob = async (jobId, userId) => {
+  const applyForJob = async (jobId, userId, userProfile) => {
     try {
-      const jobRef = doc(db, 'jobs', jobId);
-      await updateDoc(jobRef, {
-        applications: arrayUnion(userId)
-      });
-      // Refresh jobs after applying (maintain current location filter)
-      if (currentLocation) {
-        await fetchJobs(currentLocation);
+      // Find the job to get employer details
+      const job = jobs.find(j => j.id === jobId);
+      if (!job) {
+        throw new Error('Job not found');
+      }
+
+      // Create application
+      const applicationData = {
+        jobId,
+        workerId: userId,
+        workerName: userProfile?.name || 'Worker',
+        workerPhone: userProfile?.phoneNumber || '',
+        status: 'pending',
+        jobTitle: job.title,
+        employerId: job.employerId,
+        companyName: job.companyName || job.company
+      };
+
+      const applicationResult = await createApplication(applicationData);
+      
+      if (applicationResult.success) {
+        // Create notification for employer
+        await createNotification({
+          userId: job.employerId,
+          type: 'new_application',
+          title: 'New Job Application',
+          message: `${userProfile?.name || 'A worker'} applied for your job: ${job.title}`,
+          data: {
+            jobId,
+            applicationId: applicationResult.applicationId,
+            workerId: userId,
+            workerName: userProfile?.name || 'Worker'
+          }
+        });
+
+        // Update local jobs state to reflect the application
+        const updatedJobs = jobs.map(j => {
+          if (j.id === jobId) {
+            return {
+              ...j,
+              applications: [...(j.applications || []), userId]
+            };
+          }
+          return j;
+        });
+        setJobs(updatedJobs);
+
+        return { success: true };
       } else {
-        await fetchJobs();
+        throw new Error('Failed to create application');
       }
     } catch (error) {
       console.error('Error applying for job:', error);
-      throw new Error('Failed to apply for job');
+      throw new Error('Failed to apply for job: ' + error.message);
     }
+  };
+
+  const getJobApplications = async (jobId) => {
+    try {
+      const result = await fetchJobApplications(jobId);
+      return result;
+    } catch (error) {
+      console.error('Error fetching job applications:', error);
+      throw new Error('Failed to fetch job applications: ' + error.message);
+    }
+  };
+
+  const respondToApplication = async (applicationId, status, employerId, workerId, jobTitle) => {
+    try {
+      const result = await updateApplicationStatus(applicationId, status);
+      
+      if (result.success) {
+        // Create notification for worker
+        await createNotification({
+          userId: workerId,
+          type: 'application_update',
+          title: `Application ${status}`,
+          message: `Your application for "${jobTitle}" has been ${status}`,
+          data: {
+            applicationId,
+            status,
+            employerId
+          }
+        });
+
+        return { success: true };
+      } else {
+        throw new Error('Failed to update application');
+      }
+    } catch (error) {
+      console.error('Error responding to application:', error);
+      throw new Error('Failed to respond to application: ' + error.message);
+    }
+  };
+
+  const checkIfApplied = (jobId, userId) => {
+    const job = jobs.find(j => j.id === jobId);
+    return job?.applications?.includes(userId) || false;
   };
 
   const value = {
@@ -84,6 +174,9 @@ export const JobProvider = ({ children }) => {
     fetchJobs,
     fetchJobsByUserLocation,
     applyForJob,
+    getJobApplications,
+    respondToApplication,
+    checkIfApplied,
     setCurrentLocation,
   };
 

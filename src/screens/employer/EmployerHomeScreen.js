@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { signOut } from '../../services/auth';
 import { fetchEmployerJobs } from '../../services/database';
+import { colors } from '../../constants/colors';
 
 export default function EmployerHomeScreen({ navigation }) {
   const { user, userProfile } = useAuth();
@@ -64,6 +65,44 @@ export default function EmployerHomeScreen({ navigation }) {
 
   const activeJobs = jobs.filter(j => j.status === 'open').length;
   const totalApplications = jobs.reduce((sum, j) => sum + (j.applications?.length || 0), 0);
+
+  const handleViewApplications = (jobId, jobTitle) => {
+    navigation.navigate('Applications', { 
+      jobId: jobId,
+      jobTitle: jobTitle 
+    });
+  };
+
+  const handleJobDetails = (jobId) => {
+    // You can navigate to job details or show job details modal
+    Alert.alert(
+      'Job Options',
+      'What would you like to do?',
+      [
+        {
+          text: 'View Applications',
+          onPress: () => {
+            const job = jobs.find(j => j.id === jobId);
+            navigation.navigate('Applications', { 
+              jobId: jobId,
+              jobTitle: job.title 
+            });
+          }
+        },
+        {
+          text: 'View Job Details',
+          onPress: () => {
+            // Navigate to job details screen if you have one
+            Alert.alert('Job Details', 'This would show job details');
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -120,7 +159,7 @@ export default function EmployerHomeScreen({ navigation }) {
         </View>
 
         {loading ? (
-          <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} />
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 50 }} />
         ) : jobs.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateIcon}>📋</Text>
@@ -131,31 +170,55 @@ export default function EmployerHomeScreen({ navigation }) {
           </View>
         ) : (
           jobs.map((job) => (
-            <TouchableOpacity 
-              key={job.id} 
-              style={styles.jobCard}
-              onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
-            >
-              <View style={styles.jobHeader}>
-                <Text style={styles.jobTitle}>{job.title}</Text>
-                <View style={[
-                  styles.statusBadge,
-                  job.status === 'open' && styles.statusOpen,
-                  job.status === 'closed' && styles.statusClosed
-                ]}>
-                  <Text style={styles.statusText}>
-                    {job.status === 'open' ? 'Open' : 'Closed'}
+            <View key={job.id} style={styles.jobCard}>
+              <TouchableOpacity 
+                onPress={() => handleJobDetails(job.id)}
+                style={styles.jobContent}
+              >
+                <View style={styles.jobHeader}>
+                  <Text style={styles.jobTitle}>{job.title}</Text>
+                  <View style={[
+                    styles.statusBadge,
+                    job.status === 'open' && styles.statusOpen,
+                    job.status === 'closed' && styles.statusClosed
+                  ]}>
+                    <Text style={styles.statusText}>
+                      {job.status === 'open' ? 'Open' : 'Closed'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.jobLocation}>📍 {job.location}</Text>
+                <Text style={styles.jobDescription} numberOfLines={2}>
+                  {job.description}
+                </Text>
+                <View style={styles.jobFooter}>
+                  <Text style={styles.jobDetail}>₹{job.rate}/hr • {job.hours}hrs</Text>
+                  <Text style={[
+                    styles.jobApplications,
+                    job.applications?.length > 0 && styles.hasApplications
+                  ]}>
+                    {job.applications?.length || 0} applications
                   </Text>
                 </View>
-              </View>
-              <Text style={styles.jobLocation}>📍 {job.location}</Text>
-              <View style={styles.jobFooter}>
-                <Text style={styles.jobDetail}>₹{job.rate}/hr • {job.hours}hrs</Text>
-                <Text style={styles.jobApplications}>
-                  {job.applications?.length || 0} applications
+              </TouchableOpacity>
+
+              {/* Applications Button */}
+              <TouchableOpacity
+                style={[
+                  styles.viewApplicationsButton,
+                  (!job.applications || job.applications.length === 0) && styles.disabledButton
+                ]}
+                onPress={() => handleViewApplications(job.id, job.title)}
+                disabled={!job.applications || job.applications.length === 0}
+              >
+                <Text style={styles.viewApplicationsText}>
+                  {job.applications?.length > 0 
+                    ? `View Applications (${job.applications.length})` 
+                    : 'No Applications'
+                  }
                 </Text>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
           ))
         )}
       </ScrollView>
@@ -166,7 +229,7 @@ export default function EmployerHomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
   },
   topBar: {
     flexDirection: 'row',
@@ -174,28 +237,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 50,
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.border,
   },
   greeting: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
   },
   subGreeting: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   logoutButton: {
-    backgroundColor: '#ff3b30',
+    backgroundColor: colors.error,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
   logoutButtonText: {
-    color: '#fff',
+    color: colors.white,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -205,7 +268,7 @@ const styles = StyleSheet.create({
   },
   statsCard: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     padding: 20,
     borderRadius: 15,
     marginBottom: 20,
@@ -222,15 +285,15 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: colors.primary,
   },
   statLabel: {
     fontSize: 12,
-    color: '#666',
+    color: colors.textSecondary,
     marginTop: 4,
   },
   postJobButton: {
-    backgroundColor: '#28a745',
+    backgroundColor: colors.success,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -242,7 +305,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   postJobButtonText: {
-    color: '#fff',
+    color: colors.white,
     fontSize: 18,
     fontWeight: '600',
   },
@@ -255,14 +318,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
   },
   jobCount: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   jobCard: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     padding: 18,
     borderRadius: 12,
     marginBottom: 15,
@@ -272,17 +335,21 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  jobContent: {
+    marginBottom: 10,
+  },
   jobHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 8,
   },
   jobTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
     flex: 1,
+    marginRight: 10,
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -290,10 +357,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusOpen: {
-    backgroundColor: '#d4edda',
+    backgroundColor: colors.success + '20',
   },
   statusClosed: {
-    backgroundColor: '#f8d7da',
+    backgroundColor: colors.error + '20',
   },
   statusText: {
     fontSize: 12,
@@ -301,26 +368,53 @@ const styles = StyleSheet.create({
   },
   jobLocation: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  jobDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
     marginBottom: 10,
+    lineHeight: 18,
   },
   jobFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   jobDetail: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
   jobApplications: {
     fontSize: 14,
-    color: '#007AFF',
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  hasApplications: {
+    color: colors.primary,
+    fontWeight: 'bold',
+  },
+  viewApplicationsButton: {
+    backgroundColor: colors.primary,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  disabledButton: {
+    backgroundColor: colors.textSecondary,
+  },
+  viewApplicationsText: {
+    color: colors.white,
+    fontSize: 14,
     fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',
     padding: 40,
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     borderRadius: 12,
     marginTop: 20,
   },
@@ -331,12 +425,12 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text,
     marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });

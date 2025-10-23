@@ -18,6 +18,7 @@ const JobDetailsScreen = ({ route, navigation }) => {
   const [applying, setApplying] = useState(false);
 
   const job = jobs.find(j => j.id === jobId);
+  const hasApplied = job?.applications?.includes(user?.uid);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -41,13 +42,24 @@ const JobDetailsScreen = ({ route, navigation }) => {
   };
 
   const handleApply = async () => {
+    if (hasApplied) {
+      Alert.alert('Already Applied', 'You have already applied for this job.');
+      return;
+    }
+
+    if (!userProfile?.name || !userProfile?.phoneNumber) {
+      Alert.alert('Profile Incomplete', 'Please complete your profile before applying for jobs.');
+      navigation.navigate('WorkerProfile');
+      return;
+    }
+
     setApplying(true);
     try {
-      await applyForJob(jobId, user.uid);
-      Alert.alert('Success', 'Application submitted successfully!');
+      await applyForJob(jobId, user.uid, userProfile);
+      Alert.alert('Success', 'Application submitted successfully! The employer will be notified.');
       navigation.goBack();
     } catch (error) {
-      Alert.alert('Error', 'Failed to apply for job');
+      Alert.alert('Error', error.message || 'Failed to apply for job');
     }
     setApplying(false);
   };
@@ -87,8 +99,11 @@ const JobDetailsScreen = ({ route, navigation }) => {
       <ScrollView style={styles.scrollView}>
         <View style={styles.jobHeader}>
           <Text style={styles.title}>{job.title}</Text>
-          <Text style={styles.company}>{job.company}</Text>
-          <Text style={styles.salary}>₹{job.salary} / month</Text>
+          <Text style={styles.company}>{job.companyName || job.company}</Text>
+          <Text style={styles.salary}>₹{job.rate || job.salary} {job.rate ? '/hour' : '/month'}</Text>
+          {job.hours && (
+            <Text style={styles.totalSalary}>Total: ₹{(job.rate || job.salary) * job.hours}</Text>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -101,25 +116,45 @@ const JobDetailsScreen = ({ route, navigation }) => {
             <Text style={styles.detailLabel}>Location</Text>
             <Text style={styles.detailValue}>{job.location}</Text>
           </View>
+          {job.jobType && (
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Job Type</Text>
+              <Text style={styles.detailValue}>{job.jobType}</Text>
+            </View>
+          )}
+          {job.experienceLevel && (
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Experience</Text>
+              <Text style={styles.detailValue}>{job.experienceLevel}</Text>
+            </View>
+          )}
           <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Job Type</Text>
-            <Text style={styles.detailValue}>{job.jobType}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Experience</Text>
-            <Text style={styles.detailValue}>{job.experienceLevel}</Text>
+            <Text style={styles.detailLabel}>Contact</Text>
+            <Text style={styles.detailValue}>{job.employerPhone}</Text>
           </View>
         </View>
 
         <TouchableOpacity
-          style={styles.applyButton}
+          style={[
+            styles.applyButton,
+            (hasApplied || applying) && styles.disabledButton
+          ]}
           onPress={handleApply}
-          disabled={applying}
+          disabled={applying || hasApplied}
         >
           <Text style={styles.applyButtonText}>
-            {applying ? 'Applying...' : 'Apply for this Job'}
+            {applying ? 'Applying...' : 
+             hasApplied ? 'Already Applied' : 'Apply for this Job'}
           </Text>
         </TouchableOpacity>
+
+        {hasApplied && (
+          <View style={styles.appliedNote}>
+            <Text style={styles.appliedNoteText}>
+              ✓ You have applied for this job. The employer will review your application.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -187,6 +222,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.success,
+    marginBottom: 5,
+  },
+  totalSalary: {
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   section: {
     backgroundColor: colors.white,
@@ -233,10 +273,26 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
+  disabledButton: {
+    backgroundColor: colors.textSecondary,
+  },
   applyButtonText: {
     color: colors.white,
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  appliedNote: {
+    backgroundColor: colors.success + '20',
+    margin: 20,
+    padding: 15,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success,
+  },
+  appliedNoteText: {
+    color: colors.success,
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
 

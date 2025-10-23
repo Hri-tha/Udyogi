@@ -11,6 +11,7 @@ import {
 import { useJob } from '../../context/JobContext';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
+import { fetchWorkerApplications } from '../../services/database';
 
 const MyJobsScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
@@ -45,13 +46,13 @@ const MyJobsScreen = ({ navigation }) => {
 
   const loadApplications = async () => {
     try {
-      await fetchJobs();
-      // Filter jobs where current user has applied
-      const applications = jobs.filter(job => 
-        job.applications && job.applications.includes(user.uid)
-      );
-      setMyApplications(applications);
+      // Load applications from database
+      const applicationsResult = await fetchWorkerApplications(user.uid);
+      if (applicationsResult.success) {
+        setMyApplications(applicationsResult.applications);
+      }
     } catch (error) {
+      console.error('Error loading applications:', error);
       Alert.alert('Error', 'Failed to load applications');
     }
   };
@@ -67,6 +68,15 @@ const MyJobsScreen = ({ navigation }) => {
       case 'accepted': return colors.success;
       case 'rejected': return colors.error;
       default: return colors.warning;
+    }
+  };
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'accepted': return 'Accepted 🎉';
+      case 'rejected': return 'Rejected';
+      case 'pending': return 'Under Review';
+      default: return status;
     }
   };
 
@@ -86,7 +96,7 @@ const MyJobsScreen = ({ navigation }) => {
       <View style={styles.contentHeader}>
         <Text style={styles.title}>Job Applications</Text>
         <Text style={styles.subtitle}>
-          {myApplications.length} job applications
+          {myApplications.length} job application{myApplications.length !== 1 ? 's' : ''}
         </Text>
       </View>
 
@@ -102,27 +112,51 @@ const MyJobsScreen = ({ navigation }) => {
             <Text style={styles.emptySubtext}>
               Apply for jobs to see them here
             </Text>
+            <TouchableOpacity 
+              style={styles.browseButton}
+              onPress={() => navigation.navigate('WorkerHome')}
+            >
+              <Text style={styles.browseButtonText}>Browse Jobs</Text>
+            </TouchableOpacity>
           </View>
         ) : (
-          myApplications.map((job) => (
+          myApplications.map((application) => (
             <TouchableOpacity
-              key={job.id}
+              key={application.id}
               style={styles.applicationCard}
-              onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
+              onPress={() => navigation.navigate('JobDetails', { jobId: application.jobId })}
             >
               <View style={styles.applicationHeader}>
-                <Text style={styles.jobTitle}>{job.title}</Text>
-                <Text style={styles.company}>{job.company}</Text>
-              </View>
-              <View style={styles.applicationDetails}>
-                <Text style={styles.salary}>₹{job.salary}/month</Text>
-                <Text style={styles.location}>{job.location}</Text>
-              </View>
-              <View style={styles.statusContainer}>
-                <Text style={[styles.status, { color: getStatusColor(job.applicationStatus) }]}>
-                  {job.applicationStatus || 'Applied'}
+                <Text style={styles.jobTitle}>{application.jobTitle}</Text>
+                <Text style={[styles.status, { color: getStatusColor(application.status) }]}>
+                  {getStatusText(application.status)}
                 </Text>
               </View>
+              <View style={styles.applicationDetails}>
+                <Text style={styles.company}>{application.companyName}</Text>
+                <Text style={styles.location}>
+                  Applied: {application.appliedAt?.toDate().toLocaleDateString()}
+                </Text>
+              </View>
+              
+              {application.status === 'accepted' && (
+                <View style={styles.acceptedInfo}>
+                  <Text style={styles.acceptedText}>
+                    🎉 Congratulations! Your application has been accepted.
+                  </Text>
+                  <Text style={styles.contactText}>
+                    The employer will contact you soon.
+                  </Text>
+                </View>
+              )}
+
+              {application.status === 'rejected' && (
+                <View style={styles.rejectedInfo}>
+                  <Text style={styles.rejectedText}>
+                    Unfortunately, your application was not selected.
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           ))
         )}
@@ -201,6 +235,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     opacity: 0.7,
+    marginBottom: 20,
+  },
+  browseButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  browseButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
   applicationCard: {
     backgroundColor: colors.white,
@@ -228,22 +274,45 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
   },
-  salary: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.success,
-  },
   location: {
     fontSize: 14,
     color: colors.textSecondary,
   },
-  statusContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
   status: {
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  acceptedInfo: {
+    backgroundColor: colors.success + '20',
+    padding: 10,
+    borderRadius: 6,
+    marginTop: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.success,
+  },
+  acceptedText: {
+    color: colors.success,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 5,
+  },
+  contactText: {
+    color: colors.success,
+    fontSize: 12,
+    opacity: 0.8,
+  },
+  rejectedInfo: {
+    backgroundColor: colors.error + '20',
+    padding: 10,
+    borderRadius: 6,
+    marginTop: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.error,
+  },
+  rejectedText: {
+    color: colors.error,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

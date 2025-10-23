@@ -31,12 +31,10 @@ export const createJob = async (jobData) => {
   }
 };
 
-// In database.js, update the fetchJobs function
 export const fetchJobs = async (filters = {}) => {
   try {
     let q = query(collection(db, 'jobs'), where('status', '==', 'open'));
     
-    // Add location filter if provided
     if (filters.location && filters.location.trim() !== '') {
       q = query(q, where('location', '==', filters.location.trim()));
     }
@@ -47,7 +45,6 @@ export const fetchJobs = async (filters = {}) => {
       ...doc.data()
     }));
     
-    // Sort in memory instead of using orderBy to avoid index requirement
     jobs.sort((a, b) => {
       const aTime = a.createdAt?.toMillis() || 0;
       const bTime = b.createdAt?.toMillis() || 0;
@@ -82,7 +79,6 @@ export const fetchJobById = async (jobId) => {
 
 export const fetchEmployerJobs = async (employerId) => {
   try {
-    // Simple query without orderBy to avoid index requirement
     const q = query(
       collection(db, 'jobs'),
       where('employerId', '==', employerId)
@@ -94,7 +90,6 @@ export const fetchEmployerJobs = async (employerId) => {
       ...doc.data()
     }));
     
-    // Sort in memory instead
     jobs.sort((a, b) => {
       const aTime = a.createdAt?.toMillis() || 0;
       const bTime = b.createdAt?.toMillis() || 0;
@@ -165,7 +160,6 @@ export const fetchWorkerApplications = async (workerId) => {
       ...doc.data()
     }));
     
-    // Sort in memory
     applications.sort((a, b) => {
       const aTime = a.appliedAt?.toMillis() || 0;
       const bTime = b.appliedAt?.toMillis() || 0;
@@ -192,7 +186,6 @@ export const fetchJobApplications = async (jobId) => {
       ...doc.data()
     }));
     
-    // Sort in memory
     applications.sort((a, b) => {
       const aTime = a.appliedAt?.toMillis() || 0;
       const bTime = b.appliedAt?.toMillis() || 0;
@@ -216,6 +209,81 @@ export const updateApplicationStatus = async (applicationId, status) => {
     return { success: true };
   } catch (error) {
     console.error('Update Application Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ========== NOTIFICATION FUNCTIONS ==========
+
+// Add this to your database.js file in the notification functions section
+export const createNotification = async (notificationData) => {
+  try {
+    // Ensure all fields have proper values and handle undefined
+    const safeData = {
+      ...notificationData.data,
+      jobId: notificationData.data?.jobId || '',
+      applicationId: notificationData.data?.applicationId || '',
+      workerId: notificationData.data?.workerId || '',
+      workerName: notificationData.data?.workerName || 'Worker',
+      employerId: notificationData.data?.employerId || '',
+      status: notificationData.data?.status || ''
+    };
+
+    // Remove any undefined values from safeData
+    Object.keys(safeData).forEach(key => {
+      if (safeData[key] === undefined) {
+        safeData[key] = '';
+      }
+    });
+
+    const safeNotificationData = {
+      userId: notificationData.userId || '',
+      type: notificationData.type || 'general',
+      title: notificationData.title || 'Notification',
+      message: notificationData.message || '',
+      data: safeData,
+      read: false,
+      createdAt: serverTimestamp()
+    };
+
+    const docRef = await addDoc(collection(db, 'notifications'), safeNotificationData);
+    return { success: true, notificationId: docRef.id };
+  } catch (error) {
+    console.error('Create Notification Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const fetchUserNotifications = async (userId) => {
+  try {
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    const notifications = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    return { success: true, notifications };
+  } catch (error) {
+    console.error('Fetch Notifications Error:', error);
+    return { success: false, error: error.message, notifications: [] };
+  }
+};
+
+export const markNotificationAsRead = async (notificationId) => {
+  try {
+    const notifRef = doc(db, 'notifications', notificationId);
+    await updateDoc(notifRef, {
+      read: true
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Mark Notification Read Error:', error);
     return { success: false, error: error.message };
   }
 };
