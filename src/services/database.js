@@ -31,12 +31,14 @@ export const createJob = async (jobData) => {
   }
 };
 
+// In database.js, update the fetchJobs function
 export const fetchJobs = async (filters = {}) => {
   try {
     let q = query(collection(db, 'jobs'), where('status', '==', 'open'));
     
-    if (filters.location) {
-      q = query(q, where('location', '==', filters.location));
+    // Add location filter if provided
+    if (filters.location && filters.location.trim() !== '') {
+      q = query(q, where('location', '==', filters.location.trim()));
     }
     
     const snapshot = await getDocs(q);

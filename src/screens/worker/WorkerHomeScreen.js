@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useContext } from 'react';
+// src/screens/worker/WorkerHomeScreen.js
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,21 +11,37 @@ import {
 } from 'react-native';
 import { useJob } from '../../context/JobContext';
 import { useAuth } from '../../context/AuthContext';
-import JobCard from '../../components/JobCard';
 import { colors } from '../../constants/colors';
+import JobCard from '../../components/JobCard';
 
 const WorkerHomeScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
-  const { jobs, fetchJobs, applyForJob } = useJob();
-  const { user, userProfile, logout } = useAuth();
+  const { 
+    jobs, 
+    loading, 
+    currentLocation, 
+    fetchJobs, 
+    fetchJobsByUserLocation, 
+    applyForJob 
+  } = useJob();
+  const { user, userProfile } = useAuth();
 
   useEffect(() => {
-    loadJobs();
-  }, []);
+    // Load jobs based on user's location when component mounts
+    if (userProfile?.location) {
+      fetchJobsByUserLocation(userProfile.location);
+    } else {
+      fetchJobs(); // Fetch all jobs if no user location
+    }
+  }, [userProfile]);
 
   const loadJobs = async () => {
     try {
-      await fetchJobs();
+      if (currentLocation) {
+        await fetchJobs(currentLocation);
+      } else {
+        await fetchJobs();
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to load jobs');
     }
@@ -45,39 +62,32 @@ const WorkerHomeScreen = ({ navigation }) => {
     }
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to logout');
-            }
-          }
-        }
-      ]
-    );
+  const handleProfilePress = () => {
+    navigation.navigate('WorkerProfile');
   };
 
-  const availableJobs = jobs.filter(job => job.status === 'active');
+  const availableJobs = jobs.filter(job => job.status === 'open' || job.status === 'active');
 
   return (
     <View style={styles.container}>
       {/* Custom Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>Welcome back!</Text>
-          <Text style={styles.nameText}>{userProfile?.name || 'Worker'}</Text>
+        <View style={styles.headerLeft}>
+          <View>
+            <Text style={styles.welcomeText}>Welcome back!</Text>
+            <Text style={styles.nameText}>{userProfile?.name || 'Worker'}</Text>
+          </View>
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
+        
+        <TouchableOpacity 
+          style={styles.profileButton}
+          onPress={handleProfilePress}
+        >
+          <View style={styles.profileAvatar}>
+            <Text style={styles.profileAvatarText}>
+              {userProfile?.name?.charAt(0)?.toUpperCase() || 'U'}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -86,6 +96,22 @@ const WorkerHomeScreen = ({ navigation }) => {
         <Text style={styles.subtitle}>
           Find your next opportunity from {availableJobs.length} available jobs
         </Text>
+        
+        {/* Location Filter Section */}
+        <View style={styles.locationSection}>
+          <Text style={styles.locationLabel}>Showing jobs in:</Text>
+          <View style={styles.locationRow}>
+            <Text style={styles.locationText}>
+              {currentLocation || userProfile?.location || 'All locations'}
+            </Text>
+            <TouchableOpacity 
+              style={styles.changeLocationButton}
+              onPress={() => navigation.navigate('LocationFilter')}
+            >
+              <Text style={styles.changeLocationText}>Change</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <ScrollView
@@ -96,10 +122,26 @@ const WorkerHomeScreen = ({ navigation }) => {
       >
         {availableJobs.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No jobs available at the moment</Text>
-            <Text style={styles.emptySubtext}>
-              Check back later for new opportunities
+            <Text style={styles.emptyText}>
+              {currentLocation || userProfile?.location 
+                ? `No jobs available in ${currentLocation || userProfile?.location}`
+                : 'No jobs available at the moment'
+              }
             </Text>
+            <Text style={styles.emptySubtext}>
+              {currentLocation || userProfile?.location 
+                ? 'Try changing your location or check back later'
+                : 'Check back later for new opportunities'
+              }
+            </Text>
+            {(currentLocation || userProfile?.location) && (
+              <TouchableOpacity 
+                style={styles.clearFilterButton}
+                onPress={() => fetchJobs()}
+              >
+                <Text style={styles.clearFilterText}>Show all locations</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           availableJobs.map((job) => (
@@ -130,6 +172,9 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     backgroundColor: colors.primary,
   },
+  headerLeft: {
+    flex: 1,
+  },
   welcomeText: {
     fontSize: 16,
     color: colors.white,
@@ -141,16 +186,23 @@ const styles = StyleSheet.create({
     color: colors.white,
     marginTop: 2,
   },
-  logoutButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
+  profileButton: {
+    padding: 5,
   },
-  logoutButtonText: {
+  profileAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  profileAvatarText: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: colors.white,
-    fontSize: 14,
-    fontWeight: '600',
   },
   contentHeader: {
     padding: 20,
@@ -166,6 +218,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.white,
     opacity: 0.9,
+    marginBottom: 15,
+  },
+  locationSection: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    padding: 15,
+    borderRadius: 10,
+  },
+  locationLabel: {
+    fontSize: 14,
+    color: colors.white,
+    opacity: 0.9,
+    marginBottom: 8,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.white,
+    flex: 1,
+  },
+  changeLocationButton: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  changeLocationText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,
@@ -187,6 +273,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     opacity: 0.7,
+    marginBottom: 20,
+  },
+  clearFilterButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  clearFilterText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
