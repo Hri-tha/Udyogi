@@ -1,3 +1,4 @@
+// src/context/AuthContext.js - Update your existing file
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
@@ -9,6 +10,25 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Add this function to refresh user profile
+  const refreshUserProfile = async () => {
+    if (!user) return;
+    
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        console.log('User profile refreshed:', userDoc.data());
+        setUserProfile(userDoc.data());
+      } else {
+        console.log('No user profile found');
+        setUserProfile(null);
+      }
+    } catch (error) {
+      console.error('Error refreshing user profile:', error);
+      setUserProfile(null);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -82,6 +102,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     updateUserProfile,
     logout,
+    refreshUserProfile, // Add this line
     isWorker: userProfile?.userType === 'worker',
     isEmployer: userProfile?.userType === 'employer',
   };

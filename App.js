@@ -16,6 +16,7 @@ import JobDetailScreen from './src/screens/worker/JobDetailsScreen';
 import MyJobScreen from './src/screens/worker/MyJobsScreen';
 import WorkerProfileScreen from './src/screens/worker/WorkerProfileScreen';
 import EmployerHomeScreen from './src/screens/employer/EmployerHomeScreen';
+import EmployerProfileScreen from './src/screens/employer/EmployerProfileScreen';
 import PostJobScreen from './src/screens/employer/PostJobScreen';
 import LocationFilterScreen from './src/screens/worker/LocationFilterScreen';
 import ApplicationsScreen from './src/screens/employer/ApplicationsScreen';
@@ -62,6 +63,7 @@ function AppContent() {
           <Stack.Screen name="PostJob" component={PostJobScreen} />
           <Stack.Screen name="Applications" component={ApplicationsScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="EmployerProfile" component={EmployerProfileScreen} />
         </>
       )}
     </Stack.Navigator>

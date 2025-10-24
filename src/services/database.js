@@ -58,6 +58,84 @@ export const fetchJobs = async (filters = {}) => {
   }
 };
 
+export const updateEmployerProfile = async (employerId, profileData) => {
+  try {
+    const employerRef = doc(db, 'users', employerId);
+    await updateDoc(employerRef, {
+      ...profileData,
+      updatedAt: serverTimestamp(),
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Update Employer Profile Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const fetchEmployerStats = async (employerId) => {
+  try {
+    const jobsSnapshot = await getDocs(
+      query(collection(db, 'jobs'), where('employerId', '==', employerId))
+    );
+    
+    const jobs = jobsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    const activeJobs = jobs.filter(job => job.status === 'open').length;
+    const totalApplications = jobs.reduce((sum, job) => 
+      sum + (job.applications?.length || 0), 0
+    );
+    const acceptedApplications = jobs.reduce((sum, job) => {
+      const accepted = job.applications?.filter(app => app.status === 'accepted').length || 0;
+      return sum + accepted;
+    }, 0);
+
+    return {
+      success: true,
+      stats: {
+        activeJobs,
+        totalApplications,
+        acceptedApplications,
+        completionRate: totalApplications > 0 ? 
+          Math.round((acceptedApplications / totalApplications) * 100) : 0
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching employer stats:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const closeJob = async (jobId) => {
+  try {
+    const jobRef = doc(db, 'jobs', jobId);
+    await updateDoc(jobRef, {
+      status: 'closed',
+      closedAt: serverTimestamp()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Close Job Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const reopenJob = async (jobId) => {
+  try {
+    const jobRef = doc(db, 'jobs', jobId);
+    await updateDoc(jobRef, {
+      status: 'open',
+      reopenedAt: serverTimestamp()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Reopen Job Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 export const fetchJobById = async (jobId) => {
   try {
     const docRef = doc(db, 'jobs', jobId);

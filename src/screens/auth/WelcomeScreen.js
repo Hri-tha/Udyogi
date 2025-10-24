@@ -6,7 +6,8 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   StatusBar,
-  Dimensions 
+  Dimensions,
+  Image 
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -25,8 +26,15 @@ export default function WelcomeScreen({ navigation }) {
         end={{ x: 1, y: 1 }}
       >
         <View style={styles.headerContent}>
-          <Text style={styles.logo}>💼</Text>
-          <Text style={styles.title}>Labor Connect</Text>
+          {/* Logo Image */}
+          <View style={styles.logoContainer}>
+            <Image 
+              source={require('../../assets/images/UdyogiLogo.png')} // Update path as needed
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.title}>Udyogi</Text>
           <Text style={styles.subtitle}>
             Connect workers with opportunities.{'\n'}Build your future today.
           </Text>
@@ -109,9 +117,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logo: {
-    fontSize: 80,
-    marginBottom: 20,
+  logoContainer: {
+    marginBottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoImage: {
+    width: 600,
+    height: 150,
   },
   title: {
     fontSize: 36,
