@@ -37,7 +37,7 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: 📦 Install dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       - name: 🚀 Build Preview APK
         if: github.event.inputs.profile == 'preview' || github.event.inputs.profile == ''
