@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: 'Build Profile'
+        description: 'Select EAS Build Profile'
         required: true
         default: 'preview'
         type: choice
@@ -17,45 +17,71 @@ on:
 
 jobs:
   build:
-    name: Build APK/AAB
+    name: EAS Android Build
     runs-on: ubuntu-latest
-    
+
     steps:
+      # 🏗 Step 1: Checkout Repository
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
 
+      # 🏗 Step 2: Setup Node.js environment
       - name: 🏗 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: 'npm'
 
+      # 🏗 Step 3: Setup Expo CLI and EAS CLI
       - name: 🏗 Setup Expo and EAS
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: 📦 Install dependencies
-        run: npm install --legacy-peer-deps
+      # 📦 Step 4: Clean and install dependencies safely
+      - name: 📦 Clean install dependencies
+        run: |
+          echo "🧹 Cleaning existing modules..."
+          rm -rf node_modules package-lock.json
+          echo "📦 Installing dependencies with legacy-peer-deps..."
+          npm install --legacy-peer-deps
 
+      # 🔧 Step 5: Configure EAS project
       - name: 🔧 Configure EAS Project
-        run: eas init --id 2a608210-b737-4646-85a8-aab8d590cb03 --force
+        run: |
+          echo "🔗 Linking to EAS project..."
+          eas init --id 2a608210-b737-4646-85a8-aab8d590cb03 --force
 
+      # ⚙️ Step 6: Prebuild check (optional but helps detect native issues early)
+      - name: ⚙️ Prebuild check
+        run: npx expo doctor
+
+      # 🚀 Step 7: Build for Preview
       - name: 🚀 Build Preview APK
         if: github.event.inputs.profile == 'preview' || github.event.inputs.profile == ''
-        run: eas build --platform android --profile preview --non-interactive
+        run: |
+          echo "🔨 Starting EAS Android build (Preview)..."
+          eas build --platform android --profile preview --non-interactive --clear-cache
 
+      # 🚀 Step 8: Build for Production
       - name: 🚀 Build Production AAB
         if: github.event.inputs.profile == 'production'
-        run: eas build --platform android --profile production --non-interactive
+        run: |
+          echo "🔨 Starting EAS Android build (Production)..."
+          eas build --platform android --profile production --non-interactive --clear-cache
 
+      # ✅ Step 9: Success message
       - name: ✅ Build Complete
         if: success()
         run: |
           echo "🎉 Build completed successfully!"
-          echo "📱 Check your build at: https://expo.dev/accounts/hkt123456789/projects/udyogi/builds"
+          echo "📱 Check your build here:"
+          echo "🔗 https://expo.dev/accounts/hkt123456789/projects/udyogi/builds"
 
+      # ❌ Step 10: Failure handler
       - name: ❌ Build Failed
         if: failure()
-        run: echo "❌ Build failed. Check the logs above for details."
+        run: |
+          echo "❌ Build failed. Check the logs above for details."
+          echo "💡 Common causes: dependency mismatch, invalid expo sdk, missing EXPO_TOKEN."
