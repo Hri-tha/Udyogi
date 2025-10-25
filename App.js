@@ -1,4 +1,4 @@
-// App.js - Corrected Version (Language screen only once)
+// App.js - Updated Version with JobLocation and ChatScreen
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -19,6 +19,8 @@ import ApplicationsScreen from './src/screens/employer/ApplicationsScreen';
 import NotificationsScreen from './src/screens/common/NotificationsScreen';
 import PostJobScreen from './src/screens/employer/PostJobScreen';
 import EmployerProfileScreen from './src/screens/employer/EmployerProfileScreen';
+import JobLocationScreen from './src/screens/shared/JobLocationScreen'; // ADD THIS
+import ChatScreen from './src/screens/shared/ChatScreen'; // ADD THIS
 
 // Import Bottom Tab Navigators
 import WorkerBottomTabNavigator from './src/navigation/WorkerBottomTabNavigator';
@@ -60,6 +62,9 @@ function AppContent() {
           <Stack.Screen name="WorkerMain" component={WorkerBottomTabNavigator} />
           <Stack.Screen name="JobDetails" component={JobDetailScreen} />
           <Stack.Screen name="LocationFilter" component={LocationFilterScreen} />
+          {/* ADD THESE SHARED SCREENS FOR WORKER */}
+          <Stack.Screen name="JobLocation" component={JobLocationScreen} />
+          <Stack.Screen name="ChatScreen" component={ChatScreen} />
         </>
       ) : (
         // Employer Screens (Employer with complete profile)
@@ -67,6 +72,9 @@ function AppContent() {
           <Stack.Screen name="EmployerMain" component={EmployerBottomTabNavigator} />
           <Stack.Screen name="PostJob" component={PostJobScreen} />
           <Stack.Screen name="Applications" component={ApplicationsScreen} />
+          {/* ADD THESE SHARED SCREENS FOR EMPLOYER */}
+          <Stack.Screen name="JobLocation" component={JobLocationScreen} />
+          <Stack.Screen name="ChatScreen" component={ChatScreen} />
         </>
       )}
     </Stack.Navigator>

@@ -277,13 +277,36 @@ export const fetchJobApplications = async (jobId) => {
   }
 };
 
-export const updateApplicationStatus = async (applicationId, status) => {
+// In your database.js file, replace the existing updateApplicationStatus function:
+
+export const updateApplicationStatus = async (applicationId, status, locationData = null) => {
   try {
     const appRef = doc(db, 'applications', applicationId);
-    await updateDoc(appRef, {
+    const updates = {
       status,
       respondedAt: serverTimestamp()
-    });
+    };
+
+    // If accepted and location data provided, share location
+    if (status === 'accepted' && locationData) {
+      updates.employerLocation = locationData;
+      updates.locationShared = true;
+      updates.locationSharedAt = serverTimestamp();
+    }
+
+    await updateDoc(appRef, updates);
+
+    // Create chat when application is accepted
+    if (status === 'accepted') {
+      const appSnap = await getDoc(appRef);
+      const application = appSnap.data();
+      
+      await createChat(applicationId, [
+        application.employerId,
+        application.workerId
+      ]);
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Update Application Error:', error);
@@ -420,5 +443,127 @@ export const checkIfApplied = async (jobId, workerId) => {
   } catch (error) {
     console.error('Check Application Error:', error);
     return { success: false, error: error.message };
+  }
+};
+
+// ========== LOCATION FUNCTIONS ==========
+
+export const shareEmployerLocation = async (applicationId, locationData) => {
+  try {
+    const appRef = doc(db, 'applications', applicationId);
+    await updateDoc(appRef, {
+      employerLocation: locationData,
+      locationShared: true,
+      locationSharedAt: serverTimestamp()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Share Location Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const updateMeetingLocation = async (applicationId, locationData) => {
+  try {
+    const appRef = doc(db, 'applications', applicationId);
+    await updateDoc(appRef, {
+      meetingLocation: locationData,
+      meetingLocationUpdatedAt: serverTimestamp()
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Update Meeting Location Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ========== CHAT FUNCTIONS ==========
+
+export const createChat = async (applicationId, participants) => {
+  try {
+    const chatRef = await addDoc(collection(db, 'chats'), {
+      applicationId,
+      participants,
+      createdAt: serverTimestamp(),
+      lastMessage: '',
+      lastMessageAt: serverTimestamp()
+    });
+
+    // Enable chat in application
+    const appRef = doc(db, 'applications', applicationId);
+    await updateDoc(appRef, {
+      chatEnabled: true,
+      chatId: chatRef.id
+    });
+
+    return { success: true, chatId: chatRef.id };
+  } catch (error) {
+    console.error('Create Chat Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const sendMessage = async (chatId, messageData) => {
+  try {
+    const messageRef = await addDoc(collection(db, 'messages'), {
+      chatId,
+      ...messageData,
+      timestamp: serverTimestamp(),
+      read: false
+    });
+
+    // Update chat last message
+    const chatRef = doc(db, 'chats', chatId);
+    await updateDoc(chatRef, {
+      lastMessage: messageData.message,
+      lastMessageAt: serverTimestamp()
+    });
+
+    return { success: true, messageId: messageRef.id };
+  } catch (error) {
+    console.error('Send Message Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const fetchChatMessages = async (chatId) => {
+  try {
+    const q = query(
+      collection(db, 'messages'),
+      where('chatId', '==', chatId),
+      orderBy('timestamp', 'asc')
+    );
+    
+    const snapshot = await getDocs(q);
+    const messages = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    return { success: true, messages };
+  } catch (error) {
+    console.error('Fetch Messages Error:', error);
+    return { success: false, error: error.message, messages: [] };
+  }
+};
+
+export const fetchUserChats = async (userId) => {
+  try {
+    const q = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', userId),
+      orderBy('lastMessageAt', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    const chats = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    return { success: true, chats };
+  } catch (error) {
+    console.error('Fetch Chats Error:', error);
+    return { success: false, error: error.message, chats: [] };
   }
 };

@@ -80,6 +80,26 @@ const MyJobsScreen = ({ navigation }) => {
     }
   };
 
+  const handleViewLocation = (application) => {
+    if (application.employerLocation) {
+      navigation.navigate('JobLocation', { 
+        application,
+        isEmployer: false 
+      });
+    }
+  };
+
+  const handleOpenChat = (application) => {
+    if (application.chatEnabled) {
+      navigation.navigate('ChatScreen', {
+        applicationId: application.id,
+        otherUser: application.employerId,
+        jobTitle: application.jobTitle,
+        otherUserName: application.companyName || 'Employer'
+      });
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -108,6 +128,7 @@ const MyJobsScreen = ({ navigation }) => {
       >
         {myApplications.length === 0 ? (
           <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>📋</Text>
             <Text style={styles.emptyText}>No applications yet</Text>
             <Text style={styles.emptySubtext}>
               Apply for jobs to see them here
@@ -121,31 +142,53 @@ const MyJobsScreen = ({ navigation }) => {
           </View>
         ) : (
           myApplications.map((application) => (
-            <TouchableOpacity
-              key={application.id}
-              style={styles.applicationCard}
-              onPress={() => navigation.navigate('JobDetails', { jobId: application.jobId })}
-            >
-              <View style={styles.applicationHeader}>
-                <Text style={styles.jobTitle}>{application.jobTitle}</Text>
-                <Text style={[styles.status, { color: getStatusColor(application.status) }]}>
-                  {getStatusText(application.status)}
-                </Text>
-              </View>
-              <View style={styles.applicationDetails}>
-                <Text style={styles.company}>{application.companyName}</Text>
-                <Text style={styles.location}>
-                  Applied: {application.appliedAt?.toDate().toLocaleDateString()}
-                </Text>
-              </View>
+            <View key={application.id} style={styles.applicationCard}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('JobDetails', { jobId: application.jobId })}
+              >
+                <View style={styles.applicationHeader}>
+                  <Text style={styles.jobTitle}>{application.jobTitle}</Text>
+                  <Text style={[styles.status, { color: getStatusColor(application.status) }]}>
+                    {getStatusText(application.status)}
+                  </Text>
+                </View>
+                <View style={styles.applicationDetails}>
+                  <Text style={styles.company}>{application.companyName}</Text>
+                  <Text style={styles.location}>
+                    Applied: {application.appliedAt?.toDate().toLocaleDateString()}
+                  </Text>
+                </View>
+              </TouchableOpacity>
               
               {application.status === 'accepted' && (
                 <View style={styles.acceptedInfo}>
                   <Text style={styles.acceptedText}>
                     🎉 Congratulations! Your application has been accepted.
                   </Text>
+                  
+                  {/* Location and Chat Buttons - ADDED HERE */}
+                  <View style={styles.actionButtons}>
+                    {application.locationShared && (
+                      <TouchableOpacity 
+                        style={[styles.actionButton, styles.locationButton]}
+                        onPress={() => handleViewLocation(application)}
+                      >
+                        <Text style={styles.actionButtonText}>📍 View Location</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {application.chatEnabled && (
+                      <TouchableOpacity 
+                        style={[styles.actionButton, styles.chatButton]}
+                        onPress={() => handleOpenChat(application)}
+                      >
+                        <Text style={styles.actionButtonText}>💬 Chat with Employer</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
                   <Text style={styles.contactText}>
-                    The employer will contact you soon.
+                    The employer has shared their location. You can now view it and chat with them.
                   </Text>
                 </View>
               )}
@@ -155,9 +198,23 @@ const MyJobsScreen = ({ navigation }) => {
                   <Text style={styles.rejectedText}>
                     Unfortunately, your application was not selected.
                   </Text>
+                  <TouchableOpacity 
+                    style={styles.browseButton}
+                    onPress={() => navigation.navigate('WorkerHome')}
+                  >
+                    <Text style={styles.browseButtonText}>Browse More Jobs</Text>
+                  </TouchableOpacity>
                 </View>
               )}
-            </TouchableOpacity>
+
+              {application.status === 'pending' && (
+                <View style={styles.pendingInfo}>
+                  <Text style={styles.pendingText}>
+                    ⏳ Your application is under review by the employer.
+                  </Text>
+                </View>
+              )}
+            </View>
           ))
         )}
       </ScrollView>
@@ -223,12 +280,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 40,
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    marginTop: 20,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+    opacity: 0.5,
   },
   emptyText: {
     fontSize: 18,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
+    fontWeight: '600',
   },
   emptySubtext: {
     fontSize: 14,
@@ -236,6 +302,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.7,
     marginBottom: 20,
+    lineHeight: 20,
   },
   browseButton: {
     backgroundColor: colors.primary,
@@ -250,11 +317,16 @@ const styles = StyleSheet.create({
   },
   applicationCard: {
     backgroundColor: colors.white,
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
     borderLeftWidth: 4,
     borderLeftColor: colors.primary,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   applicationHeader: {
     marginBottom: 10,
@@ -267,7 +339,9 @@ const styles = StyleSheet.create({
   },
   company: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: colors.primary,
+    fontWeight: '600',
+    marginBottom: 5,
   },
   applicationDetails: {
     flexDirection: 'row',
@@ -281,11 +355,16 @@ const styles = StyleSheet.create({
   status: {
     fontSize: 14,
     fontWeight: 'bold',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: colors.background,
+    alignSelf: 'flex-start',
   },
   acceptedInfo: {
-    backgroundColor: colors.success + '20',
-    padding: 10,
-    borderRadius: 6,
+    backgroundColor: colors.success + '15',
+    padding: 12,
+    borderRadius: 8,
     marginTop: 10,
     borderLeftWidth: 3,
     borderLeftColor: colors.success,
@@ -294,25 +373,69 @@ const styles = StyleSheet.create({
     color: colors.success,
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   contactText: {
     color: colors.success,
     fontSize: 12,
     opacity: 0.8,
+    marginTop: 8,
   },
   rejectedInfo: {
-    backgroundColor: colors.error + '20',
-    padding: 10,
-    borderRadius: 6,
+    backgroundColor: colors.error + '15',
+    padding: 12,
+    borderRadius: 8,
     marginTop: 10,
     borderLeftWidth: 3,
     borderLeftColor: colors.error,
+    alignItems: 'center',
   },
   rejectedText: {
     color: colors.error,
     fontSize: 14,
     fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  pendingInfo: {
+    backgroundColor: colors.warning + '15',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.warning,
+  },
+  pendingText: {
+    color: colors.warning,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  // NEW STYLES FOR LOCATION AND CHAT BUTTONS
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  actionButton: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  locationButton: {
+    backgroundColor: colors.info,
+  },
+  chatButton: {
+    backgroundColor: colors.primary,
+  },
+  actionButtonText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 
