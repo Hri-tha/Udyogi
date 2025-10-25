@@ -10,15 +10,17 @@ import {
   Image 
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useLanguage } from '../../context/LanguageContext';
 
 const { width, height } = Dimensions.get('window');
 
 export default function WelcomeScreen({ navigation }) {
+  const { t } = useLanguage();
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
-      {/* Top Section with Gradient */}
       <LinearGradient
         colors={['#007AFF', '#0056CC']}
         style={styles.headerGradient}
@@ -26,26 +28,24 @@ export default function WelcomeScreen({ navigation }) {
         end={{ x: 1, y: 1 }}
       >
         <View style={styles.headerContent}>
-          {/* Logo Image */}
           <View style={styles.logoContainer}>
             <Image 
-              source={require('../../assets/images/UdyogiLogo.png')} // Update path as needed
+              source={require('../../assets/images/UdyogiLogo.png')}
               style={styles.logoImage}
               resizeMode="contain"
             />
           </View>
-          <Text style={styles.title}>Udyogi</Text>
+          <Text style={styles.title}>{t('welcome.title')}</Text>
           <Text style={styles.subtitle}>
-            Connect workers with opportunities.{'\n'}Build your future today.
+            {t('welcome.subtitle')}
           </Text>
         </View>
       </LinearGradient>
 
-      {/* Bottom Section */}
       <View style={styles.content}>
-        <Text style={styles.sectionTitle}>Choose Your Role</Text>
+        <Text style={styles.sectionTitle}>{t('welcome.chooseRole')}</Text>
         <Text style={styles.sectionSubtitle}>
-          Select how you want to get started
+          {t('welcome.selectRole')}
         </Text>
 
         {/* Worker Card */}
@@ -58,9 +58,9 @@ export default function WelcomeScreen({ navigation }) {
             <Text style={styles.cardIcon}>👷</Text>
           </View>
           <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>I'm Looking for Work</Text>
+            <Text style={styles.cardTitle}>{t('welcome.lookingForWork')}</Text>
             <Text style={styles.cardDesc}>
-              Find flexible jobs, earn money, and build your career
+              {t('welcome.lookingForWorkDesc')}
             </Text>
           </View>
           <Text style={styles.arrow}>→</Text>
@@ -76,9 +76,9 @@ export default function WelcomeScreen({ navigation }) {
             <Text style={styles.cardIcon}>🏭</Text>
           </View>
           <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>I Need Workers</Text>
+            <Text style={styles.cardTitle}>{t('welcome.needWorkers')}</Text>
             <Text style={styles.cardDesc}>
-              Post jobs, hire skilled workers, and grow your business
+              {t('welcome.needWorkersDesc')}
             </Text>
           </View>
           <Text style={styles.arrow}>→</Text>
@@ -87,13 +87,15 @@ export default function WelcomeScreen({ navigation }) {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Trusted by thousands of workers and employers
+            {t('welcome.trusted')}
           </Text>
         </View>
       </View>
     </View>
   );
 }
+
+// ... keep the same styles as before ...
 
 const styles = StyleSheet.create({
   container: {

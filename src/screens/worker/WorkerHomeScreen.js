@@ -1,3 +1,4 @@
+// src/screens/worker/WorkerHomeScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -115,6 +116,7 @@ export default function WorkerHomeScreen({ navigation }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
       >
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
@@ -199,7 +201,7 @@ export default function WorkerHomeScreen({ navigation }) {
                 <View style={styles.jobDetails}>
                   <View style={styles.jobDetailItem}>
                     <Icon name="cash-outline" size={16} color={colors.success} />
-                    <Text style={styles.salaryText}>₹{job.rate || job.salary}/month</Text>
+                    <Text style={styles.salaryText}>₹{job.rate || job.salary}/hour</Text>
                   </View>
                   
                   <View style={styles.jobDetailItem}>
@@ -232,41 +234,8 @@ export default function WorkerHomeScreen({ navigation }) {
           })
         )}
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.actionButtons}>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('MyJobs')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#4CAF50' }]}>
-                <Icon name="document-text" size={24} color={colors.white} />
-              </View>
-              <Text style={styles.actionText}>My Applications</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('WorkerProfile')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#2196F3' }]}>
-                <Icon name="person" size={24} color={colors.white} />
-              </View>
-              <Text style={styles.actionText}>My Profile</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('Notifications')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#FF9800' }]}>
-                <Icon name="notifications" size={24} color={colors.white} />
-              </View>
-              <Text style={styles.actionText}>Notifications</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Bottom padding to account for tab bar */}
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </View>
   );
@@ -309,6 +278,9 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20, // Extra padding for bottom tab bar
   },
   statsContainer: {
     flexDirection: 'row',
@@ -522,31 +494,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  quickActions: {
-    padding: 20,
-    paddingTop: 10,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  actionButton: {
-    alignItems: 'center',
-    flex: 1,
-    marginHorizontal: 5,
-  },
-  actionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  actionText: {
-    fontSize: 12,
-    color: colors.text,
-    textAlign: 'center',
-    fontWeight: '500',
+  bottomPadding: {
+    height: 20,
   },
 });
