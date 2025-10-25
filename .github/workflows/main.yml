@@ -1,0 +1,58 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build Profile'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
+
+jobs:
+  build:
+    name: Build APK/AAB
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🏗 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: 🏗 Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🚀 Build Preview APK
+        if: github.event.inputs.profile == 'preview' || github.event.inputs.profile == ''
+        run: eas build --platform android --profile preview --non-interactive
+
+      - name: 🚀 Build Production AAB
+        if: github.event.inputs.profile == 'production'
+        run: eas build --platform android --profile production --non-interactive
+
+      - name: ✅ Build Complete
+        if: success()
+        run: |
+          echo "🎉 Build completed successfully!"
+          echo "📱 Check your build at: https://expo.dev/accounts/hkt123456789/projects/udyogi/builds"
+
+      - name: ❌ Build Failed
+        if: failure()
+        run: echo "❌ Build failed. Check the logs above for details."
