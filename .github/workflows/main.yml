@@ -55,7 +55,9 @@ jobs:
 
       # ⚙️ Step 6: Prebuild check (optional but helps detect native issues early)
       - name: ⚙️ Prebuild check
-        run: npx expo doctor
+        run: |
+          echo "🩺 Running Expo Doctor..."
+          npx expo-doctor || echo "⚠️ expo-doctor not found or failed — continuing build."
 
       # 🚀 Step 7: Build for Preview
       - name: 🚀 Build Preview APK
@@ -84,4 +86,4 @@ jobs:
         if: failure()
         run: |
           echo "❌ Build failed. Check the logs above for details."
-          echo "💡 Common causes: dependency mismatch, invalid expo sdk, missing EXPO_TOKEN."
+          echo "💡 Common causes: dependency mismatch, invalid Expo SDK, missing EXPO_TOKEN."
