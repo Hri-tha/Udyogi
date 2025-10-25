@@ -481,19 +481,27 @@ export const updateMeetingLocation = async (applicationId, locationData) => {
 
 export const createChat = async (applicationId, participants) => {
   try {
+    // Check if chat already exists for this application
+    const q = query(
+      collection(db, 'chats'),
+      where('applicationId', '==', applicationId)
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+      // Chat already exists, return existing chat ID
+      const existingChat = snapshot.docs[0];
+      return { success: true, chatId: existingChat.id };
+    }
+    
+    // Create new chat
     const chatRef = await addDoc(collection(db, 'chats'), {
       applicationId,
       participants,
       createdAt: serverTimestamp(),
       lastMessage: '',
       lastMessageAt: serverTimestamp()
-    });
-
-    // Enable chat in application
-    const appRef = doc(db, 'applications', applicationId);
-    await updateDoc(appRef, {
-      chatEnabled: true,
-      chatId: chatRef.id
     });
 
     return { success: true, chatId: chatRef.id };
@@ -526,6 +534,7 @@ export const sendMessage = async (chatId, messageData) => {
   }
 };
 
+
 export const fetchChatMessages = async (chatId) => {
   try {
     const q = query(
@@ -544,6 +553,29 @@ export const fetchChatMessages = async (chatId) => {
   } catch (error) {
     console.error('Fetch Messages Error:', error);
     return { success: false, error: error.message, messages: [] };
+  }
+};
+
+export const markMessagesAsRead = async (chatId, userId) => {
+  try {
+    const q = query(
+      collection(db, 'messages'),
+      where('chatId', '==', chatId),
+      where('senderId', '!=', userId),
+      where('read', '==', false)
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    const updatePromises = snapshot.docs.map(doc => 
+      updateDoc(doc.ref, { read: true })
+    );
+    
+    await Promise.all(updatePromises);
+    return { success: true };
+  } catch (error) {
+    console.error('Mark Messages Read Error:', error);
+    return { success: false, error: error.message };
   }
 };
 

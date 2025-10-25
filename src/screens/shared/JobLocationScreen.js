@@ -114,14 +114,14 @@ export default function JobLocationScreen({ route, navigation }) {
             </View>
           </View>
 
-          <View style={styles.coordinates}>
+          {/* <View style={styles.coordinates}>
             <Text style={styles.coordinateText}>
               Latitude: {latitude.toFixed(6)}
             </Text>
             <Text style={styles.coordinateText}>
               Longitude: {longitude.toFixed(6)}
             </Text>
-          </View>
+          </View> */}
 
           <View style={styles.directionButtons}>
             <TouchableOpacity style={styles.directionButton} onPress={openInGoogleMaps}>
