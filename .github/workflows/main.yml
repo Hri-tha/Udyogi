@@ -40,9 +40,7 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: 🔧 Configure EAS Project
-        run: |
-          echo "Configuring EAS project..."
-          eas init --id 2a608210-b737-4646-85a8-aab8d590cb03 --non-interactive || true
+        run: eas init --id 2a608210-b737-4646-85a8-aab8d590cb03 --force
 
       - name: 🚀 Build Preview APK
         if: github.event.inputs.profile == 'preview' || github.event.inputs.profile == ''
