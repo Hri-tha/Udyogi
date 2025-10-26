@@ -25,21 +25,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": [
-        "INTERNET",
-        "ACCESS_NETWORK_STATE"
-      ]
+      "edgeToEdgeEnabled": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-localization"
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "2a608210-b737-4646-85a8-aab8d590cb03"
-      }
-    }
+    ]
   }
 }
