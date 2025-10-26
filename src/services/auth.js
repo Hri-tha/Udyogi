@@ -6,17 +6,15 @@ import {
 } from 'firebase/auth';
 import { auth } from './firebase';
 
-export const sendOTP = async (phoneNumber, recaptchaVerifier) => {
+// Send OTP (without recaptcha)
+export const sendOTP = async (phoneNumber) => {
   try {
     const formattedPhone = phoneNumber.startsWith('+') 
       ? phoneNumber 
       : `+91${phoneNumber}`;
 
     const phoneProvider = new PhoneAuthProvider(auth);
-    const verificationId = await phoneProvider.verifyPhoneNumber(
-      formattedPhone,
-      recaptchaVerifier
-    );
+    const verificationId = await phoneProvider.verifyPhoneNumber(formattedPhone, null); // remove recaptcha
 
     return { success: true, verificationId };
   } catch (error) {
@@ -25,11 +23,12 @@ export const sendOTP = async (phoneNumber, recaptchaVerifier) => {
   }
 };
 
+// Verify OTP
 export const verifyOTP = async (verificationId, code) => {
   try {
     const credential = PhoneAuthProvider.credential(verificationId, code);
     const userCredential = await signInWithCredential(auth, credential);
-    
+
     return { 
       success: true, 
       user: userCredential.user 
@@ -40,6 +39,7 @@ export const verifyOTP = async (verificationId, code) => {
   }
 };
 
+// Sign out
 export const signOut = async () => {
   try {
     await firebaseSignOut(auth);
@@ -50,6 +50,7 @@ export const signOut = async () => {
   }
 };
 
+// Get current logged-in user
 export const getCurrentUser = () => {
   return auth.currentUser;
 };

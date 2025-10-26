@@ -1,5 +1,5 @@
 // src/screens/auth/LoginScreen.js
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,20 +12,16 @@ import {
 } from 'react-native';
 import { auth } from '../../services/firebase';
 import { signInWithPhoneNumber, PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import app from '../../services/firebase'; // make sure this exports your firebase app
 
 export default function LoginScreen({ navigation, route }) {
   const { userType } = route.params;
 
-  const recaptchaVerifier = useRef(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [verificationId, setVerificationId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
 
-  // Send OTP
   const handleSendOTP = async () => {
     if (phoneNumber.length !== 10) {
       Alert.alert('Error', 'Please enter a valid 10-digit mobile number');
@@ -34,12 +30,8 @@ export default function LoginScreen({ navigation, route }) {
 
     setLoading(true);
     try {
-      const confirmationResult = await signInWithPhoneNumber(
-        auth,
-        '+91' + phoneNumber,
-        recaptchaVerifier.current
-      );
-      setVerificationId(confirmationResult.verificationId);
+      const confirmation = await signInWithPhoneNumber(auth, '+91' + phoneNumber);
+      setVerificationId(confirmation.verificationId);
       setOtpSent(true);
       Alert.alert('Success', `OTP sent successfully to +91 ${phoneNumber}`);
     } catch (err) {
@@ -50,7 +42,6 @@ export default function LoginScreen({ navigation, route }) {
     }
   };
 
-  // Verify OTP
   const handleVerifyOTP = async () => {
     if (otp.length !== 6) {
       Alert.alert('Error', 'Please enter a valid 6-digit OTP');
@@ -74,19 +65,10 @@ export default function LoginScreen({ navigation, route }) {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Recaptcha */}
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaVerifier}
-        firebaseConfig={app.options}
-        attemptInvisibleVerification={true}
-      />
-
-      {/* Back Button */}
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Text style={styles.backButtonText}>← Back</Text>
       </TouchableOpacity>
 
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logo}>📱</Text>
         <Text style={styles.title}>Login with Mobile</Text>
@@ -95,7 +77,6 @@ export default function LoginScreen({ navigation, route }) {
         </Text>
       </View>
 
-      {/* Content */}
       <View style={styles.content}>
         {!otpSent ? (
           <>
