@@ -1,5 +1,5 @@
 // src/screens/auth/LoginScreen.js
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,15 +11,14 @@ import {
   StatusBar,
 } from 'react-native';
 import { auth } from '../../services/firebase';
-import {
-  signInWithPhoneNumber,
-  PhoneAuthProvider,
-  signInWithCredential,
-} from 'firebase/auth';
+import { signInWithPhoneNumber, PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+import app from '../../services/firebase'; // make sure this exports your firebase app
 
 export default function LoginScreen({ navigation, route }) {
   const { userType } = route.params;
 
+  const recaptchaVerifier = useRef(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [verificationId, setVerificationId] = useState(null);
@@ -35,8 +34,12 @@ export default function LoginScreen({ navigation, route }) {
 
     setLoading(true);
     try {
-      const confirmation = await signInWithPhoneNumber(auth, '+91' + phoneNumber);
-      setVerificationId(confirmation.verificationId);
+      const confirmationResult = await signInWithPhoneNumber(
+        auth,
+        '+91' + phoneNumber,
+        recaptchaVerifier.current
+      );
+      setVerificationId(confirmationResult.verificationId);
       setOtpSent(true);
       Alert.alert('Success', `OTP sent successfully to +91 ${phoneNumber}`);
     } catch (err) {
@@ -71,11 +74,15 @@ export default function LoginScreen({ navigation, route }) {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
+      {/* Recaptcha */}
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={app.options}
+        attemptInvisibleVerification={true}
+      />
+
       {/* Back Button */}
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => navigation.goBack()}
-      >
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Text style={styles.backButtonText}>← Back</Text>
       </TouchableOpacity>
 
@@ -110,11 +117,7 @@ export default function LoginScreen({ navigation, route }) {
               onPress={handleSendOTP}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Send OTP</Text>
-              )}
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Send OTP</Text>}
             </TouchableOpacity>
           </>
         ) : (
@@ -136,11 +139,7 @@ export default function LoginScreen({ navigation, route }) {
               onPress={handleVerifyOTP}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Verify & Login</Text>
-              )}
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Verify & Login</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -169,35 +168,11 @@ const styles = StyleSheet.create({
   content: { padding: 20 },
   label: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 8, marginTop: 10 },
   sublabel: { fontSize: 14, color: '#666', marginBottom: 15 },
-  phoneInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginBottom: 15,
-  },
+  phoneInputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd', marginBottom: 15 },
   countryCode: { fontSize: 16, fontWeight: '600', color: '#333', paddingLeft: 15, paddingRight: 10 },
   phoneInput: { flex: 1, padding: 15, fontSize: 16 },
-  input: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
-    fontSize: 18,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginBottom: 15,
-    textAlign: 'center',
-    letterSpacing: 5,
-  },
-  primaryButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 10,
-  },
+  input: { backgroundColor: '#fff', padding: 15, borderRadius: 10, fontSize: 18, borderWidth: 1, borderColor: '#ddd', marginBottom: 15, textAlign: 'center', letterSpacing: 5 },
+  primaryButton: { backgroundColor: '#007AFF', padding: 16, borderRadius: 10, alignItems: 'center', marginTop: 10 },
   disabledButton: { opacity: 0.6 },
   primaryButtonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
   backButton: { padding: 15 },
