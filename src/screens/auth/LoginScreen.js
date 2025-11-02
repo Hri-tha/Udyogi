@@ -32,11 +32,8 @@ export default function LoginScreen({ navigation, route }) {
     setLoading(true);
     try {
       console.log('🔥 Attempting to send OTP to:', '+91' + phoneNumber);
-      console.log('🔥 Functions object:', functions);
       
       const sendOTP = httpsCallable(functions, 'sendOTP');
-      console.log('🔥 sendOTP callable created');
-      
       const result = await sendOTP({ 
         phoneNumber: '+91' + phoneNumber 
       });
@@ -114,8 +111,12 @@ export default function LoginScreen({ navigation, route }) {
             return;
           }
           
-          // Navigate to main app
-          navigation.replace('MainApp');
+          // ✅ FIX: Navigate to correct screen based on user type
+          if (userData.userType === 'worker') {
+            navigation.replace('WorkerMain');
+          } else {
+            navigation.replace('EmployerMain');
+          }
         } else {
           // New user - create initial profile
           console.log('New user - creating profile');
@@ -158,7 +159,6 @@ export default function LoginScreen({ navigation, route }) {
   const handleResendOTP = () => {
     setOtpSent(false);
     setOtp('');
-    // Auto-trigger send OTP after a brief delay
     setTimeout(() => {
       handleSendOTP();
     }, 300);

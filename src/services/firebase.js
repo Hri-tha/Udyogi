@@ -1,66 +1,44 @@
-// import { initializeApp } from 'firebase/app';
-// import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
-// import { getFirestore } from 'firebase/firestore';
-// import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
-
-// const firebaseConfig = {
-//   apiKey: "AIzaSyBk9r57zRZuCgZag7lGNsIJW6_7IT6FkTg",
-//   authDomain: "udyogi-1ed9c.firebaseapp.com",
-//   projectId: "udyogi-1ed9c",
-//   storageBucket: "udyogi-1ed9c.appspot.com",
-//   messagingSenderId: "960400461165",
-//   appId: "1:960400461165:android:e1d09e625a3df8196ede64"
-// };
-
-// // Initialize Firebase
-// const app = initializeApp(firebaseConfig);
-
-// // Initialize Auth with AsyncStorage persistence
-// const auth = initializeAuth(app, {
-//   persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-// });
-
-// // Initialize Firestore
-// const db = getFirestore(app);
-
-// export { auth, db };
-// export default app;
-
 // src/services/firebase.js
-import { initializeApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// ✅ Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBk9r57zRZuCgZag7lGNsIJW6_7IT6FkTg",
   authDomain: "udyogi-1ed9c.firebaseapp.com",
   projectId: "udyogi-1ed9c",
   storageBucket: "udyogi-1ed9c.appspot.com",
   messagingSenderId: "960400461165",
-  appId: "1:960400461165:android:e1d09e625a3df8196ede64"
+  appId: "1:960400461165:android:e1d09e625a3df8196ede64",
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// ✅ Initialize Firebase App (avoid re-initialization)
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize Auth with AsyncStorage persistence
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-});
+// ✅ Initialize Auth (handles hot reload in React Native)
+let auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+  });
+} catch (error) {
+  auth = getAuth(app); // Fallback if already initialized
+}
 
-// Initialize Firestore
+// ✅ Initialize Firestore
 const db = getFirestore(app);
 
-// Initialize Functions
+// ✅ Initialize Cloud Functions
 const functions = getFunctions(app);
 
-// Connect to Functions Emulator in development
-// Comment this out when testing with deployed functions
-// if (__DEV__) {
-//   connectFunctionsEmulator(functions, 'localhost', 5001);
-// }
+// 🔧 OPTIONAL: Connect to Functions Emulator for local testing
+// Uncomment the line below if testing locally with Firebase Emulator
+// connectFunctionsEmulator(functions, 'localhost', 5001);
 
-export { auth, db, functions };
+// ✅ Export instances
+export { app, auth, db, functions };
 export default app;

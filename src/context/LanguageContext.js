@@ -75,27 +75,25 @@ export const LanguageProvider = ({ children }) => {
     loadLanguagePreference();
   }, []);
 
-  const loadLanguagePreference = async () => {
-    try {
-      const savedLanguage = await AsyncStorage.getItem('userLanguage');
-      const languageSelected = await AsyncStorage.getItem('isLanguageSelected');
-      
-      if (savedLanguage) {
-        setLocale(savedLanguage);
-        i18n.locale = savedLanguage;
-        setIsLanguageSelected(languageSelected === 'true');
-      } else {
-        // For first time users, show language selection
-        setIsLanguageSelected(false);
-      }
-    } catch (error) {
-      console.error('Error loading language preference:', error);
-      // Set default values on error
+ const loadLanguagePreference = async () => {
+  try {
+    const savedLanguage = await AsyncStorage.getItem('userLanguage');
+    const languageSelected = await AsyncStorage.getItem('isLanguageSelected');
+
+    if (savedLanguage) {
+      setLocale(savedLanguage);
+      i18n.locale = savedLanguage;
+      setIsLanguageSelected(languageSelected === 'true');
+    } else {
       setIsLanguageSelected(false);
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error('Error loading language preference:', error);
+    setIsLanguageSelected(false);
+  } finally {
+    setLoading(false); // ✅ Ensure loading stops no matter what
+  }
+};
 
   const changeLanguage = async (language) => {
     try {

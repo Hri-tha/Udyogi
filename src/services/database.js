@@ -13,6 +13,7 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 import { db } from './firebase';
+// import { collection, addDoc, query, where, getDocs, updateDoc, doc, orderBy } from 'firebase/firestore';
 
 // ========== JOB FUNCTIONS ==========
 
@@ -291,6 +292,7 @@ export const updateApplicationStatus = async (applicationId, status, locationDat
     if (status === 'accepted' && locationData) {
       updates.employerLocation = locationData;
       updates.locationShared = true;
+      updates.chatEnabled = true; 
       updates.locationSharedAt = serverTimestamp();
     }
 
@@ -317,76 +319,121 @@ export const updateApplicationStatus = async (applicationId, status, locationDat
 // ========== NOTIFICATION FUNCTIONS ==========
 
 // Add this to your database.js file in the notification functions section
-export const createNotification = async (notificationData) => {
+export const createNotification = async (userId, notificationData) => {
   try {
-    // Ensure all fields have proper values and handle undefined
-    const safeData = {
-      ...notificationData.data,
-      jobId: notificationData.data?.jobId || '',
-      applicationId: notificationData.data?.applicationId || '',
-      workerId: notificationData.data?.workerId || '',
-      workerName: notificationData.data?.workerName || 'Worker',
-      employerId: notificationData.data?.employerId || '',
-      status: notificationData.data?.status || ''
-    };
-
-    // Remove any undefined values from safeData
-    Object.keys(safeData).forEach(key => {
-      if (safeData[key] === undefined) {
-        safeData[key] = '';
-      }
+    const notificationRef = await addDoc(collection(db, 'notifications'), {
+      userId,
+      title: notificationData.title,
+      message: notificationData.message,
+      type: notificationData.type, // e.g., 'application_accepted', 'new_application', etc.
+      read: false,
+      actionType: notificationData.actionType || null, // e.g., 'view_job', 'view_application'
+      actionId: notificationData.actionId || null, // jobId or applicationId
+      createdAt: new Date(),
     });
 
-    const safeNotificationData = {
-      userId: notificationData.userId || '',
-      type: notificationData.type || 'general',
-      title: notificationData.title || 'Notification',
-      message: notificationData.message || '',
-      data: safeData,
-      read: false,
-      createdAt: serverTimestamp()
-    };
-
-    const docRef = await addDoc(collection(db, 'notifications'), safeNotificationData);
-    return { success: true, notificationId: docRef.id };
+    console.log('Notification created:', notificationRef.id);
+    return { success: true, id: notificationRef.id };
   } catch (error) {
-    console.error('Create Notification Error:', error);
+    console.error('Error creating notification:', error);
     return { success: false, error: error.message };
   }
 };
 
 export const fetchUserNotifications = async (userId) => {
   try {
-    const q = query(
+    const notificationsQuery = query(
       collection(db, 'notifications'),
       where('userId', '==', userId),
       orderBy('createdAt', 'desc')
     );
-    
-    const snapshot = await getDocs(q);
-    const notifications = snapshot.docs.map(doc => ({
+
+    const querySnapshot = await getDocs(notificationsQuery);
+    const notifications = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
-    
+
     return { success: true, notifications };
   } catch (error) {
-    console.error('Fetch Notifications Error:', error);
+    console.error('Error fetching notifications:', error);
     return { success: false, error: error.message, notifications: [] };
   }
 };
 
 export const markNotificationAsRead = async (notificationId) => {
   try {
-    const notifRef = doc(db, 'notifications', notificationId);
-    await updateDoc(notifRef, {
-      read: true
+    const notificationRef = doc(db, 'notifications', notificationId);
+    await updateDoc(notificationRef, {
+      read: true,
+      readAt: new Date(),
     });
+
     return { success: true };
   } catch (error) {
-    console.error('Mark Notification Read Error:', error);
+    console.error('Error marking notification as read:', error);
     return { success: false, error: error.message };
   }
+};
+
+/**
+ * Helper function to send application accepted notification
+ */
+export const sendApplicationAcceptedNotification = async (workerId, jobTitle, employerName) => {
+  return await createNotification(workerId, {
+    title: '🎉 Application Accepted!',
+    message: `Congratulations! ${employerName} has accepted your application for ${jobTitle}.`,
+    type: 'application_accepted',
+    actionType: 'view_application',
+  });
+};
+
+/**
+ * Helper function to send application rejected notification
+ */
+export const sendApplicationRejectedNotification = async (workerId, jobTitle, employerName) => {
+  return await createNotification(workerId, {
+    title: 'Application Update',
+    message: `Your application for ${jobTitle} at ${employerName} was not selected. Keep applying!`,
+    type: 'application_rejected',
+    actionType: 'view_jobs',
+  });
+};
+
+/**
+ * Helper function to send new application notification to employer
+ */
+export const sendNewApplicationNotification = async (employerId, jobTitle, workerName) => {
+  return await createNotification(employerId, {
+    title: '📥 New Application Received',
+    message: `${workerName} has applied for your ${jobTitle} position.`,
+    type: 'new_application',
+    actionType: 'view_application',
+  });
+};
+
+/**
+ * Helper function to send new message notification
+ */
+export const sendNewMessageNotification = async (recipientId, senderName, jobTitle) => {
+  return await createNotification(recipientId, {
+    title: '💬 New Message',
+    message: `${senderName} sent you a message about ${jobTitle}.`,
+    type: 'new_message',
+    actionType: 'view_chat',
+  });
+};
+
+/**
+ * Helper function to send job reminder notification
+ */
+export const sendJobReminderNotification = async (workerId, jobTitle, reminderTime) => {
+  return await createNotification(workerId, {
+    title: '⏰ Job Reminder',
+    message: `Reminder: Your job "${jobTitle}" starts ${reminderTime}.`,
+    type: 'job_reminder',
+    actionType: 'view_job',
+  });
 };
 
 // ========== USER FUNCTIONS ==========

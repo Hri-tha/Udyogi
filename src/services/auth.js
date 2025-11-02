@@ -1,56 +1,33 @@
 // src/services/auth.js
-import { 
-  PhoneAuthProvider, 
-  signInWithCredential,
-  signOut as firebaseSignOut
-} from 'firebase/auth';
+import { signOut as firebaseSignOut } from 'firebase/auth';
 import { auth } from './firebase';
 
-// Send OTP (without recaptcha)
-export const sendOTP = async (phoneNumber) => {
-  try {
-    const formattedPhone = phoneNumber.startsWith('+') 
-      ? phoneNumber 
-      : `+91${phoneNumber}`;
-
-    const phoneProvider = new PhoneAuthProvider(auth);
-    const verificationId = await phoneProvider.verifyPhoneNumber(formattedPhone, null); // remove recaptcha
-
-    return { success: true, verificationId };
-  } catch (error) {
-    console.error('Send OTP Error:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// Verify OTP
-export const verifyOTP = async (verificationId, code) => {
-  try {
-    const credential = PhoneAuthProvider.credential(verificationId, code);
-    const userCredential = await signInWithCredential(auth, credential);
-
-    return { 
-      success: true, 
-      user: userCredential.user 
-    };
-  } catch (error) {
-    console.error('Verify OTP Error:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// Sign out
+/**
+ * Sign out the current user
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
 export const signOut = async () => {
   try {
+    console.log('🔓 Attempting to sign out...');
     await firebaseSignOut(auth);
+    console.log('✅ User signed out successfully');
     return { success: true };
   } catch (error) {
-    console.error('Sign Out Error:', error);
+    console.error('❌ Sign Out Error:', error);
     return { success: false, error: error.message };
   }
 };
 
-// Get current logged-in user
+/**
+ * Get current user
+ */
 export const getCurrentUser = () => {
   return auth.currentUser;
+};
+
+/**
+ * Check if user is authenticated
+ */
+export const isAuthenticated = () => {
+  return auth.currentUser !== null;
 };
