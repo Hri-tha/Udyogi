@@ -4,10 +4,10 @@
     "slug": "udyogi",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/UdyogiLogo.png",
+    "icon": "./assets/Logo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/UdyogiLogo.png",
+      "image": "./assets/Logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -22,7 +22,7 @@
       "package": "com.udyogi.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/Sls.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true

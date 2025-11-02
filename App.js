@@ -1,9 +1,9 @@
-// App.js — Final Optimized Version with JobLocation & ChatScreen
+// App.js — Final Optimized Version with Splash Screen
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { ActivityIndicator, View, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Text, Image } from 'react-native';
 
 // Context Providers
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
@@ -37,9 +37,35 @@ import EmployerBottomTabNavigator from './src/navigation/EmployerBottomTabNaviga
 
 const Stack = createStackNavigator();
 
+// Splash Screen Component
+function SplashScreen({ onFinish }) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onFinish();
+    }, 2000); 
+    return () => clearTimeout(timer);
+  }, [onFinish]);
+
+  return (
+    <View style={styles.splashContainer}>
+      <Image 
+        source={require('./assets/Sls.png')}
+        style={styles.splashImage}
+        resizeMode="cover" 
+      />
+    </View>
+  );
+}
+
 function AppContent() {
+  const [showSplash, setShowSplash] = useState(true);
   const { user, userProfile, loading: authLoading } = useAuth();
   const { isLanguageSelected, loading: languageLoading } = useLanguage();
+
+  // Show splash screen first
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
 
   // Show loading spinner while initializing language & auth
   if (authLoading || languageLoading) {
@@ -114,6 +140,15 @@ export default function App() {
 
 // Styles
 const styles = StyleSheet.create({
+  splashContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  splashImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
