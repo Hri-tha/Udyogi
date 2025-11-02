@@ -4,10 +4,10 @@
     "slug": "udyogi",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/UdyogiLogo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/UdyogiLogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
