@@ -11,6 +11,7 @@ import {
   StatusBar,
   Alert,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useJob } from '../../context/JobContext';
@@ -38,6 +39,8 @@ const Icon = ({ name, size = 24, color = colors.text, style }) => {
       'trending': '📈',
       'star': '⭐',
       'filter': '🔍',
+      'search': '🔍',
+      'close': '✕',
     };
     return iconMap[iconName] || '❓';
   };
@@ -49,16 +52,41 @@ const Icon = ({ name, size = 24, color = colors.text, style }) => {
   );
 };
 
+// Default job categories
+const DEFAULT_CATEGORIES = [
+  { id: 'all', label: 'All Jobs', icon: '💼' },
+  { id: 'daily-worker', label: 'Daily Worker', icon: '🔨' },
+  { id: 'barber', label: 'Barber', icon: '💈' },
+  { id: 'tailor', label: 'Tailor', icon: '🧵' },
+  { id: 'coder', label: 'Coder', icon: '💻' },
+  { id: 'driver', label: 'Driver', icon: '🚗' },
+  { id: 'cleaner', label: 'Cleaner', icon: '🧹' },
+  { id: 'cook', label: 'Cook', icon: '👨‍🍳' },
+  { id: 'delivery', label: 'Delivery', icon: '📦' },
+];
+
 export default function WorkerHomeScreen({ navigation }) {
   const { user, userProfile } = useAuth();
   const { jobs, loading, fetchJobs, currentLocation } = useJob();
   const [refreshing, setRefreshing] = useState(false);
   const [myApplications, setMyApplications] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Add effect to reload applications when navigating back to this screen
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('🔄 Screen focused - reloading applications');
+      loadApplications();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const loadData = async () => {
     try {
@@ -74,6 +102,8 @@ export default function WorkerHomeScreen({ navigation }) {
       const result = await fetchWorkerApplications(user.uid);
       if (result.success) {
         setMyApplications(result.applications);
+        console.log('✅ Loaded applications:', result.applications.length);
+        console.log('📋 Application Job IDs:', result.applications.map(a => `${a.jobId} (${a.status})`));
       }
     } catch (error) {
       console.error('Error loading applications:', error);
@@ -86,31 +116,83 @@ export default function WorkerHomeScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  // Get accepted job IDs to filter them out
+  // Get all applied job IDs (ALL statuses: pending, accepted, rejected)
+  // A worker should not see any job they've already applied to, regardless of application status
+  const appliedJobIds = myApplications.map(app => app.jobId);
+
+  // Filter jobs: 
+  // 1. Must be 'open' status
+  // 2. Must NOT be in appliedJobIds (worker hasn't applied yet)
+  const availableJobs = jobs.filter(job => {
+    const isOpen = job.status === 'open';
+    const notApplied = !appliedJobIds.includes(job.id);
+    
+    // Debug: Log jobs that are being filtered out
+    if (isOpen && !notApplied) {
+      console.log(`🚫 Hiding applied job: "${job.title}" (ID: ${job.id})`);
+    }
+    
+    return isOpen && notApplied;
+  });
+
+  // Comprehensive debug logs
+  console.log('═══════════════════════════════════════');
+  console.log('📊 JOB FILTERING DEBUG:');
+  console.log('   Total Jobs in System:', jobs.length);
+  console.log('   Total Applications:', myApplications.length);
+  console.log('   Applied Job IDs:', appliedJobIds);
+  console.log('   Available Jobs (after filter):', availableJobs.length);
+  console.log('   Available Job Titles:', availableJobs.map(j => j.title));
+  console.log('═══════════════════════════════════════');
+
+  // Get pending and accepted counts for stats
+  const pendingJobIds = myApplications
+    .filter(app => app.status === 'pending')
+    .map(app => app.jobId);
+  
   const acceptedJobIds = myApplications
     .filter(app => app.status === 'accepted')
     .map(app => app.jobId);
 
-  // Get pending job IDs
-  const pendingJobIds = myApplications
-    .filter(app => app.status === 'pending')
-    .map(app => app.jobId);
-
-  // Filter jobs: exclude accepted jobs, show only open jobs
-  const availableJobs = jobs.filter(job => 
-    job.status === 'open' && !acceptedJobIds.includes(job.id)
-  );
-
-  // Further filter by category
+  // Filter by category and search query
   const getFilteredJobs = () => {
-    if (selectedCategory === 'all') return availableJobs;
-    if (selectedCategory === 'applied') {
-      return availableJobs.filter(job => pendingJobIds.includes(job.id));
+    let filtered = availableJobs;
+
+    // Filter by category
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(job => {
+        const jobCategory = job.category?.toLowerCase() || '';
+        const jobTitle = job.title?.toLowerCase() || '';
+        const jobType = job.jobType?.toLowerCase() || '';
+        const searchTerm = selectedCategory.toLowerCase();
+        
+        return jobCategory.includes(searchTerm) || 
+               jobTitle.includes(searchTerm) || 
+               jobType.includes(searchTerm);
+      });
     }
-    if (selectedCategory === 'new') {
-      return availableJobs.filter(job => !pendingJobIds.includes(job.id));
+
+    // Filter by search query
+    if (searchQuery.trim() !== '') {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(job => {
+        const title = job.title?.toLowerCase() || '';
+        const company = job.companyName?.toLowerCase() || job.company?.toLowerCase() || '';
+        const location = job.location?.toLowerCase() || '';
+        const category = job.category?.toLowerCase() || '';
+        const jobType = job.jobType?.toLowerCase() || '';
+        const description = job.description?.toLowerCase() || '';
+        
+        return title.includes(query) || 
+               company.includes(query) || 
+               location.includes(query) || 
+               category.includes(query) || 
+               jobType.includes(query) ||
+               description.includes(query);
+      });
     }
-    return availableJobs;
+
+    return filtered;
   };
 
   const filteredJobs = getFilteredJobs();
@@ -121,7 +203,10 @@ export default function WorkerHomeScreen({ navigation }) {
         styles.categoryButton,
         selectedCategory === value && styles.categoryButtonActive
       ]}
-      onPress={() => setSelectedCategory(value)}
+      onPress={() => {
+        setSelectedCategory(value);
+        setSearchQuery('');
+      }}
     >
       <Text style={styles.categoryIcon}>{icon}</Text>
       <View style={styles.categoryContent}>
@@ -131,12 +216,14 @@ export default function WorkerHomeScreen({ navigation }) {
         ]}>
           {label}
         </Text>
-        <Text style={[
-          styles.categoryCount,
-          selectedCategory === value && styles.categoryCountActive
-        ]}>
-          {count} jobs
-        </Text>
+        {value === 'all' && (
+          <Text style={[
+            styles.categoryCount,
+            selectedCategory === value && styles.categoryCountActive
+          ]}>
+            {count} jobs
+          </Text>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -188,14 +275,14 @@ export default function WorkerHomeScreen({ navigation }) {
               value={availableJobs.length}
               label="Available"
               color={colors.primary}
-              onPress={() => setSelectedCategory('new')}
+              onPress={() => setSelectedCategory('all')}
             />
             <QuickStatCard
               icon="⏳"
               value={pendingJobIds.length}
               label="Pending"
               color={colors.warning}
-              onPress={() => setSelectedCategory('applied')}
+              onPress={() => navigation.navigate('MyJobs')}
             />
             <QuickStatCard
               icon="✓"
@@ -220,13 +307,13 @@ export default function WorkerHomeScreen({ navigation }) {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Location Filter */}
-        <View style={styles.locationSection}>
-          <View style={styles.locationHeader}>
-            <View>
+        {/* Search and Location Section */}
+        <View style={styles.searchSection}>
+          <View style={styles.searchHeader}>
+            <View style={styles.searchHeaderLeft}>
               <Text style={styles.sectionTitle}>Find Your Next Job</Text>
               <Text style={styles.sectionSubtitle}>
-                {filteredJobs.length} opportunities waiting for you
+                {filteredJobs.length} opportunities waiting
               </Text>
             </View>
             <TouchableOpacity 
@@ -240,6 +327,30 @@ export default function WorkerHomeScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
+          {/* Search Bar */}
+          <View style={styles.searchBarContainer}>
+            <View style={styles.searchInputWrapper}>
+              <Text style={styles.searchIcon}>🔍</Text>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search jobs, companies, categories..."
+                placeholderTextColor={colors.textSecondary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onFocus={() => setShowSearch(true)}
+              />
+              {searchQuery !== '' && (
+                <TouchableOpacity 
+                  onPress={() => setSearchQuery('')}
+                  style={styles.clearButton}
+                >
+                  <Text style={styles.clearIcon}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Location Filter */}
           <TouchableOpacity 
             style={styles.locationButton}
             onPress={() => navigation.navigate('LocationFilter')}
@@ -256,31 +367,67 @@ export default function WorkerHomeScreen({ navigation }) {
 
         {/* Category Filter */}
         <View style={styles.categorySection}>
+          <Text style={styles.categorySectionTitle}>Browse by Category</Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.categoryScroll}
           >
-            <CategoryButton
-              label="All Jobs"
-              value="all"
-              icon="💼"
-              count={availableJobs.length}
-            />
-            <CategoryButton
-              label="New Jobs"
-              value="new"
-              icon="✨"
-              count={availableJobs.filter(job => !pendingJobIds.includes(job.id)).length}
-            />
-            <CategoryButton
-              label="Applied"
-              value="applied"
-              icon="📝"
-              count={pendingJobIds.length}
-            />
+            {DEFAULT_CATEGORIES.map(category => (
+              <CategoryButton
+                key={category.id}
+                label={category.label}
+                value={category.id}
+                icon={category.icon}
+                count={availableJobs.length}
+              />
+            ))}
           </ScrollView>
         </View>
+
+        {/* Active Filters Display */}
+        {(selectedCategory !== 'all' || searchQuery !== '') && (
+          <View style={styles.activeFiltersContainer}>
+            <Text style={styles.activeFiltersText}>Active filters:</Text>
+            <View style={styles.activeFiltersRow}>
+              {selectedCategory !== 'all' && (
+                <View style={styles.activeFilterChip}>
+                  <Text style={styles.activeFilterText}>
+                    {DEFAULT_CATEGORIES.find(c => c.id === selectedCategory)?.label}
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => setSelectedCategory('all')}
+                    style={styles.removeFilterButton}
+                  >
+                    <Text style={styles.removeFilterIcon}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {searchQuery !== '' && (
+                <View style={styles.activeFilterChip}>
+                  <Text style={styles.activeFilterText} numberOfLines={1}>
+                    "{searchQuery}"
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => setSearchQuery('')}
+                    style={styles.removeFilterButton}
+                  >
+                    <Text style={styles.removeFilterIcon}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              <TouchableOpacity 
+                onPress={() => {
+                  setSelectedCategory('all');
+                  setSearchQuery('');
+                }}
+                style={styles.clearAllButton}
+              >
+                <Text style={styles.clearAllText}>Clear all</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Jobs List */}
         {loading ? (
@@ -291,34 +438,51 @@ export default function WorkerHomeScreen({ navigation }) {
         ) : filteredJobs.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>
-              {selectedCategory === 'applied' ? '📝' : '🔍'}
+              {searchQuery !== '' || selectedCategory !== 'all' ? '🔍' : '💼'}
             </Text>
             <Text style={styles.emptyTitle}>
-              {selectedCategory === 'applied' 
-                ? 'No Applied Jobs' 
+              {searchQuery !== '' || selectedCategory !== 'all'
+                ? 'No Jobs Found' 
                 : 'No Jobs Available'}
             </Text>
             <Text style={styles.emptySubtitle}>
-              {selectedCategory === 'applied'
-                ? 'Start applying to jobs to track them here'
+              {searchQuery !== '' || selectedCategory !== 'all'
+                ? 'Try adjusting your search or filters to find more jobs.'
                 : currentLocation 
                   ? `No jobs found in ${currentLocation}. Try changing location.`
-                  : 'New opportunities will appear here soon.'}
+                  : 'New opportunities will appear here soon. Check back later!'}
             </Text>
-            {selectedCategory !== 'applied' && (
+            {(searchQuery !== '' || selectedCategory !== 'all') ? (
               <TouchableOpacity 
                 style={styles.emptyButton}
-                onPress={() => navigation.navigate('LocationFilter')}
+                onPress={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('all');
+                }}
               >
-                <Text style={styles.emptyButtonText}>Change Location</Text>
+                <Text style={styles.emptyButtonText}>Clear Filters</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={styles.emptyButton}
+                onPress={() => navigation.navigate('MyJobs')}
+              >
+                <Text style={styles.emptyButtonText}>View My Applications</Text>
               </TouchableOpacity>
             )}
           </View>
         ) : (
           <View style={styles.jobsContainer}>
+            <View style={styles.jobsHeader}>
+              <Text style={styles.jobsHeaderText}>
+                {filteredJobs.length} Job{filteredJobs.length !== 1 ? 's' : ''} Available
+              </Text>
+              <Text style={styles.jobsHeaderSubtext}>
+                {myApplications.length > 0 && `${myApplications.length} already applied`}
+              </Text>
+            </View>
             {filteredJobs.map((job, index) => {
-              const hasApplied = pendingJobIds.includes(job.id);
-              const isNew = !hasApplied && new Date() - new Date(job.createdAt) < 7 * 24 * 60 * 60 * 1000;
+              const isNew = new Date() - new Date(job.createdAt) < 7 * 24 * 60 * 60 * 1000;
               
               return (
                 <TouchableOpacity
@@ -380,6 +544,11 @@ export default function WorkerHomeScreen({ navigation }) {
 
                   {/* Job Tags */}
                   <View style={styles.jobTags}>
+                    {job.category && (
+                      <View style={styles.jobTag}>
+                        <Text style={styles.jobTagText}>{job.category}</Text>
+                      </View>
+                    )}
                     <View style={styles.jobTag}>
                       <Text style={styles.jobTagText}>{job.jobType || 'Full-time'}</Text>
                     </View>
@@ -392,25 +561,11 @@ export default function WorkerHomeScreen({ navigation }) {
 
                   {/* Action Button */}
                   <TouchableOpacity
-                    style={[
-                      styles.jobActionButton,
-                      hasApplied && styles.jobActionButtonApplied
-                    ]}
+                    style={styles.jobActionButton}
                     onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
                   >
-                    {hasApplied ? (
-                      <>
-                        <Text style={styles.jobActionIcon}>✓</Text>
-                        <Text style={[styles.jobActionText, styles.jobActionTextApplied]}>
-                          Application Pending
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.jobActionText}>Apply Now</Text>
-                        <Text style={styles.jobActionArrow}>→</Text>
-                      </>
-                    )}
+                    <Text style={styles.jobActionText}>Apply Now</Text>
+                    <Text style={styles.jobActionArrow}>→</Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
               );
@@ -423,6 +578,8 @@ export default function WorkerHomeScreen({ navigation }) {
     </View>
   );
 }
+
+
 
 const styles = StyleSheet.create({
   container: {
@@ -522,15 +679,18 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  locationSection: {
+  searchSection: {
     padding: 20,
     paddingBottom: 10,
   },
-  locationHeader: {
+  searchHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  searchHeaderLeft: {
+    flex: 1,
   },
   sectionTitle: {
     fontSize: 22,
@@ -565,6 +725,38 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     color: colors.white,
+  },
+  searchBarContainer: {
+    marginBottom: 12,
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  searchIcon: {
+    fontSize: 18,
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+    paddingVertical: 16,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  clearIcon: {
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   locationButton: {
     flexDirection: 'row',
@@ -601,7 +793,14 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   categorySection: {
-    paddingVertical: 10,
+    paddingVertical: 16,
+  },
+  categorySectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 12,
+    paddingHorizontal: 20,
   },
   categoryScroll: {
     paddingHorizontal: 20,
@@ -616,7 +815,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: colors.border,
-    minWidth: 130,
+    minWidth: 120,
   },
   categoryButtonActive: {
     backgroundColor: colors.primary,
@@ -645,6 +844,56 @@ const styles = StyleSheet.create({
   },
   categoryCountActive: {
     color: 'rgba(255, 255, 255, 0.8)',
+  },
+  activeFiltersContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: colors.gray100,
+  },
+  activeFiltersText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  activeFiltersRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
+  },
+  activeFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '20',
+    paddingVertical: 6,
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRadius: 20,
+    maxWidth: width * 0.5,
+  },
+  activeFilterText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  removeFilterButton: {
+    padding: 2,
+  },
+  removeFilterIcon: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: 'bold',
+  },
+  clearAllButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  clearAllText: {
+    fontSize: 13,
+    color: colors.error,
+    fontWeight: '600',
   },
   loadingContainer: {
     alignItems: 'center',
@@ -697,6 +946,19 @@ const styles = StyleSheet.create({
   jobsContainer: {
     padding: 20,
     paddingTop: 10,
+  },
+  jobsHeader: {
+    marginBottom: 16,
+  },
+  jobsHeaderText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  jobsHeaderSubtext: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   jobCard: {
     backgroundColor: colors.white,
@@ -788,6 +1050,7 @@ const styles = StyleSheet.create({
   },
   jobTags: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 12,
   },
@@ -810,21 +1073,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  jobActionButtonApplied: {
-    backgroundColor: colors.warning + '20',
-  },
-  jobActionIcon: {
-    fontSize: 16,
-    color: colors.warning,
-    marginRight: 6,
-  },
   jobActionText: {
     fontSize: 15,
     fontWeight: 'bold',
     color: colors.white,
-  },
-  jobActionTextApplied: {
-    color: colors.warning,
   },
   jobActionArrow: {
     fontSize: 18,

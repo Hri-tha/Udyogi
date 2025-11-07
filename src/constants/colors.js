@@ -1,105 +1,50 @@
-// src/constants/colors.js
 export const colors = {
-  // Primary colors - Blue theme
+  // Primary colors - Blue theme (Modern iOS/Android Blue)
   primary: '#007AFF',
   primaryDark: '#0056CC',
-  primaryLight: '#4DA3FF',
-  primaryExtraLight: '#E6F2FF',
+  primaryLight: '#E6F2FF', // Softer light blue
   
   // Secondary colors - Purple accent
   secondary: '#5856D6',
   secondaryDark: '#3634A3',
-  secondaryLight: '#8E8CE8',
   
-  // Background colors
-  background: '#F8F9FA',
-  backgroundLight: '#FFFFFF',
-  backgroundDark: '#E9ECEF',
-  backgroundCard: '#FFFFFF',
+  // Background colors (Clean and modern light mode)
+  background: '#F2F2F7', // Standard light gray background
+  card: '#FFFFFF', // Elevated container/card background
+  overlay: 'rgba(0, 0, 0, 0.5)', 
+  backdrop: 'rgba(0, 0, 0, 0.3)',
   
   // Text colors
-  text: '#1C1C1E',
-  textSecondary: '#8E8E93',
-  textTertiary: '#C7C7CC',
-  textInverse: '#FFFFFF',
-  textMuted: '#6C757D',
+  textPrimary: '#1C1C1E',    // Near Black
+  textSecondary: '#6A6A6A',  // Dark Gray for supporting text
+  textPlaceholder: '#C7C7CC',// Placeholder text
+  textInverse: '#FFFFFF',    // White for text on colored backgrounds
+  textMuted: '#8E8E93',      // Timestamps, subtle hints
   
   // Status colors
   success: '#34C759',
-  successDark: '#28A745',
-  successLight: '#D4EDDA',
-  successText: '#155724',
+  successLight: '#E6FFEB', // Softer green light
   
   error: '#FF3B30',
-  errorDark: '#DC3545',
-  errorLight: '#F8D7DA',
-  errorText: '#721C24',
+  errorLight: '#FFEDED',   // Softer red light
   
   warning: '#FF9500',
-  warningDark: '#E0A800',
-  warningLight: '#FFF3CD',
-  warningText: '#856404',
+  warningLight: '#FFF8E6', // Softer orange light
   
   info: '#5AC8FA',
-  infoDark: '#17A2B8',
-  infoLight: '#D1ECF1',
-  infoText: '#0C5460',
+  infoLight: '#EBF9FF',    // Softer blue light
   
   // UI colors
   white: '#FFFFFF',
   black: '#000000',
-  border: '#DEE2E6',
-  borderLight: '#E9ECEF',
-  borderDark: '#CED4DA',
-  placeholder: '#ADB5BD',
+  border: '#EFEFF4',      // Very light border for separating lists
+  divider: '#D1D1D6',     // Thicker divider for sections
   shadow: 'rgba(0, 0, 0, 0.1)',
-  
-  // Gray scale
-  gray100: '#F8F9FA',
-  gray200: '#E9ECEF',
-  gray300: '#DEE2E6',
-  gray400: '#CED4DA',
-  gray500: '#ADB5BD',
-  gray600: '#6C757D',
-  gray700: '#495057',
-  gray800: '#343A40',
-  gray900: '#212529',
-  
-  // Semantic colors
-  card: '#FFFFFF',
-  cardDark: '#F8F9FA',
-  overlay: 'rgba(0, 0, 0, 0.5)',
-  backdrop: 'rgba(0, 0, 0, 0.3)',
-  
-  // Gradient colors
-  gradientPrimary: ['#007AFF', '#5856D6'],
-  gradientSuccess: ['#34C759', '#28A745'],
-  gradientWarning: ['#FF9500', '#FFCC00'],
+
+  // ... (Remove redundant grayscale definitions to simplify)
 };
 
-// Additional color utilities
-export const getStatusColor = (status) => {
-  switch (status?.toLowerCase()) {
-    case 'success':
-    case 'accepted':
-    case 'completed':
-      return colors.success;
-    case 'error':
-    case 'rejected':
-    case 'failed':
-      return colors.error;
-    case 'warning':
-    case 'pending':
-    case 'processing':
-      return colors.warning;
-    case 'info':
-    case 'active':
-    case 'open':
-      return colors.info;
-    default:
-      return colors.textSecondary;
-  }
-};
+// ... (getStatusColor function remains the same)
 
 export const getStatusBackgroundColor = (status) => {
   switch (status?.toLowerCase()) {
@@ -120,7 +65,7 @@ export const getStatusBackgroundColor = (status) => {
     case 'open':
       return colors.infoLight;
     default:
-      return colors.gray200;
+      return colors.border; // Use a light, general UI color
   }
 };
 

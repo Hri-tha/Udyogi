@@ -13,7 +13,6 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 import { db } from './firebase';
-// import { collection, addDoc, query, where, getDocs, updateDoc, doc, orderBy } from 'firebase/firestore';
 
 // ========== JOB FUNCTIONS ==========
 
@@ -23,7 +22,9 @@ export const createJob = async (jobData) => {
       ...jobData,
       status: 'open',
       createdAt: serverTimestamp(),
-      applications: []
+      applications: [],
+      // Ensure category field exists
+      category: jobData.category || 'General',
     });
     return { success: true, jobId: docRef.id };
   } catch (error) {
@@ -38,6 +39,10 @@ export const fetchJobs = async (filters = {}) => {
     
     if (filters.location && filters.location.trim() !== '') {
       q = query(q, where('location', '==', filters.location.trim()));
+    }
+    
+    if (filters.category && filters.category.trim() !== '' && filters.category !== 'all') {
+      q = query(q, where('category', '==', filters.category.trim()));
     }
     
     const snapshot = await getDocs(q);
@@ -278,8 +283,6 @@ export const fetchJobApplications = async (jobId) => {
   }
 };
 
-// In your database.js file, replace the existing updateApplicationStatus function:
-
 export const updateApplicationStatus = async (applicationId, status, locationData = null) => {
   try {
     const appRef = doc(db, 'applications', applicationId);
@@ -318,17 +321,16 @@ export const updateApplicationStatus = async (applicationId, status, locationDat
 
 // ========== NOTIFICATION FUNCTIONS ==========
 
-// Add this to your database.js file in the notification functions section
 export const createNotification = async (userId, notificationData) => {
   try {
     const notificationRef = await addDoc(collection(db, 'notifications'), {
       userId,
       title: notificationData.title,
       message: notificationData.message,
-      type: notificationData.type, // e.g., 'application_accepted', 'new_application', etc.
+      type: notificationData.type,
       read: false,
-      actionType: notificationData.actionType || null, // e.g., 'view_job', 'view_application'
-      actionId: notificationData.actionId || null, // jobId or applicationId
+      actionType: notificationData.actionType || null,
+      actionId: notificationData.actionId || null,
       createdAt: new Date(),
     });
 
@@ -376,9 +378,6 @@ export const markNotificationAsRead = async (notificationId) => {
   }
 };
 
-/**
- * Helper function to send application accepted notification
- */
 export const sendApplicationAcceptedNotification = async (workerId, jobTitle, employerName) => {
   return await createNotification(workerId, {
     title: '🎉 Application Accepted!',
@@ -388,9 +387,6 @@ export const sendApplicationAcceptedNotification = async (workerId, jobTitle, em
   });
 };
 
-/**
- * Helper function to send application rejected notification
- */
 export const sendApplicationRejectedNotification = async (workerId, jobTitle, employerName) => {
   return await createNotification(workerId, {
     title: 'Application Update',
@@ -400,9 +396,6 @@ export const sendApplicationRejectedNotification = async (workerId, jobTitle, em
   });
 };
 
-/**
- * Helper function to send new application notification to employer
- */
 export const sendNewApplicationNotification = async (employerId, jobTitle, workerName) => {
   return await createNotification(employerId, {
     title: '📥 New Application Received',
@@ -412,9 +405,6 @@ export const sendNewApplicationNotification = async (employerId, jobTitle, worke
   });
 };
 
-/**
- * Helper function to send new message notification
- */
 export const sendNewMessageNotification = async (recipientId, senderName, jobTitle) => {
   return await createNotification(recipientId, {
     title: '💬 New Message',
@@ -424,9 +414,6 @@ export const sendNewMessageNotification = async (recipientId, senderName, jobTit
   });
 };
 
-/**
- * Helper function to send job reminder notification
- */
 export const sendJobReminderNotification = async (workerId, jobTitle, reminderTime) => {
   return await createNotification(workerId, {
     title: '⏰ Job Reminder',
@@ -528,7 +515,6 @@ export const updateMeetingLocation = async (applicationId, locationData) => {
 
 export const createChat = async (applicationId, participants) => {
   try {
-    // Check if chat already exists for this application
     const q = query(
       collection(db, 'chats'),
       where('applicationId', '==', applicationId)
@@ -537,12 +523,10 @@ export const createChat = async (applicationId, participants) => {
     const snapshot = await getDocs(q);
     
     if (!snapshot.empty) {
-      // Chat already exists, return existing chat ID
       const existingChat = snapshot.docs[0];
       return { success: true, chatId: existingChat.id };
     }
     
-    // Create new chat
     const chatRef = await addDoc(collection(db, 'chats'), {
       applicationId,
       participants,
@@ -567,7 +551,6 @@ export const sendMessage = async (chatId, messageData) => {
       read: false
     });
 
-    // Update chat last message
     const chatRef = doc(db, 'chats', chatId);
     await updateDoc(chatRef, {
       lastMessage: messageData.message,
@@ -580,7 +563,6 @@ export const sendMessage = async (chatId, messageData) => {
     return { success: false, error: error.message };
   }
 };
-
 
 export const fetchChatMessages = async (chatId) => {
   try {

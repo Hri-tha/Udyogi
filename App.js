@@ -9,7 +9,8 @@ import { ActivityIndicator, View, StyleSheet, Text, Image } from 'react-native';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { JobProvider } from './src/context/JobContext';
-import { NotificationProvider } from './src/context/NotificationContext';
+import { NotificationProvider , useNotification } from './src/context/NotificationContext';
+import NotificationToast from './src/components/NotificationToast';
 
 // Screens - Auth
 import WelcomeScreen from './src/screens/auth/WelcomeScreen';
@@ -62,6 +63,7 @@ function AppContent() {
   const { user, userProfile, loading: authLoading } = useAuth();
   const { isLanguageSelected, loading: languageLoading } = useLanguage();
 
+  const { toastNotification, hideToast } = useNotification();
   // Show splash screen first
   if (showSplash) {
     return <SplashScreen onFinish={() => setShowSplash(false)} />;
@@ -78,6 +80,7 @@ function AppContent() {
   }
 
   return (
+    <>
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {/* 1️⃣ Show Language Selection for first-time users */}
       {!isLanguageSelected ? (
@@ -118,6 +121,16 @@ function AppContent() {
         </>
       )}
     </Stack.Navigator>
+
+<NotificationToast
+        notification={toastNotification}
+        onHide={hideToast}
+        onPress={(notification) => {
+          hideToast();
+        }}
+      />
+    </>
+    
   );
 }
 
