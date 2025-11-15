@@ -1,4 +1,5 @@
-import React, { useState, useContext } from 'react';
+// src/screens/worker/JobDetailsScreen.js
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,43 +7,45 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useJob } from '../../context/JobContext';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
+import { fetchWorkerApplications } from '../../services/database';
 
 const JobDetailsScreen = ({ route, navigation }) => {
   const { jobId } = route.params;
   const { jobs, applyForJob } = useJob();
-  const { user, userProfile, logout } = useAuth();
+  const { user, userProfile } = useAuth();
   const [applying, setApplying] = useState(false);
+  const [myApplication, setMyApplication] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const job = jobs.find(j => j.id === jobId);
-  const hasApplied = job?.applications?.includes(user?.uid);
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to logout');
-            }
-          }
-        }
-      ]
-    );
+  useEffect(() => {
+    checkApplicationStatus();
+  }, [jobId]);
+
+  const checkApplicationStatus = async () => {
+    try {
+      const result = await fetchWorkerApplications(user.uid);
+      if (result.success) {
+        // Find if worker has applied to this specific job
+        const application = result.applications.find(app => app.jobId === jobId);
+        setMyApplication(application || null);
+        console.log('📋 Application status:', application ? application.status : 'not applied');
+      }
+    } catch (error) {
+      console.error('Error checking application:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleApply = async () => {
-    if (hasApplied) {
+    if (myApplication) {
       Alert.alert('Already Applied', 'You have already applied for this job.');
       return;
     }
@@ -57,11 +60,20 @@ const JobDetailsScreen = ({ route, navigation }) => {
     try {
       await applyForJob(jobId, user.uid, userProfile);
       Alert.alert('Success', 'Application submitted successfully! The employer will be notified.');
-      navigation.goBack();
+      // Refresh application status
+      await checkApplicationStatus();
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to apply for job');
     }
     setApplying(false);
+  };
+
+  const handleTrackJob = () => {
+    if (myApplication && myApplication.status === 'accepted') {
+      navigation.navigate('JobTracking', {
+        applicationId: myApplication.id
+      });
+    }
   };
 
   if (!job) {
@@ -72,87 +84,162 @@ const JobDetailsScreen = ({ route, navigation }) => {
             <Text style={styles.backButton}>← Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Job Details</Text>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
+          <View style={{ width: 50 }} />
         </View>
         <View style={styles.centerContent}>
-          <Text>Job not found</Text>
+          <Text style={styles.errorText}>Job not found</Text>
         </View>
       </View>
     );
   }
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Text style={styles.backButton}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Job Details</Text>
+          <View style={{ width: 50 }} />
+        </View>
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const startTime = job.startTime ? String(job.startTime) : '';
+  const endTime = job.endTime ? String(job.endTime) : '';
+  const timeDisplay = startTime && endTime ? `${startTime} - ${endTime}` : 'Not specified';
+
+  // Determine application status
+  const hasApplied = myApplication !== null;
+  const isAccepted = myApplication?.status === 'accepted';
+  const isPending = myApplication?.status === 'pending';
+  const isRejected = myApplication?.status === 'rejected';
+
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Job Details</Text>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
-        </TouchableOpacity>
+        <View style={{ width: 50 }} />
       </View>
 
       <ScrollView style={styles.scrollView}>
-        <View style={styles.jobHeader}>
-          <Text style={styles.title}>{job.title}</Text>
-          <Text style={styles.company}>{job.companyName || job.company}</Text>
-          <Text style={styles.salary}>₹{job.rate || job.salary} {job.rate ? '/hour' : '/month'}</Text>
-          {job.hours && (
-            <Text style={styles.totalSalary}>Total: ₹{(job.rate || job.salary) * job.hours}</Text>
-          )}
+        <View style={styles.card}>
+          <Text style={styles.title}>{String(job.title || 'Job')}</Text>
+          <Text style={styles.company}>{String(job.companyName || 'Company')}</Text>
+          <Text style={styles.salary}>₹{String(job.rate || job.salary || '0')}/hr</Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Job Description</Text>
-          <Text style={styles.description}>{job.description}</Text>
-        </View>
-
-        <View style={styles.details}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Location</Text>
-            <Text style={styles.detailValue}>{job.location}</Text>
+        {job.jobDate && (
+          <View style={styles.card}>
+            <Text style={styles.label}>Date</Text>
+            <Text style={styles.value}>{String(job.jobDate)}</Text>
           </View>
-          {job.jobType && (
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Job Type</Text>
-              <Text style={styles.detailValue}>{job.jobType}</Text>
-            </View>
-          )}
-          {job.experienceLevel && (
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Experience</Text>
-              <Text style={styles.detailValue}>{job.experienceLevel}</Text>
-            </View>
-          )}
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Contact</Text>
-            <Text style={styles.detailValue}>{job.employerPhone}</Text>
+        )}
+
+        {(job.startTime || job.endTime) && (
+          <View style={styles.card}>
+            <Text style={styles.label}>Time</Text>
+            <Text style={styles.value}>{timeDisplay}</Text>
           </View>
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Description</Text>
+          <Text style={styles.value}>{String(job.description || 'No description')}</Text>
         </View>
 
-        <TouchableOpacity
-          style={[
-            styles.applyButton,
-            (hasApplied || applying) && styles.disabledButton
-          ]}
-          onPress={handleApply}
-          disabled={applying || hasApplied}
-        >
-          <Text style={styles.applyButtonText}>
-            {applying ? 'Applying...' : 
-             hasApplied ? 'Already Applied' : 'Apply for this Job'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.card}>
+          <Text style={styles.label}>Location</Text>
+          <Text style={styles.value}>{String(job.location || 'Not specified')}</Text>
+        </View>
 
+        {job.category && (
+          <View style={styles.card}>
+            <Text style={styles.label}>Category</Text>
+            <Text style={styles.value}>{String(job.category)}</Text>
+          </View>
+        )}
+
+        {/* Application Status Banner */}
         {hasApplied && (
-          <View style={styles.appliedNote}>
-            <Text style={styles.appliedNoteText}>
-              ✓ You have applied for this job. The employer will review your application.
+          <View style={[
+            styles.statusBanner,
+            isAccepted && styles.acceptedBanner,
+            isPending && styles.pendingBanner,
+            isRejected && styles.rejectedBanner
+          ]}>
+            <Text style={styles.statusIcon}>
+              {isAccepted ? '✅' : isPending ? '⏳' : '❌'}
             </Text>
+            <View style={styles.statusContent}>
+              <Text style={styles.statusTitle}>
+                {isAccepted ? 'Application Accepted!' : 
+                 isPending ? 'Application Pending' : 
+                 'Application Rejected'}
+              </Text>
+              <Text style={styles.statusText}>
+                {isAccepted ? 'Congratulations! You can track your job progress below.' : 
+                 isPending ? 'Your application is being reviewed by the employer.' : 
+                 'Unfortunately, your application was not accepted.'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Action Buttons */}
+        {!hasApplied && (
+          <TouchableOpacity
+            style={styles.applyButton}
+            onPress={handleApply}
+            disabled={applying}
+          >
+            <Text style={styles.applyButtonText}>
+              {applying ? 'Applying...' : 'Apply for Job'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Track Job Button for Accepted Applications */}
+        {isAccepted && (
+          <TouchableOpacity
+            style={styles.trackButton}
+            onPress={handleTrackJob}
+          >
+            <Text style={styles.trackButtonIcon}>📱</Text>
+            <Text style={styles.trackButtonText}>Track Job Progress</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Already Applied Message for Pending */}
+        {isPending && (
+          <View style={styles.pendingMessage}>
+            <Text style={styles.pendingMessageText}>
+              Your application is pending. The employer will review it soon.
+            </Text>
+          </View>
+        )}
+
+        {/* Rejected Message */}
+        {isRejected && (
+          <View style={styles.rejectedMessage}>
+            <Text style={styles.rejectedMessageText}>
+              Don't worry! Keep applying to other jobs.
+            </Text>
+            <TouchableOpacity
+              style={styles.browseButton}
+              onPress={() => navigation.navigate('WorkerHome')}
+            >
+              <Text style={styles.browseButtonText}>Browse More Jobs</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -163,7 +250,7 @@ const JobDetailsScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#f5f5f5',
   },
   header: {
     flexDirection: 'row',
@@ -174,25 +261,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   backButton: {
-    color: colors.white,
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.white,
-  },
-  logoutButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  logoutButtonText: {
-    color: colors.white,
-    fontSize: 12,
-    fontWeight: '600',
+    color: '#fff',
   },
   scrollView: {
     flex: 1,
@@ -201,98 +277,155 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 40,
   },
-  jobHeader: {
-    backgroundColor: colors.white,
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  card: {
+    backgroundColor: '#fff',
     padding: 20,
-    marginBottom: 10,
+    margin: 10,
+    borderRadius: 10,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 10,
     color: colors.text,
-    marginBottom: 5,
   },
   company: {
     fontSize: 18,
     color: colors.primary,
-    marginBottom: 5,
+    marginBottom: 10,
   },
   salary: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: colors.success,
+    color: colors.primary,
+  },
+  label: {
+    fontSize: 14,
+    color: '#666',
     marginBottom: 5,
+    fontWeight: '600',
   },
-  totalSalary: {
+  value: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: '#000',
   },
-  section: {
-    backgroundColor: colors.white,
-    padding: 20,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 10,
-  },
-  description: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    lineHeight: 24,
-  },
-  details: {
-    backgroundColor: colors.white,
-    padding: 20,
-    marginBottom: 10,
-  },
-  detailItem: {
+  statusBanner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    margin: 10,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'flex-start',
   },
-  detailLabel: {
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
-  detailValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  applyButton: {
-    backgroundColor: colors.primary,
-    margin: 20,
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: colors.textSecondary,
-  },
-  applyButtonText: {
-    color: colors.white,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  appliedNote: {
+  acceptedBanner: {
     backgroundColor: colors.success + '20',
-    margin: 20,
-    padding: 15,
-    borderRadius: 8,
     borderLeftWidth: 4,
     borderLeftColor: colors.success,
   },
-  appliedNoteText: {
-    color: colors.success,
+  pendingBanner: {
+    backgroundColor: colors.warning + '20',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.warning,
+  },
+  rejectedBanner: {
+    backgroundColor: colors.error + '20',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.error,
+  },
+  statusIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  statusContent: {
+    flex: 1,
+  },
+  statusTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  statusText: {
     fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  applyButton: {
+    backgroundColor: colors.primary,
+    margin: 10,
+    padding: 18,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  applyButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  trackButton: {
+    flexDirection: 'row',
+    backgroundColor: colors.primary,
+    margin: 10,
+    padding: 18,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trackButtonIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  trackButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  pendingMessage: {
+    margin: 10,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: colors.warning + '20',
+    alignItems: 'center',
+  },
+  pendingMessageText: {
+    fontSize: 14,
+    color: colors.textSecondary,
     textAlign: 'center',
+    lineHeight: 20,
+  },
+  rejectedMessage: {
+    margin: 10,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: colors.error + '20',
+    alignItems: 'center',
+  },
+  rejectedMessageText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  browseButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  browseButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

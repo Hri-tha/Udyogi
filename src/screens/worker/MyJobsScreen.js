@@ -1,3 +1,4 @@
+// src/screens/worker/MyJobsScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -164,6 +165,42 @@ const MyJobsScreen = ({ navigation }) => {
     }
   };
 
+  const handleTrackJob = (application) => {
+    if (application.status === 'accepted') {
+      navigation.navigate('JobTracking', { 
+        applicationId: application.id 
+      });
+    } else {
+      Alert.alert('Not Available', 'Job tracking is only available for accepted applications.');
+    }
+  };
+
+  // Get journey status display for accepted jobs
+  const getJourneyStatusDisplay = (application) => {
+    if (application.status !== 'accepted') return null;
+    
+    const journeyStatus = application.journeyStatus || 'accepted';
+    
+    const statusConfigs = {
+      'accepted': { text: 'Ready to Start', color: colors.info, icon: '📋' },
+      'onTheWay': { text: 'On the Way', color: colors.warning, icon: '🚗' },
+      'reached': { text: 'Reached Location', color: colors.info, icon: '📍' },
+      'started': { text: 'Work Started', color: colors.primary, icon: '▶️' },
+      'completed': { text: 'Work Completed', color: colors.success, icon: '✅' }
+    };
+    
+    const config = statusConfigs[journeyStatus] || statusConfigs.accepted;
+    
+    return (
+      <View style={[styles.journeyStatus, { backgroundColor: config.color + '20' }]}>
+        <Text style={styles.journeyStatusIcon}>{config.icon}</Text>
+        <Text style={[styles.journeyStatusText, { color: config.color }]}>
+          {config.text}
+        </Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -287,6 +324,9 @@ const MyJobsScreen = ({ navigation }) => {
                       </View>
                     </View>
 
+                    {/* Journey Status for Accepted Jobs */}
+                    {application.status === 'accepted' && getJourneyStatusDisplay(application)}
+
                     {/* Card Details */}
                     <View style={styles.cardDetails}>
                       <View style={styles.detailRow}>
@@ -305,6 +345,12 @@ const MyJobsScreen = ({ navigation }) => {
                           <Text style={styles.detailText}>₹{application.salary}/day</Text>
                         </View>
                       )}
+                      {application.rate && (
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailIcon}>💰</Text>
+                          <Text style={styles.detailText}>₹{application.rate}/hour</Text>
+                        </View>
+                      )}
                     </View>
                   </TouchableOpacity>
 
@@ -315,10 +361,19 @@ const MyJobsScreen = ({ navigation }) => {
                         <Text style={styles.congratsEmoji}>🎉</Text>
                         <Text style={styles.congratsText}>
                           Congratulations! You've been selected for this job.
+                          {application.journeyStatus && ` Current status: ${application.journeyStatus}`}
                         </Text>
                       </View>
                       
                       <View style={styles.actionButtonsRow}>
+                        <TouchableOpacity 
+                          style={[styles.actionButton, styles.trackingButton]}
+                          onPress={() => handleTrackJob(application)}
+                        >
+                          <Text style={styles.actionButtonIcon}>📱</Text>
+                          <Text style={styles.actionButtonLabel}>Track Job</Text>
+                        </TouchableOpacity>
+                        
                         <TouchableOpacity 
                           style={[styles.actionButton, styles.locationButton]}
                           onPress={() => handleViewLocation(application)}
@@ -334,13 +389,15 @@ const MyJobsScreen = ({ navigation }) => {
                           <Text style={styles.actionButtonIcon}>💬</Text>
                           <Text style={styles.actionButtonLabel}>Chat</Text>
                         </TouchableOpacity>
-                        
+                      </View>
+
+                      <View style={styles.secondaryActionsRow}>
                         <TouchableOpacity 
                           style={[styles.actionButton, styles.detailsButton]}
                           onPress={() => navigation.navigate('JobDetails', { jobId: application.jobId })}
                         >
                           <Text style={styles.actionButtonIcon}>📋</Text>
-                          <Text style={styles.actionButtonLabel}>Details</Text>
+                          <Text style={styles.actionButtonLabel}>Job Details</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -597,6 +654,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  journeyStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  journeyStatusIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  journeyStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   cardDetails: {
     gap: 8,
   },
@@ -641,6 +715,11 @@ const styles = StyleSheet.create({
   actionButtonsRow: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 8,
+  },
+  secondaryActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   actionButton: {
     flex: 1,
@@ -650,11 +729,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 4,
   },
+  trackingButton: {
+    backgroundColor: colors.primary + '20',
+  },
   locationButton: {
     backgroundColor: colors.info + '20',
   },
   chatButton: {
-    backgroundColor: colors.primary + '20',
+    backgroundColor: colors.warning + '20',
   },
   detailsButton: {
     backgroundColor: colors.gray200,

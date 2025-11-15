@@ -1,14 +1,21 @@
 // src/navigation/WorkerBottomTabNavigator.js
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native'; // Add this import
+import { createStackNavigator } from '@react-navigation/stack';
+import { Text } from 'react-native';
 import WorkerHomeScreen from '../screens/worker/WorkerHomeScreen';
-import MyJobScreen from '../screens/worker/MyJobsScreen';
+import MyJobsScreen from '../screens/worker/MyJobsScreen';
 import WorkerProfileScreen from '../screens/worker/WorkerProfileScreen';
 import NotificationsScreen from '../screens/common/NotificationsScreen';
+import JobDetailsScreen from '../screens/worker/JobDetailsScreen';
+import JobTrackingScreen from '../screens/worker/JobTrackingScreen';
+import JobLocationScreen from '../screens/shared/JobLocationScreen';
+import ChatScreen from '../screens/shared/ChatScreen';
+import LocationFilterScreen from '../screens/worker/LocationFilterScreen';
 import { colors } from '../constants/colors';
 
 const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
 // Simple icon component
 const TabIcon = ({ name, focused }) => {
@@ -31,6 +38,48 @@ const TabIcon = ({ name, focused }) => {
     </Text>
   );
 };
+
+// Home Stack Navigator
+function HomeStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="WorkerHomeMain" component={WorkerHomeScreen} />
+      <Stack.Screen name="JobDetails" component={JobDetailsScreen} />
+      <Stack.Screen name="LocationFilter" component={LocationFilterScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// My Jobs Stack Navigator
+function MyJobsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MyJobsMain" component={MyJobsScreen} />
+      <Stack.Screen name="JobTracking" component={JobTrackingScreen} />
+      <Stack.Screen name="JobDetails" component={JobDetailsScreen} />
+      <Stack.Screen name="JobLocation" component={JobLocationScreen} />
+      <Stack.Screen name="ChatScreen" component={ChatScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Profile Stack Navigator
+function ProfileStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="WorkerProfileMain" component={WorkerProfileScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Notifications Stack Navigator
+function NotificationsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="NotificationsMain" component={NotificationsScreen} />
+    </Stack.Navigator>
+  );
+}
 
 export default function WorkerBottomTabNavigator() {
   return (
@@ -55,7 +104,7 @@ export default function WorkerBottomTabNavigator() {
     >
       <Tab.Screen 
         name="WorkerHome" 
-        component={WorkerHomeScreen}
+        component={HomeStack}
         options={{
           tabBarLabel: 'Home',
           tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
@@ -63,7 +112,7 @@ export default function WorkerBottomTabNavigator() {
       />
       <Tab.Screen 
         name="MyJobs" 
-        component={MyJobScreen}
+        component={MyJobsStack}
         options={{
           tabBarLabel: 'My Jobs',
           tabBarIcon: ({ focused }) => <TabIcon name="applications" focused={focused} />,
@@ -71,7 +120,7 @@ export default function WorkerBottomTabNavigator() {
       />
       <Tab.Screen 
         name="Notifications" 
-        component={NotificationsScreen}
+        component={NotificationsStack}
         options={{
           tabBarLabel: 'Notifications',
           tabBarIcon: ({ focused }) => <TabIcon name="notifications" focused={focused} />,
@@ -79,7 +128,7 @@ export default function WorkerBottomTabNavigator() {
       />
       <Tab.Screen 
         name="WorkerProfile" 
-        component={WorkerProfileScreen}
+        component={ProfileStack}
         options={{
           tabBarLabel: 'Profile',
           tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,

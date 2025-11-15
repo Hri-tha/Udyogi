@@ -1,4 +1,4 @@
-// src/screens/employer/ApplicationsScreen.js
+// src/screens/employer/ApplicationsScreen.js - DEBUG & FIXED
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,12 +13,12 @@ import {
 import * as Location from 'expo-location';
 import { useJob } from '../../context/JobContext';
 import { useAuth } from '../../context/AuthContext';
-import { updateApplicationStatus } from '../../services/database';
+import { updateApplicationStatus, fetchJobApplications } from '../../services/database';
 import { colors } from '../../constants/colors';
 
 const ApplicationsScreen = ({ route, navigation }) => {
-  const { jobId } = route.params || {}; // Handle undefined params
-  const { getJobApplications, respondToApplication, fetchEmployerJobs } = useJob();
+  const { jobId } = route.params || {};
+  const { fetchEmployerJobs } = useJob();
   const { user, userProfile } = useAuth();
   const [applications, setApplications] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -28,22 +28,39 @@ const ApplicationsScreen = ({ route, navigation }) => {
   const [processingApplication, setProcessingApplication] = useState(null);
 
   useEffect(() => {
+    console.log('ApplicationsScreen mounted with jobId:', jobId);
     if (jobId) {
-      // If jobId is provided via params, load applications for that job
       loadApplications(jobId);
     } else {
-      // If no jobId, load all employer jobs first
       loadEmployerJobs();
     }
   }, [jobId]);
 
   const loadEmployerJobs = async () => {
     try {
+      console.log('Loading employer jobs for:', user.uid);
       const result = await fetchEmployerJobs(user.uid);
+      console.log('Employer jobs result:', result);
+      
       if (result.success) {
-        setJobs(result.jobs.filter(job => job.applications && job.applications.length > 0));
+        // Get all jobs and fetch their applications
+        const jobsWithApps = [];
+        
+        for (const job of result.jobs) {
+          const appsResult = await fetchJobApplications(job.id);
+          if (appsResult.success && appsResult.applications.length > 0) {
+            jobsWithApps.push({
+              ...job,
+              applications: appsResult.applications
+            });
+          }
+        }
+        
+        console.log('Jobs with applications:', jobsWithApps.length);
+        setJobs(jobsWithApps);
       }
     } catch (error) {
+      console.error('Error loading jobs:', error);
       Alert.alert('Error', 'Failed to load jobs');
     } finally {
       setLoading(false);
@@ -53,13 +70,22 @@ const ApplicationsScreen = ({ route, navigation }) => {
   const loadApplications = async (targetJobId) => {
     try {
       setLoading(true);
-      const result = await getJobApplications(targetJobId);
+      console.log('Loading applications for job:', targetJobId);
+      
+      const result = await fetchJobApplications(targetJobId);
+      console.log('Applications result:', result);
+      
       if (result.success) {
+        console.log('Found applications:', result.applications.length);
         setApplications(result.applications);
         setSelectedJobId(targetJobId);
         setShowJobSelector(false);
+      } else {
+        console.error('Failed to fetch applications:', result.error);
+        Alert.alert('Error', result.error || 'Failed to load applications');
       }
     } catch (error) {
+      console.error('Error in loadApplications:', error);
       Alert.alert('Error', 'Failed to load applications');
     } finally {
       setLoading(false);
@@ -67,27 +93,24 @@ const ApplicationsScreen = ({ route, navigation }) => {
   };
 
   const handleAcceptApplication = async (application) => {
+    console.log('Accepting application:', application.id);
     setProcessingApplication(application.id);
     
     try {
-      // Request location permission
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
           'Location Permission Required',
-          'We need your location to share the work location with the worker.',
-          [{ text: 'OK' }]
+          'We need your location to share the work location with the worker.'
         );
         setProcessingApplication(null);
         return;
       }
 
-      // Get current location
       let location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
       
-      // Reverse geocode to get address
       let geocode = await Location.reverseGeocodeAsync({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -104,7 +127,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
         sharedAt: new Date().toISOString()
       };
 
-      // Use the updated updateApplicationStatus function with location data
+      console.log('Updating application status with location:', locationData);
       const result = await updateApplicationStatus(
         application.id, 
         'accepted', 
@@ -116,9 +139,9 @@ const ApplicationsScreen = ({ route, navigation }) => {
           'Success', 
           'Application accepted! Location shared and chat enabled with the worker.'
         );
-        // Refresh applications list
         await loadApplications(selectedJobId);
       } else {
+        console.error('Failed to accept application:', result.error);
         Alert.alert('Error', result.error || 'Failed to accept application');
       }
     } catch (error) {
@@ -131,12 +154,18 @@ const ApplicationsScreen = ({ route, navigation }) => {
 
   const handleRejectApplication = async (applicationId, workerId, workerName) => {
     try {
-      const application = applications.find(app => app.id === applicationId);
-      await respondToApplication(applicationId, 'rejected', user.uid, workerId, application.jobTitle);
+      console.log('Rejecting application:', applicationId);
       
-      Alert.alert('Success', 'Application rejected');
-      await loadApplications(selectedJobId); // Reload applications
+      const result = await updateApplicationStatus(applicationId, 'rejected');
+      
+      if (result.success) {
+        Alert.alert('Success', 'Application rejected');
+        await loadApplications(selectedJobId);
+      } else {
+        Alert.alert('Error', result.error || 'Failed to reject application');
+      }
     } catch (error) {
+      console.error('Error rejecting application:', error);
       Alert.alert('Error', 'Failed to reject application');
     }
   };
@@ -229,7 +258,10 @@ const ApplicationsScreen = ({ route, navigation }) => {
                 <TouchableOpacity
                   key={job.id}
                   style={styles.jobCard}
-                  onPress={() => loadApplications(job.id)}
+                  onPress={() => {
+                    console.log('Selected job:', job.id, 'with', job.applications?.length, 'applications');
+                    loadApplications(job.id);
+                  }}
                 >
                   <Text style={styles.jobTitle}>{job.title}</Text>
                   <Text style={styles.jobLocation}>📍 {job.location}</Text>
@@ -247,7 +279,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
               <Text style={styles.statsText}>
                 {applications.length} application{applications.length !== 1 ? 's' : ''}
               </Text>
-              {selectedJobId && (
+              {selectedJobId && applications.length > 0 && (
                 <Text style={styles.jobName}>
                   {applications[0]?.jobTitle || 'Job Applications'}
                 </Text>
@@ -280,6 +312,18 @@ const ApplicationsScreen = ({ route, navigation }) => {
                     📅 Applied: {application.appliedAt?.toDate().toLocaleDateString()}
                   </Text>
 
+                  {/* Journey Status Badge */}
+                  {application.journeyStatus && application.journeyStatus !== 'accepted' && (
+                    <View style={styles.journeyStatusBadge}>
+                      <Text style={styles.journeyStatusText}>
+                        {application.journeyStatus === 'onTheWay' ? '🚗 On The Way' :
+                         application.journeyStatus === 'reached' ? '📍 Arrived' :
+                         application.journeyStatus === 'started' ? '⚡ Working' :
+                         application.journeyStatus === 'completed' ? '✅ Completed' : ''}
+                      </Text>
+                    </View>
+                  )}
+
                   {application.status === 'pending' && (
                     <View style={styles.actionButtons}>
                       <TouchableOpacity
@@ -309,6 +353,19 @@ const ApplicationsScreen = ({ route, navigation }) => {
                     <View style={styles.acceptedActions}>
                       <Text style={styles.acceptedTitle}>✅ Application Accepted</Text>
                       
+                      {/* TRACK JOB PROGRESS BUTTON */}
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.trackButton]}
+                        onPress={() => {
+                          console.log('Navigating to job tracking for:', application.id);
+                          navigation.navigate('EmployerJobTracking', { 
+                            applicationId: application.id 
+                          });
+                        }}
+                      >
+                        <Text style={styles.actionButtonText}>📊 Track Job Progress</Text>
+                      </TouchableOpacity>
+
                       {application.locationShared && (
                         <TouchableOpacity
                           style={[styles.actionButton, styles.locationButton]}
@@ -514,6 +571,23 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginBottom: 12,
   },
+  journeyStatusBadge: {
+    backgroundColor: colors.info + '20',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  journeyStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.info,
+  },
+  jobLocation: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
   applicationCount: {
     fontSize: 14,
     color: colors.primary,
@@ -531,6 +605,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginHorizontal: 4,
+    marginBottom: 8,
   },
   acceptButton: {
     backgroundColor: colors.success,
@@ -538,13 +613,17 @@ const styles = StyleSheet.create({
   rejectButton: {
     backgroundColor: colors.error,
   },
-  locationButton: {
+  trackButton: {
     backgroundColor: colors.info,
-    marginBottom: 8,
+    marginHorizontal: 0,
+  },
+  locationButton: {
+    backgroundColor: colors.warning,
+    marginHorizontal: 0,
   },
   chatButton: {
     backgroundColor: colors.primary,
-    marginBottom: 12,
+    marginHorizontal: 0,
   },
   disabledButton: {
     opacity: 0.6,

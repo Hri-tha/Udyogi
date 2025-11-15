@@ -52,9 +52,9 @@ const Icon = ({ name, size = 24, color = colors.text, style }) => {
   );
 };
 
-// Default job categories
+// Improved job categories with better sizing
 const DEFAULT_CATEGORIES = [
-  { id: 'all', label: 'All Jobs', icon: '💼' },
+  { id: 'all', label: 'All', icon: '💼' },
   { id: 'daily-worker', label: 'Daily Worker', icon: '🔨' },
   { id: 'barber', label: 'Barber', icon: '💈' },
   { id: 'tailor', label: 'Tailor', icon: '🧵' },
@@ -78,7 +78,6 @@ export default function WorkerHomeScreen({ navigation }) {
     loadData();
   }, []);
 
-  // Add effect to reload applications when navigating back to this screen
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       console.log('🔄 Screen focused - reloading applications');
@@ -116,18 +115,12 @@ export default function WorkerHomeScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  // Get all applied job IDs (ALL statuses: pending, accepted, rejected)
-  // A worker should not see any job they've already applied to, regardless of application status
   const appliedJobIds = myApplications.map(app => app.jobId);
 
-  // Filter jobs: 
-  // 1. Must be 'open' status
-  // 2. Must NOT be in appliedJobIds (worker hasn't applied yet)
   const availableJobs = jobs.filter(job => {
     const isOpen = job.status === 'open';
     const notApplied = !appliedJobIds.includes(job.id);
     
-    // Debug: Log jobs that are being filtered out
     if (isOpen && !notApplied) {
       console.log(`🚫 Hiding applied job: "${job.title}" (ID: ${job.id})`);
     }
@@ -135,7 +128,6 @@ export default function WorkerHomeScreen({ navigation }) {
     return isOpen && notApplied;
   });
 
-  // Comprehensive debug logs
   console.log('═══════════════════════════════════════');
   console.log('📊 JOB FILTERING DEBUG:');
   console.log('   Total Jobs in System:', jobs.length);
@@ -145,7 +137,6 @@ export default function WorkerHomeScreen({ navigation }) {
   console.log('   Available Job Titles:', availableJobs.map(j => j.title));
   console.log('═══════════════════════════════════════');
 
-  // Get pending and accepted counts for stats
   const pendingJobIds = myApplications
     .filter(app => app.status === 'pending')
     .map(app => app.jobId);
@@ -154,11 +145,9 @@ export default function WorkerHomeScreen({ navigation }) {
     .filter(app => app.status === 'accepted')
     .map(app => app.jobId);
 
-  // Filter by category and search query
   const getFilteredJobs = () => {
     let filtered = availableJobs;
 
-    // Filter by category
     if (selectedCategory !== 'all') {
       filtered = filtered.filter(job => {
         const jobCategory = job.category?.toLowerCase() || '';
@@ -172,7 +161,6 @@ export default function WorkerHomeScreen({ navigation }) {
       });
     }
 
-    // Filter by search query
     if (searchQuery.trim() !== '') {
       const query = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(job => {
@@ -197,36 +185,50 @@ export default function WorkerHomeScreen({ navigation }) {
 
   const filteredJobs = getFilteredJobs();
 
-  const CategoryButton = ({ label, value, icon, count }) => (
-    <TouchableOpacity
-      style={[
-        styles.categoryButton,
-        selectedCategory === value && styles.categoryButtonActive
-      ]}
-      onPress={() => {
-        setSelectedCategory(value);
-        setSearchQuery('');
-      }}
-    >
-      <Text style={styles.categoryIcon}>{icon}</Text>
-      <View style={styles.categoryContent}>
+  // Improved Category Button Component
+  const CategoryButton = ({ label, value, icon, count }) => {
+    const isActive = selectedCategory === value;
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.categoryButton,
+          isActive && styles.categoryButtonActive
+        ]}
+        onPress={() => {
+          setSelectedCategory(value);
+          setSearchQuery('');
+        }}
+        activeOpacity={0.7}
+      >
+        <View style={[
+          styles.categoryIconContainer,
+          isActive && styles.categoryIconContainerActive
+        ]}>
+          <Text style={styles.categoryIcon}>{icon}</Text>
+        </View>
         <Text style={[
           styles.categoryLabel,
-          selectedCategory === value && styles.categoryLabelActive
+          isActive && styles.categoryLabelActive
         ]}>
           {label}
         </Text>
         {value === 'all' && (
-          <Text style={[
-            styles.categoryCount,
-            selectedCategory === value && styles.categoryCountActive
+          <View style={[
+            styles.categoryBadge,
+            isActive && styles.categoryBadgeActive
           ]}>
-            {count} jobs
-          </Text>
+            <Text style={[
+              styles.categoryBadgeText,
+              isActive && styles.categoryBadgeTextActive
+            ]}>
+              {count}
+            </Text>
+          </View>
         )}
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const QuickStatCard = ({ icon, value, label, color, onPress }) => (
     <TouchableOpacity 
@@ -365,9 +367,14 @@ export default function WorkerHomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Category Filter */}
+        {/* Improved Category Filter */}
         <View style={styles.categorySection}>
-          <Text style={styles.categorySectionTitle}>Browse by Category</Text>
+          <View style={styles.categorySectionHeader}>
+            <Text style={styles.categorySectionTitle}>Browse by Category</Text>
+            <Text style={styles.categorySectionSubtitle}>
+              {selectedCategory === 'all' ? 'All categories' : DEFAULT_CATEGORIES.find(c => c.id === selectedCategory)?.label}
+            </Text>
+          </View>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
@@ -578,8 +585,6 @@ export default function WorkerHomeScreen({ navigation }) {
     </View>
   );
 }
-
-
 
 const styles = StyleSheet.create({
   container: {
@@ -792,63 +797,102 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: colors.textSecondary,
   },
+  
+  // IMPROVED CATEGORY SECTION
   categorySection: {
-    paddingVertical: 16,
+    paddingVertical: 20,
+    backgroundColor: colors.white,
+    marginHorizontal: 20,
+    marginTop: 8,
+    borderRadius: 16,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  categorySectionHeader: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
   categorySectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 12,
-    paddingHorizontal: 20,
+    marginBottom: 4,
+  },
+  categorySectionSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
   categoryScroll: {
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingHorizontal: 12,
+    gap: 10,
   },
   categoryButton: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.background,
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    minWidth: 120,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    minWidth: 90,
+    maxWidth: 90,
   },
   categoryButtonActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  categoryIcon: {
-    fontSize: 24,
-    marginRight: 10,
+  categoryIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  categoryContent: {
-    flex: 1,
+  categoryIconContainerActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  categoryIcon: {
+    fontSize: 22,
   },
   categoryLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 2,
+    textAlign: 'center',
   },
   categoryLabelActive: {
     color: colors.white,
   },
-  categoryCount: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '500',
+  categoryBadge: {
+    marginTop: 4,
+    backgroundColor: colors.primary + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
-  categoryCountActive: {
-    color: 'rgba(255, 255, 255, 0.8)',
+  categoryBadgeActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
+  categoryBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  categoryBadgeTextActive: {
+    color: colors.white,
+  },
+  
   activeFiltersContainer: {
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: colors.gray100,
+    backgroundColor: colors.primaryLight,
   },
   activeFiltersText: {
     fontSize: 12,
@@ -865,12 +909,14 @@ const styles = StyleSheet.create({
   activeFilterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary + '20',
+    backgroundColor: colors.white,
     paddingVertical: 6,
     paddingLeft: 12,
     paddingRight: 8,
     borderRadius: 20,
     maxWidth: width * 0.5,
+    borderWidth: 1,
+    borderColor: colors.primary,
   },
   activeFilterText: {
     fontSize: 13,
@@ -1055,14 +1101,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   jobTag: {
-    backgroundColor: colors.gray200,
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
   },
   jobTagText: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: colors.primary,
     fontWeight: '600',
   },
   jobActionButton: {
