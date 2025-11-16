@@ -1,4 +1,4 @@
-// src/screens/employer/EmployerJobTrackingScreen.js
+// src/screens/employer/EmployerJobTrackingScreen.js - ENHANCED WITH RATING
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,6 +13,7 @@ import { colors } from '../../constants/colors';
 import { onApplicationUpdate } from '../../services/database';
 import { db } from '../../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import RatingModal from '../../components/RatingModal';
 
 const EmployerJobTrackingScreen = ({ route, navigation }) => {
   const { applicationId } = route.params;
@@ -21,6 +22,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [workDuration, setWorkDuration] = useState(0);
+  const [showRatingModal, setShowRatingModal] = useState(false);
 
   // Load initial data
   useEffect(() => {
@@ -160,6 +162,24 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
     });
   };
 
+  const handleRateWorker = () => {
+    setShowRatingModal(true);
+  };
+
+  const handleRatingSubmitted = () => {
+    Alert.alert(
+      'Thank You! 🙏',
+      'Your rating has been submitted successfully.',
+      [{ 
+        text: 'OK', 
+        onPress: () => {
+          setShowRatingModal(false);
+          navigation.navigate('EmployerHome');
+        }
+      }]
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -187,6 +207,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
   }
 
   const statusInfo = getStatusInfo();
+  const isJobCompleted = application.status === 'completed';
 
   return (
     <View style={styles.container}>
@@ -279,6 +300,17 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
               <Text style={styles.actionButtonText}>Complete & Rate Job</Text>
             </TouchableOpacity>
           )}
+
+          {/* NEW: Rate Worker Button (for completed jobs) */}
+          {isJobCompleted && (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.warning }]}
+              onPress={handleRateWorker}
+            >
+              <Text style={styles.actionButtonIcon}>⭐</Text>
+              <Text style={styles.actionButtonText}>Rate Worker Performance</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Secondary Actions */}
@@ -307,6 +339,22 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Rating Modal */}
+      <RatingModal
+        visible={showRatingModal}
+        onClose={() => setShowRatingModal(false)}
+        onSubmit={handleRatingSubmitted}
+        ratingType="worker"
+        ratingData={{
+          jobId: job.id,
+          jobTitle: job.title,
+          workerId: application.workerId,
+          workerName: application.workerName,
+          employerId: application.employerId,
+          employerName: job.companyName,
+        }}
+      />
     </View>
   );
 };

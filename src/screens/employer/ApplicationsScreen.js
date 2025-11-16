@@ -1,4 +1,4 @@
-// src/screens/employer/ApplicationsScreen.js - DEBUG & FIXED
+// src/screens/employer/ApplicationsScreen.js - FIXED
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,14 +11,16 @@ import {
   StatusBar,
 } from 'react-native';
 import * as Location from 'expo-location';
-import { useJob } from '../../context/JobContext';
 import { useAuth } from '../../context/AuthContext';
-import { updateApplicationStatus, fetchJobApplications } from '../../services/database';
+import { 
+  updateApplicationStatus, 
+  fetchJobApplications,
+  fetchEmployerJobs 
+} from '../../services/database';
 import { colors } from '../../constants/colors';
 
 const ApplicationsScreen = ({ route, navigation }) => {
   const { jobId } = route.params || {};
-  const { fetchEmployerJobs } = useJob();
   const { user, userProfile } = useAuth();
   const [applications, setApplications] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -34,10 +36,16 @@ const ApplicationsScreen = ({ route, navigation }) => {
     } else {
       loadEmployerJobs();
     }
-  }, [jobId]);
+  }, [jobId, user?.uid]);
 
   const loadEmployerJobs = async () => {
     try {
+      if (!user?.uid) {
+        console.log('No user ID available');
+        setLoading(false);
+        return;
+      }
+
       console.log('Loading employer jobs for:', user.uid);
       const result = await fetchEmployerJobs(user.uid);
       console.log('Employer jobs result:', result);
@@ -58,6 +66,9 @@ const ApplicationsScreen = ({ route, navigation }) => {
         
         console.log('Jobs with applications:', jobsWithApps.length);
         setJobs(jobsWithApps);
+      } else {
+        console.error('Failed to fetch jobs:', result.error);
+        Alert.alert('Error', 'Failed to load jobs: ' + result.error);
       }
     } catch (error) {
       console.error('Error loading jobs:', error);

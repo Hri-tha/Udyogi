@@ -12,7 +12,8 @@ import {
   deleteDoc,
   serverTimestamp,
   arrayUnion,
-  onSnapshot, // ADD THIS IMPORT
+  onSnapshot,
+  increment,
   arrayRemove
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -201,15 +202,15 @@ export const updateJob = async (jobId, updates) => {
   }
 };
 
-export const deleteJob = async (jobId) => {
-  try {
-    await deleteDoc(doc(db, 'jobs', jobId));
-    return { success: true };
-  } catch (error) {
-    console.error('Delete Job Error:', error);
-    return { success: false, error: error.message };
-  }
-};
+// export const deleteJob = async (jobId) => {
+//   try {
+//     await deleteDoc(doc(db, 'jobs', jobId));
+//     return { success: true };
+//   } catch (error) {
+//     console.error('Delete Job Error:', error);
+//     return { success: false, error: error.message };
+//   }
+// };
 
 // ========== APPLICATION FUNCTIONS ==========
 
@@ -1561,5 +1562,80 @@ export const fetchUserChats = async (userId) => {
   } catch (error) {
     console.error('Fetch Chats Error:', error);
     return { success: false, error: error.message, chats: [] };
+  }
+};
+
+// ========== JOB DELETION ==========
+
+/**
+ * Delete a job (only if no accepted applications)
+ * @param {string} jobId - Job ID
+ * @param {string} employerId - Employer ID (for verification)
+ * @returns {Object} - Success status
+ */
+export const deleteJob = async (jobId, employerId) => {
+  try {
+    // Verify job belongs to employer
+    const jobRef = doc(db, 'jobs', jobId);
+    const jobSnap = await getDoc(jobRef);
+    
+    if (!jobSnap.exists()) {
+      return { success: false, error: 'Job not found' };
+    }
+
+    const jobData = jobSnap.data();
+    
+    if (jobData.employerId !== employerId) {
+      return { success: false, error: 'Unauthorized: This is not your job' };
+    }
+
+    // Check for accepted applications
+    const applicationsQuery = query(
+      collection(db, 'applications'),
+      where('jobId', '==', jobId),
+      where('status', '==', 'accepted')
+    );
+    
+    const applicationsSnap = await getDocs(applicationsQuery);
+    
+    if (!applicationsSnap.empty) {
+      return { 
+        success: false, 
+        error: 'Cannot delete job with accepted applications. Please complete or reject them first.' 
+      };
+    }
+
+    // Get all pending applications to notify workers
+    const allApplicationsQuery = query(
+      collection(db, 'applications'),
+      where('jobId', '==', jobId)
+    );
+    
+    const allApplicationsSnap = await getDocs(allApplicationsQuery);
+    
+    // Notify all applicants
+    for (const appDoc of allApplicationsSnap.docs) {
+      const appData = appDoc.data();
+      
+      if (appData.status === 'pending') {
+        await createNotification(appData.workerId, {
+          title: '❌ Job Cancelled',
+          message: `The job "${jobData.title}" has been cancelled by the employer.`,
+          type: 'job_cancelled',
+          actionType: 'view_jobs',
+        });
+      }
+      
+      // Delete application
+      await deleteDoc(doc(db, 'applications', appDoc.id));
+    }
+
+    // Delete the job
+    await deleteDoc(jobRef);
+
+    return { success: true, message: 'Job deleted successfully' };
+  } catch (error) {
+    console.error('Delete Job Error:', error);
+    return { success: false, error: error.message };
   }
 };
