@@ -14,7 +14,12 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
-import { fetchWorkerRatings, fetchWorkerApplications } from '../../services/database';
+import { 
+  fetchWorkerRatings, 
+  fetchWorkerApplications, 
+  fetchWorkerEarnings,
+  getWorkerEarningsStats 
+} from '../../services/database';
 
 const { width } = Dimensions.get('window');
 
@@ -22,6 +27,7 @@ const WorkerProfileScreen = ({ navigation }) => {
   const { user, userProfile, logout } = useAuth();
   const [ratings, setRatings] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [earnings, setEarnings] = useState([]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [stats, setStats] = useState({
     totalJobs: 0,
@@ -29,6 +35,8 @@ const WorkerProfileScreen = ({ navigation }) => {
     acceptedJobs: 0,
     averageRating: 0,
     totalEarnings: 0,
+    monthlyEarnings: 0,
+    averageEarning: 0,
   });
 
   useEffect(() => {
@@ -49,6 +57,26 @@ const WorkerProfileScreen = ({ navigation }) => {
       setApplications(appsResult.applications);
       calculateStats(appsResult.applications);
     }
+
+    // Fetch earnings data
+    await loadEarningsData();
+  };
+
+  const loadEarningsData = async () => {
+    const earningsResult = await fetchWorkerEarnings(user.uid);
+    if (earningsResult.success) {
+      setEarnings(earningsResult.earnings);
+    }
+
+    const statsResult = await getWorkerEarningsStats(user.uid);
+    if (statsResult.success) {
+      setStats(prev => ({
+        ...prev,
+        totalEarnings: statsResult.stats.totalEarnings || 0,
+        monthlyEarnings: statsResult.stats.monthlyEarnings || 0,
+        averageEarning: statsResult.stats.averageEarning || 0,
+      }));
+    }
   };
 
   const calculateAverageRating = (ratingsData) => {
@@ -61,16 +89,12 @@ const WorkerProfileScreen = ({ navigation }) => {
   const calculateStats = (appsData) => {
     const completed = appsData.filter(a => a.status === 'completed').length;
     const accepted = appsData.filter(a => a.status === 'accepted').length;
-    const earnings = appsData
-      .filter(a => a.status === 'completed')
-      .reduce((sum, a) => sum + (a.earnings || 0), 0);
 
     setStats(prev => ({
       ...prev,
       totalJobs: appsData.length,
       completedJobs: completed,
       acceptedJobs: accepted,
-      totalEarnings: earnings,
     }));
   };
 
@@ -145,6 +169,31 @@ const WorkerProfileScreen = ({ navigation }) => {
         <Text style={styles.reviewComment}>{review.comment}</Text>
       )}
       <Text style={styles.reviewJobTitle}>Job: {review.jobTitle}</Text>
+    </View>
+  );
+
+  const EarningCard = ({ earning }) => (
+    <View style={styles.earningCard}>
+      <View style={styles.earningHeader}>
+        <View style={styles.earningInfo}>
+          <Text style={styles.earningJob}>{earning.jobTitle}</Text>
+          <Text style={styles.earningEmployer}>{earning.employerName}</Text>
+          <Text style={styles.earningDate}>
+            {earning.paidAt?.toDate?.()?.toLocaleDateString() || 'Recent'}
+          </Text>
+        </View>
+        <View style={styles.earningAmount}>
+          <Text style={styles.earningValue}>₹{earning.amount}</Text>
+          <View style={[
+            styles.paymentMethodBadge,
+            { backgroundColor: earning.paymentMethod === 'online' ? '#2196F3' : '#4CAF50' }
+          ]}>
+            <Text style={styles.paymentMethodText}>
+              {earning.paymentMethod === 'online' ? 'Online' : 'Cash'}
+            </Text>
+          </View>
+        </View>
+      </View>
     </View>
   );
 
@@ -245,18 +294,55 @@ const WorkerProfileScreen = ({ navigation }) => {
             color={colors.success}
           />
           <StatCard
-            icon="⏳"
-            value={stats.acceptedJobs}
-            label="In Progress"
-            color={colors.warning}
-          />
-          <StatCard
             icon="💰"
             value={`₹${stats.totalEarnings}`}
-            label="Earned"
+            label="Total Earned"
             color={colors.primary}
           />
+          <StatCard
+            icon="📈"
+            value={`₹${stats.monthlyEarnings}`}
+            label="This Month"
+            color={colors.warning}
+          />
         </View>
+
+        {/* Earnings Summary */}
+        <Text style={styles.sectionTitle}>Earnings Summary</Text>
+        <View style={styles.earningsSummaryCard}>
+          <View style={styles.earningsStats}>
+            <View style={styles.earningsStat}>
+              <Text style={styles.earningsStatValue}>₹{stats.monthlyEarnings}</Text>
+              <Text style={styles.earningsStatLabel}>This Month</Text>
+            </View>
+            <View style={styles.earningsStat}>
+              <Text style={styles.earningsStatValue}>{stats.completedJobs}</Text>
+              <Text style={styles.earningsStatLabel}>Jobs Done</Text>
+            </View>
+            <View style={styles.earningsStat}>
+              <Text style={styles.earningsStatValue}>₹{Math.round(stats.averageEarning)}</Text>
+              <Text style={styles.earningsStatLabel}>Avg/Job</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Recent Earnings */}
+        {earnings.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Recent Earnings</Text>
+            <View style={styles.earningsContainer}>
+              {earnings.slice(0, 5).map((earning, index) => (
+                <EarningCard key={earning.id || index} earning={earning} />
+              ))}
+              
+              {earnings.length > 5 && (
+                <TouchableOpacity style={styles.viewAllButton}>
+                  <Text style={styles.viewAllText}>View All Earnings →</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </>
+        )}
 
         {/* Performance Metrics */}
         <Text style={styles.sectionTitle}>Performance</Text>
@@ -307,14 +393,17 @@ const WorkerProfileScreen = ({ navigation }) => {
 
           <View style={styles.performanceItem}>
             <View style={styles.performanceHeader}>
-              <Text style={styles.performanceLabel}>Response Time</Text>
-              <Text style={styles.performanceValue}>Fast</Text>
+              <Text style={styles.performanceLabel}>Average Earnings</Text>
+              <Text style={styles.performanceValue}>₹{Math.round(stats.averageEarning)}</Text>
             </View>
             <View style={styles.progressBar}>
               <View 
                 style={[
                   styles.progressFill,
-                  { width: '85%', backgroundColor: colors.info }
+                  { 
+                    width: `${Math.min((stats.averageEarning / 5000) * 100, 100)}%`,
+                    backgroundColor: colors.info
+                  }
                 ]}
               />
             </View>
@@ -654,6 +743,92 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     fontWeight: '500',
+  },
+  // Earnings Styles
+  earningsSummaryCard: {
+    backgroundColor: colors.white,
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 24,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  earningsStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  earningsStat: {
+    alignItems: 'center',
+  },
+  earningsStatValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  earningsStatLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  earningsContainer: {
+    marginBottom: 24,
+  },
+  earningCard: {
+    backgroundColor: colors.white,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  earningHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  earningInfo: {
+    flex: 1,
+  },
+  earningJob: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  earningEmployer: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  earningDate: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  earningAmount: {
+    alignItems: 'flex-end',
+  },
+  earningValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.success,
+    marginBottom: 6,
+  },
+  paymentMethodBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  paymentMethodText: {
+    fontSize: 10,
+    color: colors.white,
+    fontWeight: '600',
   },
   performanceCard: {
     backgroundColor: colors.white,

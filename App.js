@@ -1,4 +1,4 @@
-// App.js — Fixed Version with All Employer Screens
+// App.js – Fixed Version with All Employer Screens + Job Tracking Banner + EMPLOYER BANNER
 
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
@@ -39,6 +39,10 @@ import NotificationsScreen from './src/screens/common/NotificationsScreen';
 // Navigators
 import WorkerBottomTabNavigator from './src/navigation/WorkerBottomTabNavigator';
 import EmployerBottomTabNavigator from './src/navigation/EmployerBottomTabNavigator';
+
+// Components
+import JobTrackingBanner from './src/components/JobTrackingBanner';
+import EmployerJobTrackingBanner from './src/components/EmployerJobTrackingBanner';
 
 const Stack = createStackNavigator();
 
@@ -129,6 +133,16 @@ function AppContent() {
           </>
         )}
       </Stack.Navigator>
+
+      {/* Global Job Tracking Banner - Only for Workers */}
+      {user && userProfile?.userType === 'worker' && (
+        <JobTrackingBanner />
+      )}
+
+      {/* Global Employer Job Tracking Banner - Only for Employers */}
+      {user && userProfile?.userType === 'employer' && (
+        <EmployerJobTrackingBanner />
+      )}
 
       <NotificationToast
         notification={toastNotification}

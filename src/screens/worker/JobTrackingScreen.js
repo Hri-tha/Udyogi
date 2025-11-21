@@ -15,6 +15,7 @@ import {
   updateWorkerJourneyStatus,
   checkCanStartWork,
   onApplicationUpdate,
+  completeJobAndRemoveTracking,
 } from '../../services/database';
 import { db } from '../../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -176,14 +177,28 @@ const JobTrackingScreen = ({ route, navigation }) => {
   const handleCompleteWork = () => {
     Alert.alert(
       'Complete Work',
-      'Confirm you completed all tasks. Employer will process payment.',
+      'Confirm you completed all tasks. This will complete the job and remove tracking.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Complete Work',
           onPress: async () => {
-            await updateStatus('completed', 'Work completed! Await payment.');
-            navigation.goBack();
+            setUpdating(true);
+            try {
+              // Use the function that handles completion and removes tracking
+              const result = await completeJobAndRemoveTracking(applicationId);
+              
+              if (result.success) {
+                Alert.alert('Success', 'Job completed successfully! Tracking will be removed.');
+                navigation.goBack();
+              } else {
+                Alert.alert('Error', result.error || 'Failed to complete job');
+              }
+            } catch (error) {
+              Alert.alert('Error', error.message);
+            } finally {
+              setUpdating(false);
+            }
           },
         },
       ]

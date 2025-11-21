@@ -216,17 +216,54 @@ export const updateJob = async (jobId, updates) => {
 
 export const createApplication = async (applicationData) => {
   try {
+    // Validate required fields
+    if (!applicationData.jobId || !applicationData.workerId) {
+      return { 
+        success: false, 
+        error: 'Missing required fields: jobId or workerId' 
+      };
+    }
+
+    // Get job details to include in application
+    const jobRef = doc(db, 'jobs', applicationData.jobId);
+    const jobSnap = await getDoc(jobRef);
+    
+    if (!jobSnap.exists()) {
+      return { success: false, error: 'Job not found' };
+    }
+
+    const job = jobSnap.data();
+
     const docRef = await addDoc(collection(db, 'applications'), {
       ...applicationData,
       status: 'pending',
-      appliedAt: serverTimestamp()
+      appliedAt: serverTimestamp(),
+      jobTitle: job.title || 'Job',
+      companyName: job.companyName || 'Company',
+      hourlyRate: Number(job.rate || job.salary || 0),
+      jobDate: job.jobDate || '',
+      jobStartTime: job.startTime || '',
+      jobEndTime: job.endTime || ''
     });
     
     // Update job applications array
-    const jobRef = doc(db, 'jobs', applicationData.jobId);
     await updateDoc(jobRef, {
       applications: arrayUnion(applicationData.workerId)
     });
+
+    // Send notification to employer
+    try {
+      await createNotification(job.employerId, {
+        title: '📥 New Application Received',
+        message: `${applicationData.workerName} has applied for your ${job.title} position.`,
+        type: 'new_application',
+        actionType: 'view_applications',
+        actionId: applicationData.jobId,
+      });
+    } catch (notifError) {
+      console.error('Error sending application notification:', notifError);
+      // Don't fail application creation if notification fails
+    }
     
     return { success: true, applicationId: docRef.id };
   } catch (error) {
@@ -322,11 +359,60 @@ export const updateApplicationStatus = async (applicationId, status, locationDat
       
       if (jobSnap.exists()) {
         const job = jobSnap.data();
-        updates.hourlyRate = job.rate;
-        updates.expectedPayment = job.totalPayment;
-        updates.jobDate = job.jobDate;
-        updates.jobStartTime = job.startTime;
-        updates.jobEndTime = job.endTime;
+        
+        // Calculate total payment properly
+        const calculateTotalPayment = () => {
+          if (!job.startTime || !job.endTime || !job.rate) {
+            return job.salary || 0;
+          }
+
+          try {
+            const parseTime = (timeStr) => {
+              let time = String(timeStr).toLowerCase().trim();
+              
+              if (time.includes('am') || time.includes('pm')) {
+                const [timePart, modifier] = time.split(/(am|pm)/);
+                let [hours, minutes] = timePart.split(':').map(Number);
+                
+                if (modifier === 'pm' && hours < 12) hours += 12;
+                if (modifier === 'am' && hours === 12) hours = 0;
+                
+                return hours + (minutes || 0) / 60;
+              } else {
+                const [hours, minutes] = time.split(':').map(Number);
+                return hours + (minutes || 0) / 60;
+              }
+            };
+
+            const start = parseTime(job.startTime);
+            const end = parseTime(job.endTime);
+            
+            if (isNaN(start) || isNaN(end) || end <= start) {
+              return job.salary || 0;
+            }
+
+            const totalHours = end - start;
+            const hourlyRate = Number(job.rate || job.salary || 0);
+            return Math.round(totalHours * hourlyRate);
+          } catch (error) {
+            console.error('Error calculating payment:', error);
+            return job.salary || 0;
+          }
+        };
+
+        const totalPayment = calculateTotalPayment();
+        
+        updates.hourlyRate = Number(job.rate || job.salary || 0);
+        updates.expectedPayment = totalPayment;
+        updates.jobDate = job.jobDate || '';
+        updates.jobStartTime = job.startTime || '';
+        updates.jobEndTime = job.endTime || '';
+        
+        console.log('Storing payment info:', {
+          hourlyRate: updates.hourlyRate,
+          expectedPayment: updates.expectedPayment,
+          jobDate: updates.jobDate
+        });
       }
     }
 
@@ -337,26 +423,43 @@ export const updateApplicationStatus = async (applicationId, status, locationDat
     const application = appSnap.data();
     
     if (status === 'accepted') {
-      await createChat(applicationId, [
-        application.employerId,
-        application.workerId
-      ]);
+      // Create chat first
+      try {
+        await createChat(applicationId, [
+          application.employerId,
+          application.workerId
+        ]);
+        console.log('Chat created successfully');
+      } catch (chatError) {
+        console.error('Error creating chat:', chatError);
+      }
 
-      // Send notification with job details
-      await createNotification(application.workerId, {
-        title: '🎉 Application Accepted!',
-        message: `Your application for "${application.jobTitle}" has been accepted! You can now track your job.`,
-        type: 'application_accepted',
-        actionType: 'view_job_tracking',
-        actionId: applicationId,
-      });
+      // Send notification with proper error handling
+      try {
+        await createNotification(application.workerId, {
+          title: '🎉 Application Accepted!',
+          message: `Your application for "${application.jobTitle}" has been accepted! You can now track your job.`,
+          type: 'application_accepted',
+          actionType: 'view_job_tracking',
+          actionId: applicationId,
+        });
+        console.log('Notification sent successfully');
+      } catch (notifError) {
+        console.error('Error sending notification:', notifError);
+        // Don't fail the whole operation if notification fails
+      }
+      
     } else if (status === 'rejected') {
-      await createNotification(application.workerId, {
-        title: 'Application Update',
-        message: `Your application for "${application.jobTitle}" was not selected.`,
-        type: 'application_rejected',
-        actionType: 'view_jobs',
-      });
+      try {
+        await createNotification(application.workerId, {
+          title: 'Application Update',
+          message: `Your application for "${application.jobTitle}" was not selected.`,
+          type: 'application_rejected',
+          actionType: 'view_jobs',
+        });
+      } catch (notifError) {
+        console.error('Error sending rejection notification:', notifError);
+      }
     }
 
     return { success: true };
@@ -406,24 +509,37 @@ export const onJobUpdate = (jobId, callback) => {
 
 export const createNotification = async (userId, notificationData) => {
   try {
+    // Validate required fields
+    if (!userId) {
+      console.error('Cannot create notification: userId is missing');
+      return { success: false, error: 'User ID is required' };
+    }
+
+    if (!notificationData.title || !notificationData.message) {
+      console.error('Cannot create notification: title or message is missing');
+      return { success: false, error: 'Title and message are required' };
+    }
+
     const notificationRef = await addDoc(collection(db, 'notifications'), {
-      userId,
-      title: notificationData.title,
-      message: notificationData.message,
-      type: notificationData.type,
+      userId: String(userId),
+      title: String(notificationData.title),
+      message: String(notificationData.message),
+      type: notificationData.type || 'general',
       read: false,
       actionType: notificationData.actionType || null,
       actionId: notificationData.actionId || null,
-      createdAt: new Date(),
+      createdAt: serverTimestamp(),
     });
 
-    console.log('Notification created:', notificationRef.id);
+    console.log('Notification created successfully:', notificationRef.id);
     return { success: true, id: notificationRef.id };
   } catch (error) {
     console.error('Error creating notification:', error);
+    console.error('Notification data:', notificationData);
     return { success: false, error: error.message };
   }
 };
+
 
 export const fetchUserNotifications = async (userId) => {
   try {
@@ -1638,4 +1754,252 @@ export const deleteJob = async (jobId, employerId) => {
     console.error('Delete Job Error:', error);
     return { success: false, error: error.message };
   }
+};
+
+// src/services/database.js - ADD THESE FUNCTIONS
+
+/**
+ * Process online payment via Razorpay
+ * @param {string} applicationId - Application ID
+ * @param {Object} paymentData - Payment details including Razorpay response
+ * @returns {Object} - Success status
+ */
+export const processOnlinePayment = async (applicationId, paymentData) => {
+  try {
+    const appRef = doc(db, 'applications', applicationId);
+    
+    const paymentRecord = {
+      paymentId: paymentData.paymentId,
+      orderId: paymentData.orderId,
+      amount: paymentData.amount,
+      method: 'online',
+      provider: 'razorpay',
+      status: 'completed',
+      verified: paymentData.verified,
+      processedAt: serverTimestamp(),
+      razorpayData: paymentData
+    };
+
+    await updateDoc(appRef, {
+      paymentStatus: 'paid',
+      paymentAmount: paymentData.amount,
+      paymentMethod: 'online',
+      paymentProvider: 'razorpay',
+      paymentDetails: paymentRecord,
+      paidAt: serverTimestamp(),
+      status: 'completed'
+    });
+
+    // Get application details
+    const appSnap = await getDoc(appRef);
+    const application = appSnap.data();
+
+    // Update worker's earnings
+    const workerRef = doc(db, 'users', application.workerId);
+    const workerSnap = await getDoc(workerRef);
+    const workerData = workerSnap.data();
+
+    await updateDoc(workerRef, {
+      totalEarnings: (workerData.totalEarnings || 0) + paymentData.amount,
+      completedJobs: (workerData.completedJobs || 0) + 1,
+      lastPayment: paymentData.amount,
+      lastPaymentDate: serverTimestamp()
+    });
+
+    // Update employer stats
+    const employerRef = doc(db, 'users', application.employerId);
+    const employerSnap = await getDoc(employerRef);
+    const employerData = employerSnap.data();
+
+    await updateDoc(employerRef, {
+      totalPayments: (employerData.totalPayments || 0) + paymentData.amount,
+      totalHires: (employerData.totalHires || 0) + 1,
+      onlinePayments: (employerData.onlinePayments || 0) + paymentData.amount
+    });
+
+    // Add to worker's earnings history
+    const earningsRef = await addDoc(collection(db, 'earnings'), {
+      workerId: application.workerId,
+      applicationId: applicationId,
+      amount: paymentData.amount,
+      jobTitle: application.jobTitle,
+      employerName: application.employerName,
+      paymentMethod: 'online',
+      paymentProvider: 'razorpay',
+      paymentId: paymentData.paymentId,
+      status: 'completed',
+      paidAt: serverTimestamp(),
+      createdAt: serverTimestamp()
+    });
+
+    // Send notifications
+    await createNotification(application.workerId, {
+      title: '💰 Online Payment Received',
+      message: `You've received ₹${paymentData.amount} for ${application.jobTitle} via online payment`,
+      type: 'payment_received',
+      actionType: 'view_earnings',
+    });
+
+    await createNotification(application.employerId, {
+      title: '✅ Online Payment Successful',
+      message: `Payment of ₹${paymentData.amount} has been processed successfully for ${application.workerName}`,
+      type: 'payment_processed',
+      actionType: 'view_application',
+      actionId: applicationId,
+    });
+
+    return { success: true, paymentRecord };
+  } catch (error) {
+    console.error('Process Online Payment Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Get worker's earnings history
+ * @param {string} workerId - Worker ID
+ * @returns {Object} - Earnings history
+ */
+export const fetchWorkerEarnings = async (workerId) => {
+  try {
+    const q = query(
+      collection(db, 'earnings'),
+      where('workerId', '==', workerId),
+      orderBy('paidAt', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    const earnings = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    return { success: true, earnings };
+  } catch (error) {
+    console.error('Fetch Earnings Error:', error);
+    return { success: false, error: error.message, earnings: [] };
+  }
+};
+
+/**
+ * Get worker's total earnings statistics
+ * @param {string} workerId - Worker ID
+ * @returns {Object} - Earnings statistics
+ */
+export const getWorkerEarningsStats = async (workerId) => {
+  try {
+    const earningsResult = await fetchWorkerEarnings(workerId);
+    
+    if (!earningsResult.success) {
+      return { success: false, error: earningsResult.error };
+    }
+
+    const earnings = earningsResult.earnings;
+    const totalEarnings = earnings.reduce((sum, earning) => sum + earning.amount, 0);
+    const completedJobs = earnings.length;
+    
+    // Monthly earnings
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const monthlyEarnings = earnings
+      .filter(earning => {
+        const earningDate = earning.paidAt?.toDate();
+        return earningDate && 
+               earningDate.getMonth() === currentMonth && 
+               earningDate.getFullYear() === currentYear;
+      })
+      .reduce((sum, earning) => sum + earning.amount, 0);
+
+    return {
+      success: true,
+      stats: {
+        totalEarnings,
+        completedJobs,
+        monthlyEarnings,
+        averageEarning: completedJobs > 0 ? totalEarnings / completedJobs : 0
+      }
+    };
+  } catch (error) {
+    console.error('Get Earnings Stats Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Add this function to your Database.js
+export const completeJobAndRemoveTracking = async (applicationId) => {
+  try {
+    const appRef = doc(db, 'applications', applicationId);
+    
+    // Update application status to completed
+    await updateDoc(appRef, {
+      status: 'completed',
+      journeyStatus: 'completed',
+      completedAt: serverTimestamp(),
+      paymentStatus: 'pending' // or 'paid' if payment was processed
+    });
+
+    // Get application details for notifications
+    const appSnap = await getDoc(appRef);
+    const application = appSnap.data();
+    
+    // Update job status
+    const jobRef = doc(db, 'jobs', application.jobId);
+    await updateDoc(jobRef, {
+      status: 'completed',
+      completedAt: serverTimestamp()
+    });
+
+    // Send completion notifications
+    await createNotification(application.workerId, {
+      title: '✅ Job Completed!',
+      message: `Great work on completing "${application.jobTitle}"!`,
+      type: 'job_completed',
+      actionType: 'rate_employer',
+      actionId: applicationId,
+    });
+
+    await createNotification(application.employerId, {
+      title: '✅ Job Completed',
+      message: `${application.workerName} has completed the job "${application.jobTitle}"`,
+      type: 'job_completed',
+      actionType: 'rate_worker',
+      actionId: applicationId,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Complete Job Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Add this to your Database.js for real-time current job monitoring
+export const onWorkerCurrentJobUpdate = (workerId, callback) => {
+  const applicationsQuery = query(
+    collection(db, 'applications'),
+    where('workerId', '==', workerId),
+    where('status', '==', 'accepted'),
+    where('journeyStatus', 'in', ['accepted', 'onTheWay', 'reached', 'started'])
+  );
+
+  return onSnapshot(applicationsQuery, (snapshot) => {
+    if (!snapshot.empty) {
+      const applicationDoc = snapshot.docs[0];
+      const application = { 
+        id: applicationDoc.id, 
+        ...applicationDoc.data() 
+      };
+      
+      // Get job details
+      const jobRef = doc(db, 'jobs', application.jobId);
+      getDoc(jobRef).then(jobSnap => {
+        if (jobSnap.exists()) {
+          const job = { id: jobSnap.id, ...jobSnap.data() };
+          callback({ application, job });
+        }
+      });
+    } else {
+      callback(null); // No current job
+    }
+  });
 };

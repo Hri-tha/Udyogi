@@ -2,7 +2,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { Text } from 'react-native';
+import { View, Text } from 'react-native';
 import WorkerHomeScreen from '../screens/worker/WorkerHomeScreen';
 import MyJobsScreen from '../screens/worker/MyJobsScreen';
 import WorkerProfileScreen from '../screens/worker/WorkerProfileScreen';
@@ -13,6 +13,9 @@ import JobLocationScreen from '../screens/shared/JobLocationScreen';
 import ChatScreen from '../screens/shared/ChatScreen';
 import LocationFilterScreen from '../screens/worker/LocationFilterScreen';
 import { colors } from '../constants/colors';
+
+// Import the banner
+import JobTrackingBanner from '../components/JobTrackingBanner';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -81,59 +84,67 @@ function NotificationsStack() {
   );
 }
 
-export default function WorkerBottomTabNavigator() {
+// Create a wrapper component that includes the banner
+const TabNavigatorWithBanner = () => {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '500',
-        },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
-      }}
-    >
-      <Tab.Screen 
-        name="WorkerHome" 
-        component={HomeStack}
-        options={{
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
+    <View style={{ flex: 1 }}>
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: colors.white,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            height: 60,
+            paddingBottom: 8,
+            paddingTop: 8,
+          },
+          tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: '500',
+          },
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.textSecondary,
         }}
-      />
-      <Tab.Screen 
-        name="MyJobs" 
-        component={MyJobsStack}
-        options={{
-          tabBarLabel: 'My Jobs',
-          tabBarIcon: ({ focused }) => <TabIcon name="applications" focused={focused} />,
-        }}
-      />
-      <Tab.Screen 
-        name="Notifications" 
-        component={NotificationsStack}
-        options={{
-          tabBarLabel: 'Notifications',
-          tabBarIcon: ({ focused }) => <TabIcon name="notifications" focused={focused} />,
-        }}
-      />
-      <Tab.Screen 
-        name="WorkerProfile" 
-        component={ProfileStack}
-        options={{
-          tabBarLabel: 'Profile',
-          tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
-        }}
-      />
-    </Tab.Navigator>
+      >
+        <Tab.Screen 
+          name="WorkerHome" 
+          component={HomeStack}
+          options={{
+            tabBarLabel: 'Home',
+            tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
+          }}
+        />
+        <Tab.Screen 
+          name="MyJobs" 
+          component={MyJobsStack}
+          options={{
+            tabBarLabel: 'My Jobs',
+            tabBarIcon: ({ focused }) => <TabIcon name="applications" focused={focused} />,
+          }}
+        />
+        <Tab.Screen 
+          name="Notifications" 
+          component={NotificationsStack}
+          options={{
+            tabBarLabel: 'Notifications',
+            tabBarIcon: ({ focused }) => <TabIcon name="notifications" focused={focused} />,
+          }}
+        />
+        <Tab.Screen 
+          name="WorkerProfile" 
+          component={ProfileStack}
+          options={{
+            tabBarLabel: 'Profile',
+            tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
+          }}
+        />
+      </Tab.Navigator>
+      
+      {/* Job Tracking Banner - Only shown on main tab screens */}
+      <JobTrackingBanner />
+    </View>
   );
 }
+
+export default TabNavigatorWithBanner;

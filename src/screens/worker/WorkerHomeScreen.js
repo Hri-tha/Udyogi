@@ -557,7 +557,7 @@ export default function WorkerHomeScreen({ navigation }) {
                       </View>
                     )}
                     <View style={styles.jobTag}>
-                      <Text style={styles.jobTagText}>{job.jobType || 'Full-time'}</Text>
+                      <Text style={styles.jobTagText}>{job.jobType || 'Hourly work'}</Text>
                     </View>
                     <View style={styles.jobTag}>
                       <Text style={styles.jobTagText}>
