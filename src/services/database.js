@@ -1236,7 +1236,7 @@ export const getEmployerRatingStats = async (employerId) => {
  * @param {Object} additionalData - Any additional data to store
  * @returns {Object} - Success status
  */
-// src/services/database.js - ENHANCED VERSION
+// In src/services/database.js - FIX THE PAYMENT CALCULATION
 export const updateWorkerJourneyStatus = async (applicationId, status) => {
   try {
     const appRef = doc(db, 'applications', applicationId);
@@ -1265,7 +1265,7 @@ export const updateWorkerJourneyStatus = async (applicationId, status) => {
     } else if (status === 'completed') {
       // CRITICAL: Set BOTH server timestamp and client timestamp
       updates.workCompletedAt = timestamp;
-      updates.workCompletedTimestamp = currentTime; // This ensures actual completion time is recorded
+      updates.workCompletedTimestamp = currentTime;
       updates.completedAt = timestamp;
       
       console.log('Work completed - setting timestamps:', {
@@ -1305,40 +1305,29 @@ export const updateWorkerJourneyStatus = async (applicationId, status) => {
           durationHours: durationHours
         });
 
-        // Calculate payment based on actual duration and hourly rate
+        // FIXED PAYMENT CALCULATION - PROPER MINUTE-BASED CALCULATION
         if (appData.hourlyRate) {
           const hourlyRate = appData.hourlyRate;
           let calculatedPayment = 0;
           
-          if (durationMinutes < 60) {
-            // For work less than 1 hour, pay proportionally with minimum payment
-            const proportion = durationMinutes / 60;
-            calculatedPayment = Math.round(hourlyRate * proportion);
-            
-            // Ensure minimum payment (at least 15 minutes worth of work)
-            const minPayment = Math.round(hourlyRate * 0.25);
-            if (calculatedPayment < minPayment && durationMinutes > 0) {
-              calculatedPayment = minPayment;
-            }
-          } else {
-            // For 1 hour or more, pay normally
-            calculatedPayment = Math.round(durationHours * hourlyRate);
-          }
+          // Calculate payment per minute
+          const ratePerMinute = hourlyRate / 60;
+          calculatedPayment = Math.round(durationMinutes * ratePerMinute);
           
-          // Ensure payment is at least 1 rupee
+          // Ensure minimum payment of at least 1 rupee
           calculatedPayment = Math.max(1, calculatedPayment);
           
           updates.calculatedPayment = calculatedPayment;
           
-          console.log('WORK COMPLETED - Payment Calculation:', {
+          console.log('WORK COMPLETED - CORRECTED PAYMENT CALCULATION:', {
             workStarted: new Date(appData.workStartedTimestamp).toLocaleString(),
             workCompleted: new Date(currentTime).toLocaleString(),
             durationMinutes: Math.round(durationMinutes),
             durationHours: durationHours.toFixed(4),
             hourlyRate: hourlyRate,
+            ratePerMinute: ratePerMinute.toFixed(2),
             calculatedPayment: calculatedPayment,
-            expectedPayment: appData.expectedPayment,
-            difference: appData.expectedPayment - calculatedPayment
+            expectedPayment: appData.expectedPayment
           });
         } else {
           console.warn('No hourly rate found for payment calculation');
@@ -1403,7 +1392,6 @@ export const updateWorkerJourneyStatus = async (applicationId, status) => {
     return { success: false, error: error.message };
   }
 };
-
 /**
  * Process payment for completed work
  * @param {string} applicationId - Application ID
@@ -2063,70 +2051,77 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
   }
 };
 
-export const calculateActualPayment = (application) => {
+// FIXED calculateActualPayment function
+const calculateActualPayment = (appData) => {
   try {
-    console.log('Calculating actual payment for application:', {
-      workStarted: application.workStartedTimestamp,
-      workCompleted: application.workCompletedTimestamp,
-      hourlyRate: application.hourlyRate,
-      expectedPayment: application.expectedPayment,
-      actualWorkMinutes: application.actualWorkMinutes
+    console.log('=== CALCULATE ACTUAL PAYMENT DEBUG ===');
+    console.log('All relevant data:', {
+      workStartedTimestamp: appData.workStartedTimestamp,
+      workCompletedTimestamp: appData.workCompletedTimestamp,
+      calculatedPayment: appData.calculatedPayment,
+      actualWorkDuration: appData.actualWorkDuration,
+      actualWorkMinutes: appData.actualWorkMinutes,
+      hourlyRate: appData.hourlyRate,
+      expectedPayment: appData.expectedPayment,
+      journeyStatus: appData.journeyStatus
     });
 
-    // If we have calculated payment from database, use that
-    if (application.calculatedPayment !== undefined && application.calculatedPayment !== null) {
-      console.log('Using stored calculated payment:', application.calculatedPayment);
-      return application.calculatedPayment;
+    // Priority 1: Use calculated payment from database
+    if (appData.calculatedPayment !== undefined && appData.calculatedPayment !== null && appData.calculatedPayment > 0) {
+      console.log('Using database calculated payment:', appData.calculatedPayment);
+      return appData.calculatedPayment;
     }
 
-    // If work was started and completed, calculate based on actual hours
-    if (application.workStartedTimestamp && application.workCompletedTimestamp) {
-      const durationMs = application.workCompletedTimestamp - application.workStartedTimestamp;
+    // Priority 2: Calculate from actual work timestamps
+    if (appData.workStartedTimestamp && appData.workCompletedTimestamp) {
+      const durationMs = appData.workCompletedTimestamp - appData.workStartedTimestamp;
       const durationMinutes = durationMs / (1000 * 60);
-      const durationHours = durationMinutes / 60;
+      const hourlyRate = appData.hourlyRate || 0;
       
-      // Use hourly rate to calculate payment
-      const hourlyRate = application.hourlyRate || 0;
-      let calculatedPayment = 0;
-      
-      if (durationMinutes < 60) {
-        // For work less than 1 hour, pay proportionally with minimum payment
-        const proportion = durationMinutes / 60;
-        calculatedPayment = Math.round(hourlyRate * proportion);
-        
-        // Ensure minimum payment (at least 15 minutes worth of work)
-        const minPayment = Math.round(hourlyRate * 0.25); // 15 minutes = 0.25 hours
-        if (calculatedPayment < minPayment && durationMinutes > 0) {
-          calculatedPayment = minPayment;
-        }
-      } else {
-        // For 1 hour or more, pay normally
-        calculatedPayment = Math.round(durationHours * hourlyRate);
-      }
-      
-      // Ensure payment is at least 1 rupee
+      // CORRECTED CALCULATION: Payment per minute
+      const ratePerMinute = hourlyRate / 60;
+      let calculatedPayment = Math.round(durationMinutes * ratePerMinute);
       calculatedPayment = Math.max(1, calculatedPayment);
-      
-      console.log('Actual Payment Calculation:', {
+
+      console.log('CORRECTED Calculation from timestamps:', {
         durationMinutes: Math.round(durationMinutes),
-        durationHours: durationHours.toFixed(4),
         hourlyRate: hourlyRate,
-        calculatedPayment: calculatedPayment,
-        expectedPayment: application.expectedPayment
+        ratePerMinute: ratePerMinute.toFixed(2),
+        calculatedPayment: calculatedPayment
       });
-      
+
       return calculatedPayment;
     }
-    
-    // Fallback to expected payment
-    console.log('Using expected payment as fallback:', application.expectedPayment);
-    return application.expectedPayment || 0;
+
+    // Priority 3: Calculate from actualWorkMinutes
+    if (appData.actualWorkMinutes && appData.actualWorkMinutes > 0) {
+      const durationMinutes = appData.actualWorkMinutes;
+      const hourlyRate = appData.hourlyRate || 0;
+      
+      // CORRECTED CALCULATION: Payment per minute
+      const ratePerMinute = hourlyRate / 60;
+      let calculatedPayment = Math.round(durationMinutes * ratePerMinute);
+      calculatedPayment = Math.max(1, calculatedPayment);
+
+      console.log('CORRECTED Calculation from actualWorkMinutes:', {
+        durationMinutes: durationMinutes,
+        hourlyRate: hourlyRate,
+        ratePerMinute: ratePerMinute.toFixed(2),
+        calculatedPayment: calculatedPayment
+      });
+
+      return calculatedPayment;
+    }
+
+    // Final fallback: Expected payment
+    console.log('Using expected payment as fallback:', appData.expectedPayment);
+    return appData.expectedPayment || 0;
+
   } catch (error) {
     console.error('Payment calculation error:', error);
-    return application.expectedPayment || 0;
+    return appData.expectedPayment || 0;
   }
 };
-
 /**
  * Get worker's earnings history
  * @param {string} workerId - Worker ID

@@ -110,28 +110,37 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   };
 
   // Helper function for payment calculation
-  const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
-    let calculatedPayment = 0;
+  // const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
+  //   let calculatedPayment = 0;
 
-    if (durationMinutes < 60) {
-      // For work less than 1 hour, pay proportionally with minimum payment
-      const proportion = durationMinutes / 60;
-      calculatedPayment = Math.round(hourlyRate * proportion);
+  //   if (durationMinutes < 60) {
+  //     // For work less than 1 hour, pay proportionally with minimum payment
+  //     const proportion = durationMinutes / 60;
+  //     calculatedPayment = Math.round(hourlyRate * proportion);
 
-      // Ensure minimum payment (at least 15 minutes worth of work)
-      const minPayment = Math.round(hourlyRate * 0.25); // 15 minutes = 0.25 hours
-      if (calculatedPayment < minPayment && durationMinutes > 0) {
-        calculatedPayment = minPayment;
-      }
-    } else {
-      // For 1 hour or more, pay normally
-      const durationHours = durationMinutes / 60;
-      calculatedPayment = Math.round(durationHours * hourlyRate);
-    }
+  //     // Ensure minimum payment (at least 15 minutes worth of work)
+  //     const minPayment = Math.round(hourlyRate * 0.25); // 15 minutes = 0.25 hours
+  //     if (calculatedPayment < minPayment && durationMinutes > 0) {
+  //       calculatedPayment = minPayment;
+  //     }
+  //   } else {
+  //     // For 1 hour or more, pay normally
+  //     const durationHours = durationMinutes / 60;
+  //     calculatedPayment = Math.round(durationHours * hourlyRate);
+  //   }
 
-    // Ensure payment is at least 1 rupee
-    return Math.max(1, calculatedPayment);
-  };
+  //   // Ensure payment is at least 1 rupee
+  //   return Math.max(1, calculatedPayment);
+  // };
+  // In PaymentProcessingScreen - FIXED helper function
+const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
+  // CORRECTED CALCULATION: Simple per-minute calculation
+  const ratePerMinute = hourlyRate / 60;
+  let calculatedPayment = Math.round(durationMinutes * ratePerMinute);
+  
+  // Ensure payment is at least 1 rupee
+  return Math.max(1, calculatedPayment);
+};
 
   // Helper function to calculate work duration in hours
   const calculateWorkDurationHours = (appData) => {
