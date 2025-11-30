@@ -1,5 +1,5 @@
-// src/components/EmployerJobTrackingBanner.js
-import React, { useState, useEffect } from 'react';
+// src/components/EmployerJobTrackingBanner.js - ENHANCED VERSION
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,13 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Alert,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import {
   fetchEmployerJobs,
   fetchJobApplications,
-  onApplicationUpdate,
   createRating,
 } from '../services/database';
 import { colors } from '../constants/colors';
@@ -23,17 +23,16 @@ const EmployerJobTrackingBanner = () => {
   const { user, userProfile } = useAuth();
   const navigation = useNavigation();
 
-  const [activeJobs, setActiveJobs] = useState([]);
-  const [activeApplications, setActiveApplications] = useState([]);
+  const [mainApp, setMainApp] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [unsubscribers, setUnsubscribers] = useState([]);
   const [showBanner, setShowBanner] = useState(true);
-  const [currentRoute, setCurrentRoute] = useState(null);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [ratingLoading, setRatingLoading] = useState(false);
   const [manuallyClosed, setManuallyClosed] = useState(false);
+  
+  const isLoadingRef = useRef(false);
 
   // Track navigation state
   useEffect(() => {
@@ -41,14 +40,11 @@ const EmployerJobTrackingBanner = () => {
       const state = navigation.getState();
       const currentRouteName = state?.routes[state?.index]?.name;
       
-      // Hide banner on EmployerJobTracking screen
-      if (currentRouteName === 'EmployerJobTracking') {
+      if (currentRouteName === 'EmployerJobTracking' || currentRouteName === 'PaymentProcessing') {
         setShowBanner(false);
       } else {
         setShowBanner(true);
       }
-      
-      setCurrentRoute(currentRouteName);
     });
 
     return unsubscribe;
@@ -56,88 +52,212 @@ const EmployerJobTrackingBanner = () => {
 
   useEffect(() => {
     loadInitialData();
+    
+    const interval = setInterval(() => {
+      if (!isLoadingRef.current) {
+        loadInitialData();
+      }
+    }, 10000);
 
-    return () => {
-      unsubscribers.forEach(unsub => unsub && unsub());
-    };
+    return () => clearInterval(interval);
   }, [user?.uid]);
 
+  // Refresh when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (!isLoadingRef.current) {
+        loadInitialData();
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
   const loadInitialData = async () => {
+    if (isLoadingRef.current) return;
+    
+    isLoadingRef.current = true;
+    
     try {
       if (!user?.uid) return;
 
       const jobsResult = await fetchEmployerJobs(user.uid);
       if (!jobsResult.success) return;
 
-      // Filter jobs with active applications
-      const jobsWithActiveApps = await Promise.all(
-        jobsResult.jobs
-          .filter(job => job.status === 'open' || job.status === 'completed')
-          .map(async (job) => {
-            const appsResult = await fetchJobApplications(job.id);
-            const activeApps = appsResult.applications?.filter(
-              app => app.status === 'accepted' || app.status === 'pending' || app.status === 'completed'
-            ) || [];
+      console.log('Fetched ALL employer jobs:', jobsResult.jobs.length);
 
-            return {
-              job,
-              applications: activeApps,
-            };
-          })
-      );
-
-      const filteredJobs = jobsWithActiveApps.filter(j => j.applications.length > 0);
-      setActiveJobs(filteredJobs);
-
-      // Set up real-time listeners for active applications
-      const newUnsubscribers = [];
-      filteredJobs.forEach(({ applications }) => {
-        applications.forEach(app => {
-          const unsub = onApplicationUpdate(app.id, (updatedApp) => {
-            setActiveApplications(prev => {
-              const filtered = prev.filter(a => a.id !== updatedApp.id);
-              return [updatedApp, ...filtered];
+      // Get all applications that need employer attention from ALL jobs
+      const allActiveApplications = [];
+      
+      for (const job of jobsResult.jobs) {
+        // Check ALL job statuses - not just 'open' or 'completed'
+        const appsResult = await fetchJobApplications(job.id);
+        
+        if (appsResult.success && appsResult.applications) {
+          // CRITICAL FIX: Include applications that need employer action
+          const employerActionApps = appsResult.applications.filter(app => {
+            console.log('Checking application:', {
+              id: app.id,
+              status: app.status,
+              journeyStatus: app.journeyStatus,
+              paymentStatus: app.paymentStatus,
+              hasRating: app.hasRating
             });
-          });
-          newUnsubscribers.push(unsub);
-        });
-      });
 
-      setUnsubscribers(newUnsubscribers);
+            // Applications that are accepted and in progress
+            if (app.status === 'accepted' && ['accepted', 'onTheWay', 'reached', 'started'].includes(app.journeyStatus)) {
+              console.log('Found in-progress application');
+              return true;
+            }
+            
+            // Applications waiting for payment after completion
+            if (app.status === 'awaiting_payment' && app.journeyStatus === 'completed' && app.paymentStatus === 'pending') {
+              console.log('Found application needing payment');
+              return true;
+            }
+            
+            // Applications waiting for rating after payment
+            if (app.status === 'awaiting_rating' && app.paymentStatus === 'paid' && app.hasRating === false) {
+              console.log('Found application needing rating');
+              return true;
+            }
+            
+            return false;
+          });
+          
+          allActiveApplications.push(...employerActionApps);
+        }
+      }
+
+      console.log('All active applications for employer:', allActiveApplications.length);
+      
+      const prioritizedApp = getPriorityApplication(allActiveApplications);
+      console.log('Prioritized application:', prioritizedApp ? {
+        id: prioritizedApp.id,
+        status: prioritizedApp.status,
+        journeyStatus: prioritizedApp.journeyStatus,
+        paymentStatus: prioritizedApp.paymentStatus,
+        workerName: prioritizedApp.workerName,
+        hasRating: prioritizedApp.hasRating
+      } : 'No application');
+      
+      setMainApp(prioritizedApp);
       setLoading(false);
     } catch (error) {
       console.error('Error loading employer tracking data:', error);
       setLoading(false);
+    } finally {
+      isLoadingRef.current = false;
     }
   };
 
-  // Get the most important application (first in pending, then in progress, then completed)
-  const getMainApplication = () => {
-    const allApps = activeJobs.reduce((acc, { applications }) => [...acc, ...applications], []);
-    const inProgress = allApps.find(app => ['onTheWay', 'reached', 'started'].includes(app.journeyStatus));
-    const pending = allApps.find(app => app.status === 'accepted' && app.journeyStatus === 'accepted');
-    const completed = allApps.find(app => app.status === 'completed' && app.journeyStatus === 'completed');
-    return inProgress || pending || completed;
+  const getPriorityApplication = (allApps) => {
+    if (!allApps || allApps.length === 0) return null;
+    
+    console.log('All apps for prioritization:', allApps.map(app => ({
+      id: app.id,
+      status: app.status,
+      journeyStatus: app.journeyStatus,
+      paymentStatus: app.paymentStatus,
+      workerName: app.workerName,
+      hasRating: app.hasRating
+    })));
+    
+    // Priority 1: Work completed, needs payment (awaiting_payment status)
+    const completedNeedingPayment = allApps.find(app => 
+      app.status === 'awaiting_payment' && 
+      app.journeyStatus === 'completed' &&
+      app.paymentStatus === 'pending'
+    );
+    if (completedNeedingPayment) {
+      console.log('Found application needing payment:', completedNeedingPayment.id);
+      return completedNeedingPayment;
+    }
+    
+    // Priority 2: Payment done, needs rating
+    const paidNeedingRating = allApps.find(app => 
+      app.status === 'awaiting_rating' &&
+      app.paymentStatus === 'paid' && 
+      (app.hasRating === false || app.hasRating === undefined)
+    );
+    if (paidNeedingRating) {
+      console.log('Found application needing rating:', paidNeedingRating.id);
+      return paidNeedingRating;
+    }
+    
+    // Priority 3: Work in progress
+    const inProgress = allApps.find(app => 
+      ['onTheWay', 'reached', 'started'].includes(app.journeyStatus) &&
+      app.status === 'accepted'
+    );
+    if (inProgress) {
+      console.log('Found in-progress application:', inProgress.id);
+      return inProgress;
+    }
+    
+    // Priority 4: Accepted but not started journey
+    const accepted = allApps.find(app => 
+      app.status === 'accepted' && 
+      app.journeyStatus === 'accepted'
+    );
+    
+    if (accepted) {
+      console.log('Found accepted application:', accepted.id);
+      return accepted;
+    }
+    
+    console.log('No prioritized application found');
+    return null;
   };
 
-  const mainApp = getMainApplication();
-
-  // Hide banner if no main application, manually closed, or after rating completion
   const shouldShowBanner = !loading && mainApp && user && userProfile?.userType === 'employer' && showBanner && !manuallyClosed;
+
+  console.log('Should show banner:', shouldShowBanner, {
+    loading,
+    hasMainApp: !!mainApp,
+    hasUser: !!user,
+    userType: userProfile?.userType,
+    showBanner,
+    manuallyClosed
+  });
 
   if (!shouldShowBanner) {
     return null;
   }
 
   const getStatusInfo = () => {
+    // CRITICAL FIX: Check for awaiting_payment status first
+    if (mainApp.status === 'awaiting_payment' && mainApp.journeyStatus === 'completed' && mainApp.paymentStatus === 'pending') {
+      return {
+        icon: '💰',
+        title: 'Payment Required',
+        subtitle: `${mainApp.workerName} completed work - Pay now`,
+        color: '#FF6B35',
+        action: 'Pay Now',
+        showClose: false,
+      };
+    }
+    
+    if (mainApp.status === 'awaiting_rating' && mainApp.paymentStatus === 'paid' && (mainApp.hasRating === false || mainApp.hasRating === undefined)) {
+      return {
+        icon: '⭐',
+        title: 'Rate Worker',
+        subtitle: `Rate ${mainApp.workerName}'s performance`,
+        color: '#FFB800',
+        action: 'Rate Now',
+        showClose: true,
+      };
+    }
+    
     switch (mainApp.journeyStatus) {
       case 'accepted':
         return {
-          icon: '✓',
+          icon: '✔',
           title: 'Job Accepted',
           subtitle: `${mainApp.workerName} accepted your job`,
           color: colors.info,
           action: 'Track',
+          showClose: false,
         };
       case 'onTheWay':
         return {
@@ -146,30 +266,25 @@ const EmployerJobTrackingBanner = () => {
           subtitle: `${mainApp.workerName} is heading to location`,
           color: colors.warning,
           action: 'Track',
+          showClose: false,
         };
       case 'reached':
         return {
           icon: '📍',
           title: 'Worker Arrived',
-          subtitle: `${mainApp.workerName} has reached location`,
+          subtitle: `${mainApp.workerName} has reached`,
           color: colors.success,
           action: 'Track',
+          showClose: false,
         };
       case 'started':
         return {
           icon: '▶️',
           title: 'Work In Progress',
-          subtitle: `${mainApp.workerName} is working now`,
+          subtitle: `${mainApp.workerName} is working`,
           color: colors.primary,
           action: 'Track',
-        };
-      case 'completed':
-        return {
-          icon: '✅',
-          title: 'Work Completed!',
-          subtitle: `${mainApp.workerName} finished the job`,
-          color: colors.success,
-          action: 'Rate',
+          showClose: false,
         };
       default:
         return {
@@ -178,35 +293,39 @@ const EmployerJobTrackingBanner = () => {
           subtitle: 'View job details',
           color: colors.primary,
           action: 'View',
+          showClose: false,
         };
     }
   };
 
   const statusInfo = getStatusInfo();
-  
-  // Calculate active applications excluding completed ones for the badge
-  const activeApplicationsCount = activeJobs.reduce((sum, jobData) => {
-    const nonCompletedApps = jobData.applications.filter(app => 
-      app.journeyStatus !== 'completed'
-    );
-    return sum + nonCompletedApps.length;
-  }, 0);
 
   const handleBannerPress = () => {
-    if (mainApp.journeyStatus === 'completed') {
+    console.log('Banner pressed with status:', {
+      status: mainApp.status,
+      journeyStatus: mainApp.journeyStatus,
+      paymentStatus: mainApp.paymentStatus,
+      hasRating: mainApp.hasRating
+    });
+
+    // CRITICAL FIX: Handle payment requirement first
+    if (mainApp.status === 'awaiting_payment' && mainApp.journeyStatus === 'completed' && mainApp.paymentStatus === 'pending') {
+      console.log('Navigating to EmployerJobTracking for payment');
+      navigation.navigate('EmployerJobTracking', { applicationId: mainApp.id });
+    }
+    else if (mainApp.status === 'awaiting_rating' && mainApp.paymentStatus === 'paid' && (mainApp.hasRating === false || mainApp.hasRating === undefined)) {
+      console.log('Opening rating modal');
       setShowRatingModal(true);
-    } else {
+    }
+    else {
+      console.log('Navigating to EmployerJobTracking for tracking');
       navigation.navigate('EmployerJobTracking', { applicationId: mainApp.id });
     }
   };
 
-  const handleCloseBanner = () => {
-    setManuallyClosed(true);
-  };
-
   const handleSubmitRating = async () => {
     if (rating === 0) {
-      alert('Please select a rating');
+      Alert.alert('Rating Required', 'Please select a rating before submitting');
       return;
     }
 
@@ -222,94 +341,63 @@ const EmployerJobTrackingBanner = () => {
         employerName: userProfile?.name || 'Employer',
         rating,
         comment: comment.trim(),
+        applicationId: mainApp.id,
       });
 
       setRatingLoading(false);
 
       if (result.success) {
-        alert('Rating submitted successfully! 🎉');
-        setShowRatingModal(false);
-        setRating(0);
-        setComment('');
-        // Close the banner after successful rating
-        setManuallyClosed(true);
-        // Reload data to update the banner state
-        await loadInitialData();
+        Alert.alert(
+          '🎉 Thank You!',
+          'Your rating has been submitted successfully.',
+          [{ 
+            text: 'OK', 
+            onPress: () => {
+              setShowRatingModal(false);
+              setRating(0);
+              setComment('');
+              setManuallyClosed(true);
+              loadInitialData();
+            }
+          }]
+        );
       } else {
-        alert(result.error || 'Failed to submit rating');
+        Alert.alert('Error', result.error || 'Failed to submit rating');
       }
     } catch (error) {
       setRatingLoading(false);
-      alert('An error occurred. Please try again.');
+      Alert.alert('Error', 'An error occurred. Please try again.');
       console.error('Rating submission error:', error);
     }
   };
 
-  const renderStars = () => {
-    return (
-      <View style={styles.starsContainer}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <TouchableOpacity
-            key={star}
-            onPress={() => setRating(star)}
-            style={styles.starButton}
-          >
-            <Text style={[
-              styles.star,
-              star <= rating && styles.starSelected
-            ]}>
-              {star <= rating ? '⭐' : '☆'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
-
-  const getRatingLabel = () => {
-    switch(rating) {
-      case 1: return 'Poor';
-      case 2: return 'Fair';
-      case 3: return 'Good';
-      case 4: return 'Very Good';
-      case 5: return 'Excellent';
-      default: return 'Tap a star to rate';
-    }
-  };
+  const renderStars = () => (
+    <View style={styles.starsContainer}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <TouchableOpacity key={star} onPress={() => setRating(star)} style={styles.starButton}>
+          <Text style={[styles.star, star <= rating && styles.starSelected]}>
+            {star <= rating ? '⭐' : '☆'}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
   return (
     <>
       <View style={styles.bannerContainer}>
         <View style={[styles.banner, { borderLeftColor: statusInfo.color }]}>
-          {/* Left Side - Icon & Status */}
-          <TouchableOpacity
-            style={styles.leftSection}
-            onPress={handleBannerPress}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity style={styles.leftSection} onPress={handleBannerPress} activeOpacity={0.7}>
             <View style={[styles.statusIcon, { backgroundColor: statusInfo.color + '20' }]}>
               <Text style={styles.statusIconText}>{statusInfo.icon}</Text>
             </View>
             <View style={styles.statusInfo}>
-              <Text style={styles.statusTitle} numberOfLines={1}>
-                {statusInfo.title}
-              </Text>
-              <Text style={styles.statusSubtitle} numberOfLines={1}>
-                {statusInfo.subtitle}
-              </Text>
+              <Text style={styles.statusTitle} numberOfLines={1}>{statusInfo.title}</Text>
+              <Text style={styles.statusSubtitle} numberOfLines={1}>{statusInfo.subtitle}</Text>
             </View>
           </TouchableOpacity>
 
-          {/* Right Side - Action & Badge */}
           <View style={styles.rightSection}>
-            {/* Only show badge if there are multiple active (non-completed) applications */}
-            {activeApplicationsCount > 1 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{activeApplicationsCount}</Text>
-              </View>
-            )}
-            
-            {/* Action Button */}
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: statusInfo.color }]}
               onPress={handleBannerPress}
@@ -319,71 +407,30 @@ const EmployerJobTrackingBanner = () => {
               <Text style={styles.actionArrow}>›</Text>
             </TouchableOpacity>
 
-            {/* Close Button - Only show for completed jobs */}
-            {mainApp.journeyStatus === 'completed' && (
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={handleCloseBanner}
-                activeOpacity={0.7}
-              >
+            {statusInfo.showClose && (
+              <TouchableOpacity style={styles.closeButton} onPress={() => setManuallyClosed(true)} activeOpacity={0.7}>
                 <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
-
-        {/* Progress Indicator Dots */}
-        {mainApp.journeyStatus && (
-          <View style={styles.progressDots}>
-            {['accepted', 'onTheWay', 'reached', 'started', 'completed'].map((status, idx) => {
-              const isActive = ['accepted', 'onTheWay', 'reached', 'started', 'completed'].indexOf(mainApp.journeyStatus) >= idx;
-              const isCurrent = mainApp.journeyStatus === status;
-
-              return (
-                <View
-                  key={status}
-                  style={[
-                    styles.dot,
-                    isActive && styles.dotActive,
-                    isCurrent && styles.dotCurrent,
-                  ]}
-                >
-                  {isCurrent && <View style={styles.dotPulse} />}
-                </View>
-              );
-            })}
-          </View>
-        )}
       </View>
 
       {/* Rating Modal */}
-      <Modal
-        visible={showRatingModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowRatingModal(false)}
-      >
+      <Modal visible={showRatingModal} animationType="slide" transparent={true} onRequestClose={() => setShowRatingModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            {/* Header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Rate Worker Performance</Text>
-              <TouchableOpacity 
-                onPress={() => setShowRatingModal(false)}
-                style={styles.modalCloseButton}
-              >
+              <TouchableOpacity onPress={() => setShowRatingModal(false)} style={styles.modalCloseButton}>
                 <Text style={styles.modalCloseIcon}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Content */}
             <View style={styles.modalContent}>
-              {/* Worker Info */}
               <View style={styles.workerInfoCard}>
                 <View style={styles.workerAvatar}>
-                  <Text style={styles.avatarText}>
-                    {mainApp.workerName?.charAt(0) || 'W'}
-                  </Text>
+                  <Text style={styles.avatarText}>{mainApp.workerName?.charAt(0) || 'W'}</Text>
                 </View>
                 <View style={styles.workerInfoText}>
                   <Text style={styles.workerName}>{mainApp.workerName}</Text>
@@ -391,20 +438,16 @@ const EmployerJobTrackingBanner = () => {
                 </View>
               </View>
 
-              {/* Rating Question */}
               <View style={styles.ratingSection}>
-                <Text style={styles.ratingQuestion}>
-                  How was the work quality?
-                </Text>
+                <Text style={styles.ratingQuestion}>How was the work quality?</Text>
                 {renderStars()}
-                <Text style={styles.ratingLabel}>{getRatingLabel()}</Text>
+                <Text style={styles.ratingLabel}>
+                  {rating === 0 ? 'Tap a star to rate' : ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][rating - 1]}
+                </Text>
               </View>
 
-              {/* Comment Input */}
               <View style={styles.commentSection}>
-                <Text style={styles.commentLabel}>
-                  Share your feedback (optional)
-                </Text>
+                <Text style={styles.commentLabel}>Share your feedback (optional)</Text>
                 <View style={styles.commentInputWrapper}>
                   <Text style={styles.commentInputIcon}>💬</Text>
                   <TextInput
@@ -420,7 +463,6 @@ const EmployerJobTrackingBanner = () => {
                 </View>
               </View>
 
-              {/* Action Buttons */}
               <View style={styles.modalActions}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.skipButton]}
@@ -428,6 +470,7 @@ const EmployerJobTrackingBanner = () => {
                     setShowRatingModal(false);
                     setRating(0);
                     setComment('');
+                    setManuallyClosed(true);
                   }}
                   disabled={ratingLoading}
                 >
@@ -435,11 +478,7 @@ const EmployerJobTrackingBanner = () => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[
-                    styles.modalButton,
-                    styles.submitButton,
-                    (rating === 0 || ratingLoading) && styles.submitButtonDisabled
-                  ]}
+                  style={[styles.modalButton, styles.submitButton, (rating === 0 || ratingLoading) && styles.submitButtonDisabled]}
                   onPress={handleSubmitRating}
                   disabled={rating === 0 || ratingLoading}
                 >
@@ -460,6 +499,8 @@ const EmployerJobTrackingBanner = () => {
     </>
   );
 };
+
+// ... (keep the same styles as before)
 
 const styles = StyleSheet.create({
   bannerContainer: {
@@ -519,27 +560,12 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     gap: 8,
   },
-  badge: {
-    backgroundColor: colors.error,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: colors.white,
-  },
   actionButton: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 8,
     alignItems: 'center',
-    minWidth: 60,
-    justifyContent: 'center',
   },
   actionText: {
     fontSize: 13,
@@ -558,45 +584,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 4,
   },
   closeButtonText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: colors.textSecondary,
   },
-  progressDots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 10,
-    paddingHorizontal: 20,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.borderLight,
-  },
-  dotActive: {
-    backgroundColor: colors.primary,
-  },
-  dotCurrent: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    position: 'relative',
-  },
-  dotPulse: {
-    position: 'absolute',
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.primary,
-    opacity: 0.5,
-  },
-
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -627,7 +620,6 @@ const styles = StyleSheet.create({
   modalCloseIcon: {
     fontSize: 24,
     color: colors.textSecondary,
-    fontWeight: '300',
   },
   modalContent: {
     padding: 20,
@@ -752,7 +744,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   submitButton: {
-    backgroundColor: colors.success,
+    backgroundColor: '#FFB800',
   },
   submitButtonDisabled: {
     backgroundColor: colors.textSecondary,

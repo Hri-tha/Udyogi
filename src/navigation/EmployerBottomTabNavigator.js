@@ -1,14 +1,21 @@
-// src/navigation/EmployerBottomTabNavigator.js
+// src/navigation/EmployerBottomTabNavigator.js - UPDATED
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native'; // Add this import
+import { createStackNavigator } from '@react-navigation/stack';
+import { View, Text } from 'react-native';
 import EmployerHomeScreen from '../screens/employer/EmployerHomeScreen';
 import ApplicationsScreen from '../screens/employer/ApplicationsScreen';
 import EmployerProfileScreen from '../screens/employer/EmployerProfileScreen';
 import NotificationsScreen from '../screens/common/NotificationsScreen';
+import EmployerJobTrackingScreen from '../screens/employer/EmployerJobTrackingScreen';
+import PaymentProcessingScreen from '../screens/employer/PaymentProcessingScreen';
 import { colors } from '../constants/colors';
 
+// Import the employer banner
+import EmployerJobTrackingBanner from '../components/EmployerJobTrackingBanner';
+
 const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
 // Simple icon component
 const TabIcon = ({ name, focused }) => {
@@ -32,59 +39,107 @@ const TabIcon = ({ name, focused }) => {
   );
 };
 
-export default function EmployerBottomTabNavigator() {
+// Home Stack Navigator
+function HomeStack() {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '500',
-        },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
-      }}
-    >
-      <Tab.Screen 
-        name="EmployerHome" 
-        component={EmployerHomeScreen}
-        options={{
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
-        }}
-      />
-      <Tab.Screen 
-        name="Applications" 
-        component={ApplicationsScreen}
-        options={{
-          tabBarLabel: 'Applications',
-          tabBarIcon: ({ focused }) => <TabIcon name="applications" focused={focused} />,
-        }}
-      />
-      <Tab.Screen 
-        name="Notifications" 
-        component={NotificationsScreen}
-        options={{
-          tabBarLabel: 'Notifications',
-          tabBarIcon: ({ focused }) => <TabIcon name="notifications" focused={focused} />,
-        }}
-      />
-      <Tab.Screen 
-        name="EmployerProfile" 
-        component={EmployerProfileScreen}
-        options={{
-          tabBarLabel: 'Profile',
-          tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
-        }}
-      />
-    </Tab.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="EmployerHomeMain" component={EmployerHomeScreen} />
+      <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
+      <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
+    </Stack.Navigator>
   );
 }
+
+// Applications Stack Navigator
+function ApplicationsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ApplicationsMain" component={ApplicationsScreen} />
+      <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
+      <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Profile Stack Navigator
+function ProfileStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="EmployerProfileMain" component={EmployerProfileScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Notifications Stack Navigator
+function NotificationsStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="NotificationsMain" component={NotificationsScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Create a wrapper component that includes the banner
+const TabNavigatorWithBanner = () => {
+  return (
+    <View style={{ flex: 1 }}>
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: {
+            backgroundColor: colors.white,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            height: 60,
+            paddingBottom: 8,
+            paddingTop: 8,
+          },
+          tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: '500',
+          },
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.textSecondary,
+        }}
+      >
+        <Tab.Screen 
+          name="EmployerHome" 
+          component={HomeStack}
+          options={{
+            tabBarLabel: 'Home',
+            tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
+          }}
+        />
+        <Tab.Screen 
+          name="Applications" 
+          component={ApplicationsStack}
+          options={{
+            tabBarLabel: 'Applications',
+            tabBarIcon: ({ focused }) => <TabIcon name="applications" focused={focused} />,
+          }}
+        />
+        <Tab.Screen 
+          name="Notifications" 
+          component={NotificationsStack}
+          options={{
+            tabBarLabel: 'Notifications',
+            tabBarIcon: ({ focused }) => <TabIcon name="notifications" focused={focused} />,
+          }}
+        />
+        <Tab.Screen 
+          name="EmployerProfile" 
+          component={ProfileStack}
+          options={{
+            tabBarLabel: 'Profile',
+            tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
+          }}
+        />
+      </Tab.Navigator>
+      
+      {/* Employer Job Tracking Banner - Only shown on main tab screens */}
+      <EmployerJobTrackingBanner />
+    </View>
+  );
+}
+
+export default TabNavigatorWithBanner;

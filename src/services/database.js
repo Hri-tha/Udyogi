@@ -165,11 +165,13 @@ export const fetchJobById = async (jobId) => {
   }
 };
 
+// In src/services/database.js - UPDATE THIS FUNCTION
 export const fetchEmployerJobs = async (employerId) => {
   try {
     const q = query(
       collection(db, 'jobs'),
       where('employerId', '==', employerId)
+      // REMOVED: where('status', '==', 'open') - Fetch all jobs
     );
     
     const snapshot = await getDocs(q);
@@ -795,7 +797,7 @@ export const fetchChatMessages = async (chatId) => {
  */
 export const createRating = async (ratingData) => {
   try {
-    // Check if rating already exists for this job/worker combination
+    // Check if rating already exists
     const existingRatingQuery = query(
       collection(db, 'ratings'),
       where('jobId', '==', ratingData.jobId),
@@ -818,6 +820,18 @@ export const createRating = async (ratingData) => {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+
+    // CRITICAL: Update application status to completed and set hasRating flag
+    if (ratingData.applicationId) {
+      const appRef = doc(db, 'applications', ratingData.applicationId);
+      await updateDoc(appRef, {
+        status: 'completed',
+        hasRating: true,
+        ratedAt: serverTimestamp(),
+        employerRating: ratingData.rating,
+        employerComment: ratingData.comment || '',
+      });
+    }
 
     // Update worker's average rating
     await updateWorkerRating(ratingData.workerId);
@@ -945,16 +959,22 @@ export const fetchEmployerRatings = async (employerId) => {
  */
 const updateWorkerRating = async (workerId) => {
   try {
-    const ratingsResult = await fetchWorkerRatings(workerId);
+    const ratingsQuery = query(
+      collection(db, 'ratings'),
+      where('workerId', '==', workerId)
+    );
     
-    if (ratingsResult.success && ratingsResult.ratings.length > 0) {
-      const sum = ratingsResult.ratings.reduce((acc, r) => acc + r.rating, 0);
-      const average = sum / ratingsResult.ratings.length;
+    const snapshot = await getDocs(ratingsQuery);
+    const ratings = snapshot.docs.map(doc => doc.data());
+    
+    if (ratings.length > 0) {
+      const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
+      const average = sum / ratings.length;
       
       const userRef = doc(db, 'users', workerId);
       await updateDoc(userRef, {
         rating: parseFloat(average.toFixed(2)),
-        totalRatings: ratingsResult.ratings.length,
+        totalRatings: ratings.length,
         updatedAt: serverTimestamp()
       });
     }
@@ -965,6 +985,7 @@ const updateWorkerRating = async (workerId) => {
     return { success: false, error: error.message };
   }
 };
+
 
 /**
  * Update employer's average rating in their profile
@@ -1207,15 +1228,30 @@ export const getEmployerRatingStats = async (employerId) => {
  * @param {Object} additionalData - Any additional data to store
  * @returns {Object} - Success status
  */
+// In src/services/database.js - UPDATE THIS FUNCTION
+/**
+ * Update worker's journey status (on the way, reached, started, completed)
+ * @param {string} applicationId - Application ID
+ * @param {string} status - Journey status
+ * @param {Object} additionalData - Any additional data to store
+ * @returns {Object} - Success status
+ */
+// src/services/database.js - ENHANCED VERSION
 export const updateWorkerJourneyStatus = async (applicationId, status) => {
   try {
     const appRef = doc(db, 'applications', applicationId);
     const timestamp = serverTimestamp();
+    const currentTime = new Date().getTime();
     
     const updates = {
       journeyStatus: status,
       updatedAt: timestamp
     };
+
+    console.log('=== UPDATING JOURNEY STATUS ===');
+    console.log('Application ID:', applicationId);
+    console.log('New Status:', status);
+    console.log('Current Time:', currentTime);
 
     // Add specific timestamps based on status
     if (status === 'onTheWay') {
@@ -1224,30 +1260,102 @@ export const updateWorkerJourneyStatus = async (applicationId, status) => {
       updates.reachedAt = timestamp;
     } else if (status === 'started') {
       updates.workStartedAt = timestamp;
-      updates.workStartedTimestamp = new Date().getTime();
+      updates.workStartedTimestamp = currentTime;
+      console.log('Work started - timestamp set:', currentTime);
     } else if (status === 'completed') {
+      // CRITICAL: Set BOTH server timestamp and client timestamp
       updates.workCompletedAt = timestamp;
-      updates.workCompletedTimestamp = new Date().getTime();
+      updates.workCompletedTimestamp = currentTime; // This ensures actual completion time is recorded
+      updates.completedAt = timestamp;
       
-      // Calculate work duration if started timestamp exists
+      console.log('Work completed - setting timestamps:', {
+        serverTimestamp: timestamp,
+        clientTimestamp: currentTime
+      });
+      
+      // CRITICAL: Set payment status to pending when work completes
+      updates.paymentStatus = 'pending';
+      updates.status = 'awaiting_payment';
+      
+      // Get current application data to calculate payment
       const appSnap = await getDoc(appRef);
       const appData = appSnap.data();
       
+      console.log('Current application data for payment calculation:', {
+        workStartedTimestamp: appData.workStartedTimestamp,
+        workCompletedTimestamp: currentTime,
+        hourlyRate: appData.hourlyRate,
+        expectedPayment: appData.expectedPayment
+      });
+      
+      // Calculate work duration and payment based on actual hours worked
       if (appData.workStartedTimestamp) {
-        const durationMs = new Date().getTime() - appData.workStartedTimestamp;
-        const durationHours = (durationMs / (1000 * 60 * 60)).toFixed(2);
-        updates.actualWorkDuration = parseFloat(durationHours);
+        const durationMs = currentTime - appData.workStartedTimestamp;
+        const durationMinutes = durationMs / (1000 * 60);
+        const durationHours = durationMinutes / 60;
         
-        // Calculate payment
+        updates.actualWorkDuration = parseFloat(durationHours.toFixed(4));
+        updates.actualWorkMinutes = Math.round(durationMinutes);
+        
+        console.log('Work duration calculation:', {
+          startTime: appData.workStartedTimestamp,
+          endTime: currentTime,
+          durationMs: durationMs,
+          durationMinutes: durationMinutes,
+          durationHours: durationHours
+        });
+
+        // Calculate payment based on actual duration and hourly rate
         if (appData.hourlyRate) {
-          updates.calculatedPayment = Math.round(parseFloat(durationHours) * appData.hourlyRate);
+          const hourlyRate = appData.hourlyRate;
+          let calculatedPayment = 0;
+          
+          if (durationMinutes < 60) {
+            // For work less than 1 hour, pay proportionally with minimum payment
+            const proportion = durationMinutes / 60;
+            calculatedPayment = Math.round(hourlyRate * proportion);
+            
+            // Ensure minimum payment (at least 15 minutes worth of work)
+            const minPayment = Math.round(hourlyRate * 0.25);
+            if (calculatedPayment < minPayment && durationMinutes > 0) {
+              calculatedPayment = minPayment;
+            }
+          } else {
+            // For 1 hour or more, pay normally
+            calculatedPayment = Math.round(durationHours * hourlyRate);
+          }
+          
+          // Ensure payment is at least 1 rupee
+          calculatedPayment = Math.max(1, calculatedPayment);
+          
+          updates.calculatedPayment = calculatedPayment;
+          
+          console.log('WORK COMPLETED - Payment Calculation:', {
+            workStarted: new Date(appData.workStartedTimestamp).toLocaleString(),
+            workCompleted: new Date(currentTime).toLocaleString(),
+            durationMinutes: Math.round(durationMinutes),
+            durationHours: durationHours.toFixed(4),
+            hourlyRate: hourlyRate,
+            calculatedPayment: calculatedPayment,
+            expectedPayment: appData.expectedPayment,
+            difference: appData.expectedPayment - calculatedPayment
+          });
+        } else {
+          console.warn('No hourly rate found for payment calculation');
+          updates.calculatedPayment = appData.expectedPayment || 0;
         }
+      } else {
+        // Fallback to expected payment if no start timestamp
+        console.warn('No work start timestamp found, using expected payment');
+        updates.calculatedPayment = appData.expectedPayment || 0;
       }
     }
 
+    console.log('Final updates to be applied:', updates);
     await updateDoc(appRef, updates);
+    console.log('Successfully updated application with journey status:', status);
 
-    // Send notification to employer
+    // Get updated application data for notifications
     const appSnap = await getDoc(appRef);
     const application = appSnap.data();
     
@@ -1268,8 +1376,13 @@ export const updateWorkerJourneyStatus = async (applicationId, status) => {
         notificationMessage = `${application.workerName} has started working`;
         break;
       case 'completed':
-        notificationTitle = '✅ Work completed';
-        notificationMessage = `${application.workerName} has completed the work`;
+        const actualPayment = application.calculatedPayment || application.expectedPayment;
+        const durationText = application.actualWorkMinutes < 60 
+          ? `${application.actualWorkMinutes} minutes` 
+          : `${(application.actualWorkDuration || 0).toFixed(2)} hours`;
+        
+        notificationTitle = '💰 Payment Required';
+        notificationMessage = `${application.workerName} has completed the work in ${durationText}. Payment due: ₹${actualPayment}`;
         break;
     }
 
@@ -1277,10 +1390,11 @@ export const updateWorkerJourneyStatus = async (applicationId, status) => {
       await createNotification(application.employerId, {
         title: notificationTitle,
         message: notificationMessage,
-        type: 'worker_status_update',
-        actionType: 'view_application',
+        type: status === 'completed' ? 'payment_required' : 'worker_status_update',
+        actionType: status === 'completed' ? 'process_payment' : 'view_application',
         actionId: applicationId,
       });
+      console.log('Notification sent successfully');
     }
 
     return { success: true };
@@ -1296,22 +1410,61 @@ export const updateWorkerJourneyStatus = async (applicationId, status) => {
  * @param {Object} paymentData - Payment details
  * @returns {Object} - Success status
  */
+// src/services/database.js - FIXED processPayment function
 export const processPayment = async (applicationId, paymentData) => {
   try {
     const appRef = doc(db, 'applications', applicationId);
+    const appSnap = await getDoc(appRef);
+    const application = appSnap.data();
     
+    if (!application) {
+      return { success: false, error: 'Application not found' };
+    }
+
+    // Use calculated payment if available, otherwise use the provided amount
+    const finalAmount = application.calculatedPayment || paymentData.amount;
+    
+    console.log('Processing Payment:', {
+      providedAmount: paymentData.amount,
+      calculatedPayment: application.calculatedPayment,
+      finalAmount: finalAmount,
+      actualWorkDuration: application.actualWorkDuration,
+      hourlyRate: application.hourlyRate
+    });
+
+    // CRITICAL FIX: Ensure all required fields have values
+    const employerName = application.employerName || 'Employer';
+    const workerName = application.workerName || 'Worker';
+    const jobTitle = application.jobTitle || 'Job';
+    const actualWorkDuration = application.actualWorkDuration || 0;
+    const hourlyRate = application.hourlyRate || 0;
+
+    console.log('Payment data validation:', {
+      employerName,
+      workerName,
+      jobTitle,
+      actualWorkDuration,
+      hourlyRate
+    });
+
+    // Update application with payment details
     await updateDoc(appRef, {
       paymentStatus: 'paid',
-      paymentAmount: paymentData.amount,
+      paymentAmount: finalAmount,
       paymentMethod: paymentData.method,
       paymentNotes: paymentData.notes || '',
       paidAt: serverTimestamp(),
-      status: 'completed'
+      status: 'completed', // CRITICAL: Change from 'awaiting_rating' to 'completed'
+      hasRating: false,
+      journeyStatus: 'completed', // Ensure journey status is also completed
     });
 
-    // Get application details
-    const appSnap = await getDoc(appRef);
-    const application = appSnap.data();
+    // Update job status to completed
+    const jobRef = doc(db, 'jobs', application.jobId);
+    await updateDoc(jobRef, {
+      status: 'completed',
+      completedAt: serverTimestamp()
+    });
 
     // Update worker's earnings
     const workerRef = doc(db, 'users', application.workerId);
@@ -1319,7 +1472,7 @@ export const processPayment = async (applicationId, paymentData) => {
     const workerData = workerSnap.data();
 
     await updateDoc(workerRef, {
-      totalEarnings: (workerData.totalEarnings || 0) + paymentData.amount,
+      totalEarnings: (workerData.totalEarnings || 0) + finalAmount,
       completedJobs: (workerData.completedJobs || 0) + 1,
     });
 
@@ -1329,23 +1482,42 @@ export const processPayment = async (applicationId, paymentData) => {
     const employerData = employerSnap.data();
 
     await updateDoc(employerRef, {
-      totalPayments: (employerData.totalPayments || 0) + paymentData.amount,
+      totalPayments: (employerData.totalPayments || 0) + finalAmount,
       totalHires: (employerData.totalHires || 0) + 1,
     });
+
+    // Add to worker's earnings history - FIXED: Ensure no undefined values
+    const earningsData = {
+      workerId: application.workerId,
+      applicationId: applicationId,
+      amount: finalAmount,
+      jobTitle: jobTitle,
+      employerName: employerName,
+      paymentMethod: paymentData.method,
+      actualWorkDuration: actualWorkDuration,
+      hourlyRate: hourlyRate,
+      status: 'completed',
+      paidAt: serverTimestamp(),
+      createdAt: serverTimestamp()
+    };
+
+    console.log('Creating earnings record:', earningsData);
+    
+    await addDoc(collection(db, 'earnings'), earningsData);
 
     // Send notifications
     await createNotification(application.workerId, {
       title: '💰 Payment Received',
-      message: `You've received ₹${paymentData.amount} for ${application.jobTitle}`,
+      message: `You've received ₹${finalAmount} for ${jobTitle} (${actualWorkDuration} hours worked)`,
       type: 'payment_received',
       actionType: 'view_earnings',
     });
 
     await createNotification(application.employerId, {
-      title: '✅ Payment Processed',
-      message: `Payment of ₹${paymentData.amount} has been processed for ${application.workerName}`,
-      type: 'payment_processed',
-      actionType: 'view_application',
+      title: '⭐ Rate Worker Performance',
+      message: `Payment of ₹${finalAmount} processed for ${actualWorkDuration} hours of work. Please rate ${workerName}'s work.`,
+      type: 'rating_required',
+      actionType: 'rate_worker',
       actionId: applicationId,
     });
 
@@ -1355,6 +1527,7 @@ export const processPayment = async (applicationId, paymentData) => {
     return { success: false, error: error.message };
   }
 };
+
 
 /**
  * Mark payment as pending (for cash payments)
@@ -1764,14 +1937,38 @@ export const deleteJob = async (jobId, employerId) => {
  * @param {Object} paymentData - Payment details including Razorpay response
  * @returns {Object} - Success status
  */
+// src/services/database.js - FIXED processOnlinePayment function
 export const processOnlinePayment = async (applicationId, paymentData) => {
   try {
     const appRef = doc(db, 'applications', applicationId);
+    const appSnap = await getDoc(appRef);
+    const application = appSnap.data();
     
+    if (!application) {
+      return { success: false, error: 'Application not found' };
+    }
+
+    // Use calculated payment if available, otherwise use the provided amount
+    const finalAmount = application.calculatedPayment || paymentData.amount;
+    
+    console.log('Processing Online Payment:', {
+      providedAmount: paymentData.amount,
+      calculatedPayment: application.calculatedPayment,
+      finalAmount: finalAmount,
+      actualWorkDuration: application.actualWorkDuration
+    });
+
+    // CRITICAL FIX: Ensure all required fields have values
+    const employerName = application.employerName || 'Employer';
+    const workerName = application.workerName || 'Worker';
+    const jobTitle = application.jobTitle || 'Job';
+    const actualWorkDuration = application.actualWorkDuration || 0;
+    const hourlyRate = application.hourlyRate || 0;
+
     const paymentRecord = {
       paymentId: paymentData.paymentId,
       orderId: paymentData.orderId,
-      amount: paymentData.amount,
+      amount: finalAmount,
       method: 'online',
       provider: 'razorpay',
       status: 'completed',
@@ -1782,17 +1979,22 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
 
     await updateDoc(appRef, {
       paymentStatus: 'paid',
-      paymentAmount: paymentData.amount,
+      paymentAmount: finalAmount,
       paymentMethod: 'online',
       paymentProvider: 'razorpay',
       paymentDetails: paymentRecord,
       paidAt: serverTimestamp(),
-      status: 'completed'
+      status: 'completed', // CRITICAL: Change from 'awaiting_rating' to 'completed'
+      hasRating: false,
+      journeyStatus: 'completed', // Ensure journey status is also completed
     });
 
-    // Get application details
-    const appSnap = await getDoc(appRef);
-    const application = appSnap.data();
+    // Update job status to completed
+    const jobRef = doc(db, 'jobs', application.jobId);
+    await updateDoc(jobRef, {
+      status: 'completed',
+      completedAt: serverTimestamp()
+    });
 
     // Update worker's earnings
     const workerRef = doc(db, 'users', application.workerId);
@@ -1800,9 +2002,9 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
     const workerData = workerSnap.data();
 
     await updateDoc(workerRef, {
-      totalEarnings: (workerData.totalEarnings || 0) + paymentData.amount,
+      totalEarnings: (workerData.totalEarnings || 0) + finalAmount,
       completedJobs: (workerData.completedJobs || 0) + 1,
-      lastPayment: paymentData.amount,
+      lastPayment: finalAmount,
       lastPaymentDate: serverTimestamp()
     });
 
@@ -1812,39 +2014,45 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
     const employerData = employerSnap.data();
 
     await updateDoc(employerRef, {
-      totalPayments: (employerData.totalPayments || 0) + paymentData.amount,
+      totalPayments: (employerData.totalPayments || 0) + finalAmount,
       totalHires: (employerData.totalHires || 0) + 1,
-      onlinePayments: (employerData.onlinePayments || 0) + paymentData.amount
+      onlinePayments: (employerData.onlinePayments || 0) + finalAmount
     });
 
-    // Add to worker's earnings history
-    const earningsRef = await addDoc(collection(db, 'earnings'), {
+    // Add to worker's earnings history - FIXED: Ensure no undefined values
+    const earningsData = {
       workerId: application.workerId,
       applicationId: applicationId,
-      amount: paymentData.amount,
-      jobTitle: application.jobTitle,
-      employerName: application.employerName,
+      amount: finalAmount,
+      jobTitle: jobTitle,
+      employerName: employerName,
       paymentMethod: 'online',
       paymentProvider: 'razorpay',
       paymentId: paymentData.paymentId,
+      actualWorkDuration: actualWorkDuration,
+      hourlyRate: hourlyRate,
       status: 'completed',
       paidAt: serverTimestamp(),
       createdAt: serverTimestamp()
-    });
+    };
+
+    console.log('Creating online earnings record:', earningsData);
+    
+    await addDoc(collection(db, 'earnings'), earningsData);
 
     // Send notifications
     await createNotification(application.workerId, {
       title: '💰 Online Payment Received',
-      message: `You've received ₹${paymentData.amount} for ${application.jobTitle} via online payment`,
+      message: `You've received ₹${finalAmount} for ${jobTitle} via online payment (${actualWorkDuration} hours worked)`,
       type: 'payment_received',
       actionType: 'view_earnings',
     });
 
     await createNotification(application.employerId, {
-      title: '✅ Online Payment Successful',
-      message: `Payment of ₹${paymentData.amount} has been processed successfully for ${application.workerName}`,
-      type: 'payment_processed',
-      actionType: 'view_application',
+      title: '⭐ Rate Worker Performance',
+      message: `Payment of ₹${finalAmount} processed for ${actualWorkDuration} hours of work. Please rate ${workerName}'s work.`,
+      type: 'rating_required',
+      actionType: 'rate_worker',
       actionId: applicationId,
     });
 
@@ -1852,6 +2060,70 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
   } catch (error) {
     console.error('Process Online Payment Error:', error);
     return { success: false, error: error.message };
+  }
+};
+
+export const calculateActualPayment = (application) => {
+  try {
+    console.log('Calculating actual payment for application:', {
+      workStarted: application.workStartedTimestamp,
+      workCompleted: application.workCompletedTimestamp,
+      hourlyRate: application.hourlyRate,
+      expectedPayment: application.expectedPayment,
+      actualWorkMinutes: application.actualWorkMinutes
+    });
+
+    // If we have calculated payment from database, use that
+    if (application.calculatedPayment !== undefined && application.calculatedPayment !== null) {
+      console.log('Using stored calculated payment:', application.calculatedPayment);
+      return application.calculatedPayment;
+    }
+
+    // If work was started and completed, calculate based on actual hours
+    if (application.workStartedTimestamp && application.workCompletedTimestamp) {
+      const durationMs = application.workCompletedTimestamp - application.workStartedTimestamp;
+      const durationMinutes = durationMs / (1000 * 60);
+      const durationHours = durationMinutes / 60;
+      
+      // Use hourly rate to calculate payment
+      const hourlyRate = application.hourlyRate || 0;
+      let calculatedPayment = 0;
+      
+      if (durationMinutes < 60) {
+        // For work less than 1 hour, pay proportionally with minimum payment
+        const proportion = durationMinutes / 60;
+        calculatedPayment = Math.round(hourlyRate * proportion);
+        
+        // Ensure minimum payment (at least 15 minutes worth of work)
+        const minPayment = Math.round(hourlyRate * 0.25); // 15 minutes = 0.25 hours
+        if (calculatedPayment < minPayment && durationMinutes > 0) {
+          calculatedPayment = minPayment;
+        }
+      } else {
+        // For 1 hour or more, pay normally
+        calculatedPayment = Math.round(durationHours * hourlyRate);
+      }
+      
+      // Ensure payment is at least 1 rupee
+      calculatedPayment = Math.max(1, calculatedPayment);
+      
+      console.log('Actual Payment Calculation:', {
+        durationMinutes: Math.round(durationMinutes),
+        durationHours: durationHours.toFixed(4),
+        hourlyRate: hourlyRate,
+        calculatedPayment: calculatedPayment,
+        expectedPayment: application.expectedPayment
+      });
+      
+      return calculatedPayment;
+    }
+    
+    // Fallback to expected payment
+    console.log('Using expected payment as fallback:', application.expectedPayment);
+    return application.expectedPayment || 0;
+  } catch (error) {
+    console.error('Payment calculation error:', error);
+    return application.expectedPayment || 0;
   }
 };
 
@@ -2002,4 +2274,73 @@ export const onWorkerCurrentJobUpdate = (workerId, callback) => {
       callback(null); // No current job
     }
   });
+};
+
+/**
+ * Fix completed jobs that are missing completion timestamps and calculated payments
+ * @param {string} applicationId - Application ID
+ * @returns {Object} - Success status
+ */
+export const fixCompletedJobPayment = async (applicationId) => {
+  try {
+    const appRef = doc(db, 'applications', applicationId);
+    const appSnap = await getDoc(appRef);
+    
+    if (!appSnap.exists()) {
+      return { success: false, error: 'Application not found' };
+    }
+
+    const appData = appSnap.data();
+    
+    // Only fix jobs that are completed but missing completion timestamp
+    if (appData.journeyStatus === 'completed' && appData.workStartedTimestamp && !appData.workCompletedTimestamp) {
+      console.log('Fixing completed job payment for:', applicationId);
+      
+      const currentTime = new Date().getTime();
+      const durationMs = currentTime - appData.workStartedTimestamp;
+      const durationMinutes = durationMs / (1000 * 60);
+      const durationHours = durationMs / (1000 * 60 * 60);
+      
+      let calculatedPayment = 0;
+      const hourlyRate = appData.hourlyRate || 0;
+      
+      if (durationMinutes < 60) {
+        const proportion = durationMinutes / 60;
+        calculatedPayment = Math.round(hourlyRate * proportion);
+        const minPayment = Math.round(hourlyRate * 0.25);
+        if (calculatedPayment < minPayment && durationMinutes > 0) {
+          calculatedPayment = minPayment;
+        }
+      } else {
+        calculatedPayment = Math.round(durationHours * hourlyRate);
+      }
+      
+      calculatedPayment = Math.max(1, calculatedPayment);
+      
+      const updates = {
+        workCompletedTimestamp: currentTime,
+        workCompletedAt: serverTimestamp(),
+        calculatedPayment: calculatedPayment,
+        actualWorkDuration: parseFloat(durationHours.toFixed(4)),
+        actualWorkMinutes: Math.round(durationMinutes),
+        paymentStatus: 'pending',
+        status: 'awaiting_payment'
+      };
+      
+      console.log('Fixing job with updates:', updates);
+      await updateDoc(appRef, updates);
+      
+      return { 
+        success: true, 
+        message: 'Job payment data fixed successfully',
+        calculatedPayment: calculatedPayment,
+        workDuration: durationHours
+      };
+    }
+    
+    return { success: true, message: 'No fix needed - job data is complete' };
+  } catch (error) {
+    console.error('Fix Completed Job Error:', error);
+    return { success: false, error: error.message };
+  }
 };

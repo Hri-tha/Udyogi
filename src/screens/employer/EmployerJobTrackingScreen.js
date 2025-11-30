@@ -1,4 +1,4 @@
-// src/screens/employer/EmployerJobTrackingScreen.js - ENHANCED WITH RATING
+// src/screens/employer/EmployerJobTrackingScreen.js - COMPLETE UPDATED VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -23,6 +23,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [workDuration, setWorkDuration] = useState(0);
   const [showRatingModal, setShowRatingModal] = useState(false);
+  const [actualPayment, setActualPayment] = useState(0);
 
   // Load initial data
   useEffect(() => {
@@ -31,6 +32,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
     // Real-time listener for application updates
     const unsubscribe = onApplicationUpdate(applicationId, (updatedApp) => {
       setApplication(updatedApp);
+      calculateActualPayment(updatedApp);
     });
 
     return () => {
@@ -54,6 +56,37 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
     };
   }, [application?.journeyStatus, application?.workStartedTimestamp]);
 
+  const calculateActualPayment = (appData) => {
+    try {
+      // If we have calculated payment from database, use that
+      if (appData.calculatedPayment) {
+        setActualPayment(appData.calculatedPayment);
+        return;
+      }
+      
+      // Calculate based on actual work timestamps
+      if (appData.workStartedTimestamp && appData.workCompletedTimestamp) {
+        const durationMs = appData.workCompletedTimestamp - appData.workStartedTimestamp;
+        const durationHours = durationMs / (1000 * 60 * 60);
+        const hourlyRate = appData.hourlyRate || 0;
+        const calculatedPayment = Math.round(durationHours * hourlyRate);
+        setActualPayment(calculatedPayment);
+        
+        console.log('Payment Calculation in Tracking:', {
+          durationHours: durationHours.toFixed(2),
+          hourlyRate: hourlyRate,
+          calculatedPayment: calculatedPayment
+        });
+      } else {
+        // Fallback to expected payment
+        setActualPayment(appData.expectedPayment || 0);
+      }
+    } catch (error) {
+      console.error('Payment calculation error in tracking:', error);
+      setActualPayment(appData.expectedPayment || 0);
+    }
+  };
+
   const loadInitialData = async () => {
     try {
       const appRef = doc(db, 'applications', applicationId);
@@ -67,6 +100,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
 
       const appData = { id: appSnap.id, ...appSnap.data() };
       setApplication(appData);
+      calculateActualPayment(appData);
 
       if (appData.jobId) {
         const jobRef = doc(db, 'jobs', appData.jobId);
@@ -90,8 +124,56 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const formatWorkDuration = (hours) => {
+    if (!hours) return '0 hours';
+    const wholeHours = Math.floor(hours);
+    const minutes = Math.round((hours - wholeHours) * 60);
+    
+    if (wholeHours === 0) {
+      return `${minutes} minutes`;
+    } else if (minutes === 0) {
+      return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''}`;
+    } else {
+      return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''} ${minutes} minutes`;
+    }
+  };
+
   const getStatusInfo = () => {
-    switch (application?.journeyStatus) {
+    const status = application?.status;
+    const journeyStatus = application?.journeyStatus;
+
+    // Handle completed job status
+    if (status === 'completed') {
+      return {
+        icon: '✅',
+        color: colors.success,
+        title: 'Job Completed',
+        message: 'The job has been successfully completed.',
+      };
+    }
+
+    // Handle awaiting rating status
+    if (status === 'awaiting_rating') {
+      return {
+        icon: '⭐',
+        color: colors.warning,
+        title: 'Rate Worker Performance',
+        message: 'Please rate the worker to complete the job process.',
+      };
+    }
+
+    // Handle awaiting payment status
+    if (status === 'awaiting_payment') {
+      return {
+        icon: '💰',
+        color: colors.warning,
+        title: 'Payment Required',
+        message: `Please process payment of ₹${actualPayment} to complete the job.`,
+      };
+    }
+
+    // Handle journey status for active jobs
+    switch (journeyStatus) {
       case 'accepted':
         return {
           icon: '✓',
@@ -125,7 +207,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
           icon: '✅',
           color: colors.success,
           title: 'Work Completed',
-          message: 'Worker has completed the job. Process payment to finalize.',
+          message: `Worker has completed the job. Payment due: ₹${actualPayment}`,
         };
       default:
         return {
@@ -138,7 +220,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
   };
 
   const handleProcessPayment = () => {
-    if (application?.journeyStatus !== 'completed') {
+    if (application?.journeyStatus !== 'completed' && application?.status !== 'awaiting_payment') {
       Alert.alert('Cannot Process Payment', 'Please wait for the worker to complete the job first.');
       return;
     }
@@ -180,6 +262,10 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
     );
   };
 
+  const handleViewJobHistory = () => {
+    navigation.navigate('ApplicationsScreen');
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -208,6 +294,10 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
 
   const statusInfo = getStatusInfo();
   const isJobCompleted = application.status === 'completed';
+  const isAwaitingRating = application.status === 'awaiting_rating';
+  const isAwaitingPayment = application.status === 'awaiting_payment';
+  const hasActualWorkData = application.workStartedTimestamp && application.workCompletedTimestamp;
+  const hourlyRate = application.hourlyRate || job.rate || 0;
 
   return (
     <View style={styles.container}>
@@ -235,7 +325,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
           <Text style={styles.cardTitle}>Job Details</Text>
           <Text style={styles.infoValue}>{job.title}</Text>
           <Text style={styles.infoValue}>{job.location}</Text>
-          <Text style={styles.infoValue}>Rate: ₹{job.rate}/hour</Text>
+          <Text style={styles.infoValue}>Rate: ₹{hourlyRate}/hour</Text>
         </View>
 
         {/* Worker Information */}
@@ -257,41 +347,116 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
           <View style={styles.timerCard}>
             <Text style={styles.timerTitle}>Work Duration</Text>
             <Text style={styles.timerValue}>{formatDuration(workDuration)}</Text>
+            <Text style={styles.timerSubtitle}>Time spent working</Text>
           </View>
         )}
 
-        {/* Payment Information */}
-        {(application.journeyStatus === 'completed' || application.paymentStatus) && (
+        {/* Actual Work Duration (if completed) */}
+        {hasActualWorkData && (
+          <View style={[styles.card, styles.workDurationCard]}>
+            <Text style={styles.cardTitle}>Actual Work Duration</Text>
+            <Text style={styles.workDurationValue}>
+              {formatWorkDuration((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60))}
+            </Text>
+            <Text style={styles.workDurationNote}>
+              Work started: {new Date(application.workStartedTimestamp).toLocaleTimeString()}
+              {'\n'}
+              Work completed: {new Date(application.workCompletedTimestamp).toLocaleTimeString()}
+            </Text>
+          </View>
+        )}
+
+        {/* Payment Information - UPDATED WITH ACTUAL CALCULATION */}
+        {(application.paymentStatus || isAwaitingPayment || isJobCompleted) && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Payment Details</Text>
-            <Text style={styles.infoLabel}>Hourly Rate: <Text style={styles.infoValue}>₹{job.rate}/hour</Text></Text>
-            <Text style={styles.infoLabel}>Expected Payment: <Text style={styles.infoValue}>₹{application.expectedPayment || job.totalPayment || 0}</Text></Text>
-            {application.calculatedPayment && (
-              <Text style={styles.infoLabel}>Calculated Payment: <Text style={[styles.infoValue, styles.highlight]}>₹{application.calculatedPayment}</Text></Text>
+            
+            {/* Hourly Rate */}
+            <Text style={styles.infoLabel}>Hourly Rate: <Text style={styles.infoValue}>₹{hourlyRate}/hour</Text></Text>
+            
+            {/* Actual Work Duration */}
+            {hasActualWorkData && (
+              <Text style={styles.infoLabel}>
+                Actual Duration: <Text style={styles.infoValue}>
+                  {formatWorkDuration((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60))}
+                </Text>
+              </Text>
             )}
+            
+            {/* Payment Amount */}
+            <Text style={styles.infoLabel}>
+              {hasActualWorkData ? 'Calculated Payment:' : 'Expected Payment:'} 
+              <Text style={[styles.infoValue, styles.highlight]}> ₹{actualPayment}</Text>
+            </Text>
+            
+            {/* Show original estimate for comparison */}
+            {hasActualWorkData && application.expectedPayment && application.expectedPayment !== actualPayment && (
+              <Text style={styles.infoLabel}>
+                Original Estimate: <Text style={[styles.infoValue, styles.originalEstimate]}>
+                  ₹{application.expectedPayment}
+                </Text>
+              </Text>
+            )}
+            
+            {/* Payment Calculation Details */}
+            {hasActualWorkData && (
+              <View style={styles.calculationBox}>
+                <Text style={styles.calculationText}>
+                  Calculation: {((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60)).toFixed(2)} hours × ₹{hourlyRate}/hour
+                </Text>
+              </View>
+            )}
+            
+            {/* Payment Status */}
             {application.paymentStatus && (
-              <View style={styles.paymentStatus}>
+              <View style={[
+                styles.paymentStatus,
+                application.paymentStatus === 'paid' ? styles.paymentStatusPaid : styles.paymentStatusPending
+              ]}>
                 <Text style={styles.paymentStatusText}>
                   Status: {application.paymentStatus === 'paid' ? '✅ Paid' : '⏳ Pending'}
                 </Text>
               </View>
             )}
+            
+            {/* Amount Paid */}
+            {application.paymentAmount && (
+              <Text style={styles.infoLabel}>Amount Paid: <Text style={[styles.infoValue, styles.highlight]}>₹{application.paymentAmount}</Text></Text>
+            )}
+          </View>
+        )}
+
+        {/* Rating Information (for completed jobs) */}
+        {isJobCompleted && application.hasRating && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Your Rating</Text>
+            <View style={styles.ratingDisplay}>
+              <Text style={styles.ratingStars}>
+                {'⭐'.repeat(application.employerRating)}{'☆'.repeat(5 - application.employerRating)}
+              </Text>
+              <Text style={styles.ratingValue}>{application.employerRating}/5 stars</Text>
+              {application.employerComment && (
+                <Text style={styles.ratingComment}>"{application.employerComment}"</Text>
+              )}
+            </View>
           </View>
         )}
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
-          {application.journeyStatus === 'completed' && application.paymentStatus !== 'paid' && (
+          {/* Payment Button - Show for completed work awaiting payment */}
+          {(application.journeyStatus === 'completed' || isAwaitingPayment) && application.paymentStatus !== 'paid' && (
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: colors.success }]}
               onPress={handleProcessPayment}
             >
               <Text style={styles.actionButtonIcon}>💰</Text>
-              <Text style={styles.actionButtonText}>Process Payment</Text>
+              <Text style={styles.actionButtonText}>Process Payment - ₹{actualPayment}</Text>
             </TouchableOpacity>
           )}
 
-          {application.paymentStatus === 'paid' && application.status !== 'completed' && (
+          {/* Complete Job Button - Show after payment */}
+          {application.paymentStatus === 'paid' && application.status !== 'completed' && !isAwaitingRating && (
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: colors.primary }]}
               onPress={handleCompleteJob}
@@ -301,14 +466,25 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
             </TouchableOpacity>
           )}
 
-          {/* NEW: Rate Worker Button (for completed jobs) */}
-          {isJobCompleted && (
+          {/* Rate Worker Button - Show for awaiting rating or completed jobs without rating */}
+          {(isAwaitingRating || (isJobCompleted && !application.hasRating)) && (
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: colors.warning }]}
               onPress={handleRateWorker}
             >
               <Text style={styles.actionButtonIcon}>⭐</Text>
               <Text style={styles.actionButtonText}>Rate Worker Performance</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* View Job History Button - For completed jobs */}
+          {isJobCompleted && (
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.info }]}
+              onPress={handleViewJobHistory}
+            >
+              <Text style={styles.actionButtonIcon}>📋</Text>
+              <Text style={styles.actionButtonText}>View Job History</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -353,6 +529,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
           workerName: application.workerName,
           employerId: application.employerId,
           employerName: job.companyName,
+          applicationId: application.id,
         }}
       />
     </View>
@@ -445,6 +622,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  workDurationCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success,
+  },
   cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -464,6 +645,10 @@ const styles = StyleSheet.create({
   highlight: {
     color: colors.primary,
     fontWeight: 'bold',
+  },
+  originalEstimate: {
+    color: colors.textSecondary,
+    textDecorationLine: 'line-through',
   },
   timerCard: {
     backgroundColor: colors.primary,
@@ -490,17 +675,74 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     letterSpacing: 2,
   },
+  timerSubtitle: {
+    color: '#fff',
+    fontSize: 14,
+    opacity: 0.9,
+    marginTop: 4,
+  },
+  workDurationValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.success,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  workDurationNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  calculationBox: {
+    backgroundColor: colors.info + '10',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  calculationText: {
+    fontSize: 12,
+    color: colors.info,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
   paymentStatus: {
     marginTop: 12,
     padding: 12,
-    backgroundColor: colors.success + '20',
     borderRadius: 8,
     alignItems: 'center',
+  },
+  paymentStatusPaid: {
+    backgroundColor: colors.success + '20',
+  },
+  paymentStatusPending: {
+    backgroundColor: colors.warning + '20',
   },
   paymentStatusText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: colors.success,
+    color: colors.text,
+  },
+  ratingDisplay: {
+    alignItems: 'center',
+    padding: 16,
+  },
+  ratingStars: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  ratingValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  ratingComment: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   actionsContainer: {
     marginTop: 10,

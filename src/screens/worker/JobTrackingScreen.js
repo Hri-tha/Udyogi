@@ -1,4 +1,4 @@
-// src/screens/worker/JobTrackingScreen.js
+// src/screens/worker/JobTrackingScreen.js - COMPLETE FIXED VERSION
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -15,7 +15,6 @@ import {
   updateWorkerJourneyStatus,
   checkCanStartWork,
   onApplicationUpdate,
-  completeJobAndRemoveTracking,
 } from '../../services/database';
 import { db } from '../../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -177,7 +176,7 @@ const JobTrackingScreen = ({ route, navigation }) => {
   const handleCompleteWork = () => {
     Alert.alert(
       'Complete Work',
-      'Confirm you completed all tasks. This will complete the job and remove tracking.',
+      'Are you sure you want to mark this work as completed? This will stop the timer and notify the employer for payment.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -185,17 +184,26 @@ const JobTrackingScreen = ({ route, navigation }) => {
           onPress: async () => {
             setUpdating(true);
             try {
-              // Use the function that handles completion and removes tracking
-              const result = await completeJobAndRemoveTracking(applicationId);
+              // Use updateWorkerJourneyStatus to properly set completion timestamp
+              const result = await updateWorkerJourneyStatus(applicationId, 'completed');
               
               if (result.success) {
-                Alert.alert('Success', 'Job completed successfully! Tracking will be removed.');
-                navigation.goBack();
+                Alert.alert(
+                  'Success', 
+                  'Work completed! Employer has been notified for payment processing.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => navigation.goBack()
+                    }
+                  ]
+                );
               } else {
-                Alert.alert('Error', result.error || 'Failed to complete job');
+                Alert.alert('Error', result.error || 'Failed to complete work');
               }
             } catch (error) {
-              Alert.alert('Error', error.message);
+              console.error('Complete work error:', error);
+              Alert.alert('Error', error.message || 'Failed to complete work');
             } finally {
               setUpdating(false);
             }

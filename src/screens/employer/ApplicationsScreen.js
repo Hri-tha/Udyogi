@@ -1,4 +1,4 @@
-// src/screens/employer/ApplicationsScreen.js - FIXED
+// src/screens/employer/ApplicationsScreen.js - UPDATED
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -185,6 +185,9 @@ const ApplicationsScreen = ({ route, navigation }) => {
     switch (status) {
       case 'accepted': return colors.success;
       case 'rejected': return colors.error;
+      case 'completed': return colors.success;
+      case 'awaiting_payment': return colors.warning;
+      case 'awaiting_rating': return colors.info;
       default: return colors.warning;
     }
   };
@@ -206,6 +209,46 @@ const ApplicationsScreen = ({ route, navigation }) => {
         jobTitle: application.jobTitle,
         otherUserName: application.workerName
       });
+    }
+  };
+
+  const handleTrackJob = (application) => {
+    console.log('Navigating to job tracking for:', application.id);
+    navigation.navigate('EmployerJobTracking', { 
+      applicationId: application.id 
+    });
+  };
+
+  const handleProcessPayment = (application) => {
+    console.log('Navigating to payment processing for:', application.id);
+    navigation.navigate('PaymentProcessing', { 
+      applicationId: application.id 
+    });
+  };
+
+  const handleRateWorker = (application) => {
+    console.log('Navigating to rating for worker:', application.workerId);
+    navigation.navigate('CompleteJob', {
+      applicationId: application.id,
+      jobId: application.jobId,
+      workerId: application.workerId,
+      workerName: application.workerName,
+    });
+  };
+
+  const getStatusText = (application) => {
+    if (application.status === 'completed') {
+      return '✅ Completed';
+    } else if (application.status === 'awaiting_payment') {
+      return '💰 Payment Required';
+    } else if (application.status === 'awaiting_rating') {
+      return '⭐ Rate Worker';
+    } else if (application.status === 'accepted') {
+      return '✅ Accepted';
+    } else if (application.status === 'rejected') {
+      return '❌ Rejected';
+    } else {
+      return '⏳ Pending';
     }
   };
 
@@ -314,7 +357,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
                       <Text style={styles.workerPhone}>📞 {application.workerPhone}</Text>
                     </View>
                     <Text style={[styles.status, { color: getStatusColor(application.status) }]}>
-                      {application.status.toUpperCase()}
+                      {getStatusText(application)}
                     </Text>
                   </View>
                   
@@ -331,6 +374,19 @@ const ApplicationsScreen = ({ route, navigation }) => {
                          application.journeyStatus === 'reached' ? '📍 Arrived' :
                          application.journeyStatus === 'started' ? '⚡ Working' :
                          application.journeyStatus === 'completed' ? '✅ Completed' : ''}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Payment Status */}
+                  {application.paymentStatus && (
+                    <View style={[
+                      styles.paymentStatusBadge,
+                      application.paymentStatus === 'paid' && styles.paymentStatusPaid,
+                      application.paymentStatus === 'pending' && styles.paymentStatusPending
+                    ]}>
+                      <Text style={styles.paymentStatusText}>
+                        {application.paymentStatus === 'paid' ? '💰 Paid' : '⏳ Payment Pending'}
                       </Text>
                     </View>
                   )}
@@ -360,22 +416,30 @@ const ApplicationsScreen = ({ route, navigation }) => {
                     </View>
                   )}
 
-                  {application.status === 'accepted' && (
+                  {/* ACCEPTED & IN PROGRESS ACTIONS */}
+                  {(application.status === 'accepted' || application.status === 'awaiting_payment') && (
                     <View style={styles.acceptedActions}>
-                      <Text style={styles.acceptedTitle}>✅ Application Accepted</Text>
+                      <Text style={styles.acceptedTitle}>
+                        {application.status === 'accepted' ? '✅ Application Accepted' : '💰 Payment Required'}
+                      </Text>
                       
-                      {/* TRACK JOB PROGRESS BUTTON */}
+                      {/* TRACK JOB PROGRESS BUTTON - Always show for accepted and awaiting_payment */}
                       <TouchableOpacity
                         style={[styles.actionButton, styles.trackButton]}
-                        onPress={() => {
-                          console.log('Navigating to job tracking for:', application.id);
-                          navigation.navigate('EmployerJobTracking', { 
-                            applicationId: application.id 
-                          });
-                        }}
+                        onPress={() => handleTrackJob(application)}
                       >
                         <Text style={styles.actionButtonText}>📊 Track Job Progress</Text>
                       </TouchableOpacity>
+
+                      {/* PAYMENT BUTTON - Show when payment is required */}
+                      {application.status === 'awaiting_payment' && (
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.paymentButton]}
+                          onPress={() => handleProcessPayment(application)}
+                        >
+                          <Text style={styles.actionButtonText}>💳 Process Payment</Text>
+                        </TouchableOpacity>
+                      )}
 
                       {application.locationShared && (
                         <TouchableOpacity
@@ -403,6 +467,75 @@ const ApplicationsScreen = ({ route, navigation }) => {
                           Please contact the worker to coordinate the job details.
                         </Text>
                       </View>
+                    </View>
+                  )}
+
+                  {/* COMPLETED JOB ACTIONS */}
+                  {application.status === 'completed' && (
+                    <View style={styles.completedActions}>
+                      <Text style={styles.completedTitle}>✅ Job Completed Successfully</Text>
+                      
+                      {/* TRACK JOB PROGRESS BUTTON - Still show for completed jobs */}
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.trackButton]}
+                        onPress={() => handleTrackJob(application)}
+                      >
+                        <Text style={styles.actionButtonText}>📊 View Job Details</Text>
+                      </TouchableOpacity>
+
+                      {/* RATE WORKER BUTTON - Show if not rated yet */}
+                      {!application.hasRating && (
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.rateButton]}
+                          onPress={() => handleRateWorker(application)}
+                        >
+                          <Text style={styles.actionButtonText}>⭐ Rate Worker</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* PAYMENT STATUS */}
+                      {application.paymentStatus && (
+                        <View style={styles.paymentInfo}>
+                          <Text style={styles.paymentInfoText}>
+                            Payment: {application.paymentStatus === 'paid' ? '✅ Completed' : '⏳ Pending'}
+                          </Text>
+                          {application.paymentAmount && (
+                            <Text style={styles.paymentAmount}>
+                              Amount: ₹{application.paymentAmount}
+                            </Text>
+                          )}
+                        </View>
+                      )}
+
+                      {/* RATING STATUS */}
+                      {application.hasRating && (
+                        <View style={styles.ratingInfo}>
+                          <Text style={styles.ratingInfoText}>
+                            ⭐ You rated: {application.employerRating}/5 stars
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* AWAITING RATING ACTIONS */}
+                  {application.status === 'awaiting_rating' && (
+                    <View style={styles.awaitingRatingActions}>
+                      <Text style={styles.awaitingRatingTitle}>⭐ Rate Worker Performance</Text>
+                      
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.rateButton]}
+                        onPress={() => handleRateWorker(application)}
+                      >
+                        <Text style={styles.actionButtonText}>⭐ Rate Worker Now</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.trackButton]}
+                        onPress={() => handleTrackJob(application)}
+                      >
+                        <Text style={styles.actionButtonText}>📊 View Job Details</Text>
+                      </TouchableOpacity>
                     </View>
                   )}
 
@@ -594,6 +727,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.info,
   },
+  paymentStatusBadge: {
+    padding: 6,
+    borderRadius: 6,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  paymentStatusPaid: {
+    backgroundColor: colors.success + '20',
+  },
+  paymentStatusPending: {
+    backgroundColor: colors.warning + '20',
+  },
+  paymentStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   jobLocation: {
     fontSize: 14,
     color: colors.textSecondary,
@@ -628,12 +777,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.info,
     marginHorizontal: 0,
   },
-  locationButton: {
+  paymentButton: {
     backgroundColor: colors.warning,
+    marginHorizontal: 0,
+  },
+  locationButton: {
+    backgroundColor: colors.secondary,
     marginHorizontal: 0,
   },
   chatButton: {
     backgroundColor: colors.primary,
+    marginHorizontal: 0,
+  },
+  rateButton: {
+    backgroundColor: colors.warning,
     marginHorizontal: 0,
   },
   disabledButton: {
@@ -651,6 +808,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.success,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  completedActions: {
+    marginTop: 12,
+  },
+  completedTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.success,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  awaitingRatingActions: {
+    marginTop: 12,
+  },
+  awaitingRatingTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.info,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -678,6 +855,35 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontStyle: 'italic',
     marginTop: 8,
+  },
+  paymentInfo: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: colors.background,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  paymentInfoText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  paymentAmount: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  ratingInfo: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: colors.warning + '15',
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  ratingInfoText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.warning,
   },
   rejectedInfo: {
     marginTop: 12,
