@@ -1,4 +1,4 @@
-// src/screens/worker/JobDetailsScreen.js - COMPLETE FIXED VERSION
+// src/screens/worker/JobDetailsScreen.js - FIXED VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -14,7 +14,7 @@ import {
 import { useJob } from '../../context/JobContext';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../constants/colors';
-import { fetchWorkerApplications } from '../../services/database';
+import { fetchWorkerApplications, fetchJobById } from '../../services/database';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 
@@ -28,20 +28,51 @@ const JobDetailsScreen = ({ route, navigation }) => {
   const [myApplication, setMyApplication] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [job, setJob] = useState(null);
 
-  const job = jobs.find(j => j.id === jobId);
-
+  // Find job from context or fetch from database
   useEffect(() => {
-    checkApplicationStatus();
+    loadJobDetails();
   }, [jobId]);
 
   useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 800,
-      useNativeDriver: true,
-    }).start();
-  }, []);
+    if (job) {
+      checkApplicationStatus();
+    }
+  }, [job]);
+
+  useEffect(() => {
+    if (job) {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [job]);
+
+  const loadJobDetails = async () => {
+    try {
+      // First try to find job in context
+      const contextJob = jobs.find(j => j.id === jobId);
+      if (contextJob) {
+        setJob(contextJob);
+        return;
+      }
+
+      // If not found in context, fetch from database
+      const result = await fetchJobById(jobId);
+      if (result.success) {
+        setJob(result.job);
+      } else {
+        console.error('Job not found:', result.error);
+        setJob(null);
+      }
+    } catch (error) {
+      console.error('Error loading job details:', error);
+      setJob(null);
+    }
+  };
 
   const checkApplicationStatus = async () => {
     try {
@@ -57,29 +88,65 @@ const JobDetailsScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleApply = async () => {
-    if (myApplication) {
-      Alert.alert('Already Applied', 'You have already applied for this job.');
-      return;
-    }
+const handleApply = async () => {
+  console.log('=== Starting Application Process ===');
+  console.log('Job ID:', jobId);
+  console.log('Job data available:', !!job);
+  console.log('User ID:', user?.uid);
+  console.log('User profile:', userProfile);
 
-    if (!userProfile?.name || !userProfile?.phoneNumber) {
-      Alert.alert('Profile Incomplete', 'Please complete your profile before applying for jobs.');
-      navigation.navigate('WorkerProfile');
-      return;
-    }
+  if (myApplication) {
+    Alert.alert('Already Applied', 'You have already applied for this job.');
+    return;
+  }
 
-    setApplying(true);
-    try {
-      await applyForJob(jobId, user.uid, userProfile);
+  if (!userProfile?.name || !userProfile?.phoneNumber) {
+    Alert.alert('Profile Incomplete', 'Please complete your profile before applying for jobs.');
+    navigation.navigate('WorkerProfile');
+    return;
+  }
+
+  // Ensure job data is available
+  if (!job) {
+    console.error('Job data is null when trying to apply');
+    Alert.alert('Error', 'Job information not available. Please try again.');
+    return;
+  }
+
+  // Validate critical job data
+  if (!job.employerId) {
+    console.error('Job missing employerId:', job);
+    Alert.alert('Error', 'Job data is incomplete. Please try again later.');
+    return;
+  }
+
+  setApplying(true);
+  try {
+    console.log('Calling applyForJob with job data:', {
+      jobId,
+      jobTitle: job.title,
+      employerId: job.employerId
+    });
+
+    // Pass the complete job data to the applyForJob function
+    const result = await applyForJob(jobId, user.uid, userProfile, job);
+    
+    if (result.success) {
+      console.log('Application successful, application ID:', result.applicationId);
       Alert.alert('Success', 'Application submitted successfully! The employer will be notified.');
       await checkApplicationStatus();
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to apply for job');
+    } else {
+      throw new Error(result.error || 'Unknown error occurred');
     }
-    setApplying(false);
-  };
-
+  } catch (error) {
+    console.error('Application error details:', {
+      message: error.message,
+      stack: error.stack
+    });
+    Alert.alert('Error', error.message || 'Failed to apply for job. Please try again.');
+  }
+  setApplying(false);
+};
   const handleTrackJob = () => {
     if (myApplication && myApplication.status === 'accepted') {
       navigation.navigate('JobTracking', {
@@ -132,10 +199,12 @@ const JobDetailsScreen = ({ route, navigation }) => {
   };
 
   const calculateTotalEarnings = () => {
-    if (!job.startTime || !job.endTime) return null;
+    if (!job?.startTime || !job?.endTime) return null;
 
     try {
       const parseTime = (timeStr) => {
+        if (!timeStr) return 0;
+        
         let time = String(timeStr).toLowerCase().trim();
         
         if (time.includes('am') || time.includes('pm')) {
@@ -173,33 +242,7 @@ const JobDetailsScreen = ({ route, navigation }) => {
 
   const totalEarnings = calculateTotalEarnings();
 
-  if (!job) {
-    return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={[colors.primary, '#4A90E2']}
-          style={styles.gradientHeader}
-        >
-          <View style={styles.header}>
-            <TouchableOpacity 
-              onPress={() => navigation.goBack()}
-              style={styles.backButton}
-            >
-              <Ionicons name="chevron-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Job Details</Text>
-            <View style={{ width: 40 }} />
-          </View>
-        </LinearGradient>
-        <View style={styles.centerContent}>
-          <MaterialIcons name="error-outline" size={64} color={colors.textSecondary} />
-          <Text style={styles.errorText}>Job not found</Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (loading) {
+  if (loading && !job) {
     return (
       <View style={styles.container}>
         <LinearGradient
@@ -225,6 +268,39 @@ const JobDetailsScreen = ({ route, navigation }) => {
     );
   }
 
+  if (!job) {
+    return (
+      <View style={styles.container}>
+        <LinearGradient
+          colors={[colors.primary, '#4A90E2']}
+          style={styles.gradientHeader}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity 
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <Ionicons name="chevron-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Job Details</Text>
+            <View style={{ width: 40 }} />
+          </View>
+        </LinearGradient>
+        <View style={styles.centerContent}>
+          <MaterialIcons name="error-outline" size={64} color={colors.textSecondary} />
+          <Text style={styles.errorText}>Job not found</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={loadJobDetails}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Safe access to job properties with fallbacks
   const startTime = job.startTime ? String(job.startTime) : '';
   const endTime = job.endTime ? String(job.endTime) : '';
   const timeDisplay = startTime && endTime ? `${startTime} - ${endTime}` : 'Not specified';
@@ -270,7 +346,7 @@ const JobDetailsScreen = ({ route, navigation }) => {
               <Text style={styles.title}>{String(job.title || 'Job')}</Text>
               <View style={styles.companyRow}>
                 <MaterialIcons name="business" size={16} color={colors.primary} />
-                <Text style={styles.company}>{String(job.companyName || 'Company')}</Text>
+                <Text style={styles.company}>{String(job.companyName || job.company || 'Company')}</Text>
               </View>
               <View style={styles.salaryRow}>
                 <FontAwesome5 name="money-bill-wave" size={16} color="#27ae60" />
@@ -808,11 +884,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
     marginTop: 16,
+    textAlign: 'center',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
     color: colors.textSecondary,
+  },
+  retryButton: {
+    marginTop: 16,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

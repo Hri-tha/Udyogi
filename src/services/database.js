@@ -2344,3 +2344,276 @@ export const fixCompletedJobPayment = async (applicationId) => {
     return { success: false, error: error.message };
   }
 };
+
+/**
+ * Check if a job date is in the future
+ * @param {string} jobDate - Job date in YYYY-MM-DD format
+ * @param {string} jobTime - Job time (optional)
+ * @returns {boolean} - True if job is in future
+ */
+export const isJobInFuture = (jobDate, jobTime = null) => {
+  try {
+    if (!jobDate) return false;
+    
+    const now = new Date();
+    
+    // Parse the job date safely
+    const [year, month, day] = jobDate.split('-').map(Number);
+    
+    // Validate date components
+    if (!year || !month || !day || year < 2000 || month < 1 || month > 12 || day < 1 || day > 31) {
+      console.error('Invalid job date format:', jobDate);
+      return false;
+    }
+    
+    let jobDateTime;
+    
+    if (jobTime) {
+      // Parse time safely
+      const [hours, minutes] = jobTime.split(':').map(Number);
+      
+      // Validate time components
+      if (hours === undefined || minutes === undefined || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+        console.error('Invalid job time format:', jobTime);
+        // If time is invalid, use start of day
+        jobDateTime = new Date(year, month - 1, day, 0, 0, 0);
+      } else {
+        jobDateTime = new Date(year, month - 1, day, hours, minutes, 0);
+      }
+    } else {
+      // If no time provided, consider the entire day as future
+      jobDateTime = new Date(year, month - 1, day, 0, 0, 0);
+    }
+    
+    // Validate the created date
+    if (isNaN(jobDateTime.getTime())) {
+      console.error('Invalid job date/time combination:', { jobDate, jobTime });
+      return false;
+    }
+    
+    console.log('Date comparison:', {
+      jobDate,
+      jobTime,
+      jobDateTime: jobDateTime.toISOString(),
+      now: now.toISOString(),
+      isFuture: jobDateTime > now
+    });
+    
+    return jobDateTime > now;
+  } catch (error) {
+    console.error('Error checking job date:', error);
+    return false;
+  }
+};
+/**
+ * Fetch only future jobs for workers
+ * @param {Object} filters - Filters object
+ * @returns {Object} - Success status and filtered jobs
+ */
+export const fetchFutureJobs = async (filters = {}) => {
+  try {
+    let q = query(collection(db, 'jobs'), where('status', '==', 'open'));
+    
+    if (filters.location && filters.location.trim() !== '') {
+      q = query(q, where('location', '==', filters.location.trim()));
+    }
+    
+    if (filters.category && filters.category.trim() !== '' && filters.category !== 'all') {
+      q = query(q, where('category', '==', filters.category.trim()));
+    }
+    
+    const snapshot = await getDocs(q);
+    const allJobs = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    // Filter only future jobs
+    const futureJobs = allJobs.filter(job => 
+      isJobInFuture(job.jobDate, job.startTime)
+    );
+    
+    // Sort by date (closest first)
+    futureJobs.sort((a, b) => {
+      const aDate = new Date(a.jobDate + ' ' + (a.startTime || '00:00'));
+      const bDate = new Date(b.jobDate + ' ' + (b.startTime || '00:00'));
+      return aDate - bDate;
+    });
+    
+    return { success: true, jobs: futureJobs };
+  } catch (error) {
+    console.error('Fetch Future Jobs Error:', error);
+    return { success: false, error: error.message, jobs: [] };
+  }
+};
+
+/**
+ * Fetch all jobs for employer (including past jobs)
+ * @param {string} employerId - Employer ID
+ * @returns {Object} - Success status and all jobs
+ */
+/**
+ * Fetch all jobs for employer (including past jobs)
+ * @param {string} employerId - Employer ID
+ * @returns {Object} - Success status and all jobs
+ */
+export const fetchAllEmployerJobs = async (employerId) => {
+  try {
+    const q = query(
+      collection(db, 'jobs'),
+      where('employerId', '==', employerId)
+    );
+    
+    const snapshot = await getDocs(q);
+    const jobs = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    // Separate future and past jobs using the same logic
+    const now = new Date();
+    const futureJobs = [];
+    const pastJobs = [];
+    
+    jobs.forEach(job => {
+      if (isJobInFuture(job.jobDate, job.startTime)) {
+        futureJobs.push(job);
+      } else {
+        pastJobs.push(job);
+      }
+    });
+    
+    // Safe date sorting function
+    const safeDateSort = (a, b) => {
+      try {
+        const getJobTimestamp = (job) => {
+          if (!job.jobDate) return 0;
+          
+          const [year, month, day] = job.jobDate.split('-').map(Number);
+          const [hours = 0, minutes = 0] = (job.startTime || '').split(':').map(Number);
+          
+          if (!year || !month || !day) return 0;
+          
+          const date = new Date(year, month - 1, day, hours, minutes, 0);
+          return isNaN(date.getTime()) ? 0 : date.getTime();
+        };
+        
+        const aTime = getJobTimestamp(a);
+        const bTime = getJobTimestamp(b);
+        
+        return aTime - bTime; // Ascending for future jobs (closest first)
+      } catch (error) {
+        console.error('Error in date sorting:', error);
+        return 0;
+      }
+    };
+    
+    // Sort future jobs by date (closest first)
+    futureJobs.sort(safeDateSort);
+    
+    // Sort past jobs by date (most recent first)
+    pastJobs.sort((a, b) => safeDateSort(b, a)); // Reverse for descending
+    
+    console.log('Job categorization:', {
+      total: jobs.length,
+      future: futureJobs.length,
+      past: pastJobs.length,
+      futureJobTitles: futureJobs.map(j => j.title),
+      pastJobTitles: pastJobs.map(j => j.title)
+    });
+    
+    return { 
+      success: true, 
+      futureJobs, 
+      pastJobs,
+      allJobs: jobs 
+    };
+  } catch (error) {
+    console.error('Fetch All Employer Jobs Error:', error);
+    return { success: false, error: error.message, futureJobs: [], pastJobs: [] };
+  }
+};
+/**
+ * Delete past job (only past jobs can be deleted)
+ * @param {string} jobId - Job ID
+ * @param {string} employerId - Employer ID
+ * @returns {Object} - Success status
+ */
+export const deletePastJob = async (jobId, employerId) => {
+  try {
+    // Verify job belongs to employer and is in the past
+    const jobRef = doc(db, 'jobs', jobId);
+    const jobSnap = await getDoc(jobRef);
+    
+    if (!jobSnap.exists()) {
+      return { success: false, error: 'Job not found' };
+    }
+
+    const jobData = jobSnap.data();
+    
+    if (jobData.employerId !== employerId) {
+      return { success: false, error: 'Unauthorized: This is not your job' };
+    }
+
+    // Check if job is in the past
+    const jobDate = new Date(jobData.jobDate + ' ' + (jobData.startTime || '00:00'));
+    const now = new Date();
+    
+    if (jobDate > now) {
+      return { 
+        success: false, 
+        error: 'Cannot delete future jobs. Please wait until the job date has passed.' 
+      };
+    }
+
+    // Check for completed applications
+    const applicationsQuery = query(
+      collection(db, 'applications'),
+      where('jobId', '==', jobId),
+      where('status', '==', 'completed')
+    );
+    
+    const applicationsSnap = await getDocs(applicationsQuery);
+    
+    if (!applicationsSnap.empty) {
+      return { 
+        success: false, 
+        error: 'Cannot delete job with completed applications.' 
+      };
+    }
+
+    // Get all applications to notify workers and delete them
+    const allApplicationsQuery = query(
+      collection(db, 'applications'),
+      where('jobId', '==', jobId)
+    );
+    
+    const allApplicationsSnap = await getDocs(allApplicationsQuery);
+    
+    // Delete all applications
+    for (const appDoc of allApplicationsSnap.docs) {
+      const appData = appDoc.data();
+      
+      // Notify workers if application was pending
+      if (appData.status === 'pending') {
+        await createNotification(appData.workerId, {
+          title: '🗑️ Job Deleted',
+          message: `The job "${jobData.title}" has been deleted by the employer.`,
+          type: 'job_deleted',
+          actionType: 'view_jobs',
+        });
+      }
+      
+      // Delete application
+      await deleteDoc(doc(db, 'applications', appDoc.id));
+    }
+
+    // Delete the job
+    await deleteDoc(jobRef);
+
+    return { success: true, message: 'Past job deleted successfully' };
+  } catch (error) {
+    console.error('Delete Past Job Error:', error);
+    return { success: false, error: error.message };
+  }
+};

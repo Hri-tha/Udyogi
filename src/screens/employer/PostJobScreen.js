@@ -10,6 +10,8 @@ import {
   Alert,
   ActivityIndicator,
   StatusBar,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { createJobWithTiming } from '../../services/database';
@@ -33,8 +35,16 @@ export default function PostJobScreen({ navigation }) {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
+  // Format date for storage (YYYY-MM-DD format) - FIXED
+  const formatDateForStorage = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Format date for display
-  const formatDate = (date) => {
+  const formatDateForDisplay = (date) => {
     return date.toLocaleDateString('en-IN', { 
       year: 'numeric', 
       month: 'short', 
@@ -49,6 +59,13 @@ export default function PostJobScreen({ navigation }) {
       minute: '2-digit',
       hour12: true 
     });
+  };
+
+  // Format time for storage (HH:mm format)
+  const formatTimeForStorage = (date) => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   };
 
   // Helper function to compare only time portions
@@ -101,7 +118,7 @@ export default function PostJobScreen({ navigation }) {
       return;
     }
 
-    // Validate end time is after start time (FIXED)
+    // Validate end time is after start time
     if (!isEndTimeAfterStartTime(startTime, endTime)) {
       Alert.alert('Error', 'End time must be after start time');
       return;
@@ -121,110 +138,237 @@ export default function PostJobScreen({ navigation }) {
       location: location.trim(),
       rate: parseInt(rate),
       employerId: user.uid,
-      companyName: userProfile.companyName || userProfile.name,
-      employerPhone: userProfile.phoneNumber,
-      jobDate: formatDate(jobDate),
-      startTime: formatTime(startTime),
-      endTime: formatTime(endTime),
+      companyName: userProfile?.companyName || userProfile?.name || 'Company',
+      employerPhone: userProfile?.phoneNumber || '',
+      jobDate: formatDateForStorage(jobDate), // Use correct format for storage
+      startTime: formatTimeForStorage(startTime),
+      endTime: formatTimeForStorage(endTime),
+      category: 'General', // Default category
     };
+
+    console.log('Posting job with data:', jobData);
 
     const result = await createJobWithTiming(jobData);
     setLoading(false);
 
     if (result.success) {
       Alert.alert(
-        'Success', 
-        `Job posted successfully!\n\nScheduled for: ${formatDate(jobDate)}\nTime: ${formatTime(startTime)} - ${formatTime(endTime)}\nDuration: ${duration} hours\nTotal Payment: ₹${calculateTotal()}`,
+        '🎉 Success!', 
+        `Job posted successfully!\n\n📅 Date: ${formatDateForDisplay(jobDate)}\n🕐 Time: ${formatTime(startTime)} - ${formatTime(endTime)}\n⏱️ Duration: ${duration} hours\n💰 Total Payment: ₹${calculateTotal()}`,
         [
           {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
+            text: 'View Jobs',
+            onPress: () => navigation.navigate('EmployerHome'),
+          },
+          {
+            text: 'Post Another',
+            style: 'cancel',
           },
         ]
       );
     } else {
-      Alert.alert('Error', result.error || 'Failed to post job');
+      Alert.alert('❌ Error', result.error || 'Failed to post job. Please try again.');
     }
   };
 
+  const clearForm = () => {
+    setTitle('');
+    setDescription('');
+    setLocation(userProfile?.location || '');
+    setRate('');
+    setJobDate(new Date());
+    setStartTime(new Date());
+    setEndTime(new Date());
+  };
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
       
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Post New Job</Text>
-        <View style={{ width: 60 }} />
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonIcon}>←</Text>
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Post New Job</Text>
+          <TouchableOpacity 
+            onPress={clearForm}
+            style={styles.clearButton}
+          >
+            <Text style={styles.clearButtonText}>Clear</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionHeader}>Job Details</Text>
-        
-        <Text style={styles.label}>Job Title *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g., Factory Helper Needed"
-          value={title}
-          onChangeText={setTitle}
-        />
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.contentContainer}
+      >
+        {/* Job Details Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardIcon}>📋</Text>
+            <Text style={styles.cardTitle}>Job Details</Text>
+          </View>
 
-        <Text style={styles.label}>Description *</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Describe the work requirements and responsibilities"
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          numberOfLines={5}
-        />
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>
+              Job Title <Text style={styles.required}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g., Factory Helper Needed"
+              placeholderTextColor={colors.textSecondary}
+              value={title}
+              onChangeText={setTitle}
+            />
+          </View>
 
-        <Text style={styles.label}>Location *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g., Industrial Area, Phase 1"
-          value={location}
-          onChangeText={setLocation}
-        />
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>
+              Description <Text style={styles.required}>*</Text>
+            </Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Describe the work requirements, responsibilities, and any specific skills needed..."
+              placeholderTextColor={colors.textSecondary}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
 
-        {/* Date & Time Section */}
-        <Text style={styles.sectionHeader}>Schedule</Text>
-        
-        <Text style={styles.label}>Job Date *</Text>
-        <TouchableOpacity 
-          style={styles.dateTimeButton}
-          onPress={() => setShowDatePicker(true)}
-        >
-          <Text style={styles.dateTimeIcon}>📅</Text>
-          <Text style={styles.dateTimeText}>{formatDate(jobDate)}</Text>
-          <Text style={styles.dateTimeArrow}>›</Text>
-        </TouchableOpacity>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>
+              Location <Text style={styles.required}>*</Text>
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g., Industrial Area, Phase 1, Bangalore"
+              placeholderTextColor={colors.textSecondary}
+              value={location}
+              onChangeText={setLocation}
+            />
+          </View>
+        </View>
 
-        <View style={styles.timeRow}>
-          <View style={styles.timeColumn}>
-            <Text style={styles.label}>Start Time *</Text>
+        {/* Schedule Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardIcon}>📅</Text>
+            <Text style={styles.cardTitle}>Schedule</Text>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>
+              Job Date <Text style={styles.required}>*</Text>
+            </Text>
             <TouchableOpacity 
               style={styles.dateTimeButton}
-              onPress={() => setShowStartTimePicker(true)}
+              onPress={() => setShowDatePicker(true)}
             >
-              <Text style={styles.dateTimeIcon}>🕐</Text>
-              <Text style={styles.dateTimeText}>{formatTime(startTime)}</Text>
+              <Text style={styles.dateTimeIcon}>📅</Text>
+              <Text style={styles.dateTimeText}>{formatDateForDisplay(jobDate)}</Text>
               <Text style={styles.dateTimeArrow}>›</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.timeColumn}>
-            <Text style={styles.label}>End Time *</Text>
-            <TouchableOpacity 
-              style={styles.dateTimeButton}
-              onPress={() => setShowEndTimePicker(true)}
-            >
-              <Text style={styles.dateTimeIcon}>🕐</Text>
-              <Text style={styles.dateTimeText}>{formatTime(endTime)}</Text>
-              <Text style={styles.dateTimeArrow}>›</Text>
-            </TouchableOpacity>
+          <View style={styles.timeRow}>
+            <View style={styles.timeColumn}>
+              <Text style={styles.label}>
+                Start Time <Text style={styles.required}>*</Text>
+              </Text>
+              <TouchableOpacity 
+                style={styles.dateTimeButton}
+                onPress={() => setShowStartTimePicker(true)}
+              >
+                <Text style={styles.dateTimeIcon}>🕐</Text>
+                <Text style={styles.dateTimeText}>{formatTime(startTime)}</Text>
+                <Text style={styles.dateTimeArrow}>›</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.timeColumn}>
+              <Text style={styles.label}>
+                End Time <Text style={styles.required}>*</Text>
+              </Text>
+              <TouchableOpacity 
+                style={styles.dateTimeButton}
+                onPress={() => setShowEndTimePicker(true)}
+              >
+                <Text style={styles.dateTimeIcon}>🕐</Text>
+                <Text style={styles.dateTimeText}>{formatTime(endTime)}</Text>
+                <Text style={styles.dateTimeArrow}>›</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {/* Duration Display */}
+          {calculateDuration() > 0 && (
+            <View style={styles.durationBadge}>
+              <Text style={styles.durationIcon}>⏱️</Text>
+              <Text style={styles.durationText}>
+                {calculateDuration()} hours total
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* Payment Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardIcon}>💰</Text>
+            <Text style={styles.cardTitle}>Payment</Text>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>
+              Hourly Rate <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={styles.rateInputContainer}>
+              <Text style={styles.rupeeSymbol}>₹</Text>
+              <TextInput
+                style={styles.rateInput}
+                placeholder="Rate per hour"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="numeric"
+                value={rate}
+                onChangeText={(text) => setRate(text.replace(/[^0-9]/g, ''))}
+              />
+              <Text style={styles.perHourText}>/ hour</Text>
+            </View>
+            <Text style={styles.hint}>Minimum rate: ₹50/hour</Text>
+          </View>
+
+          {/* Payment Summary */}
+          {calculateDuration() > 0 && rate && (
+            <View style={styles.paymentSummary}>
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>Hourly Rate:</Text>
+                <Text style={styles.paymentValue}>₹{rate}</Text>
+              </View>
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>Duration:</Text>
+                <Text style={styles.paymentValue}>{calculateDuration()} hours</Text>
+              </View>
+              <View style={styles.paymentDivider} />
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentTotalLabel}>Total Payment:</Text>
+                <Text style={styles.paymentTotalValue}>₹{calculateTotal()}</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Custom Date/Time Pickers */}
@@ -262,80 +406,39 @@ export default function PostJobScreen({ navigation }) {
           onCancel={() => setShowEndTimePicker(false)}
         />
 
-        {/* Payment Section */}
-        <Text style={styles.sectionHeader}>Payment</Text>
-        
-        <Text style={styles.label}>Hourly Rate *</Text>
-        <View style={styles.rateInputContainer}>
-          <Text style={styles.rupeeSymbol}>₹</Text>
-          <TextInput
-            style={styles.rateInput}
-            placeholder="Rate per hour"
-            keyboardType="numeric"
-            value={rate}
-            onChangeText={setRate}
-          />
-          <Text style={styles.perHourText}>/hour</Text>
+        {/* Action Buttons */}
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={[styles.postButton, loading && styles.disabledButton]}
+            onPress={handlePostJob}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.white} size="small" />
+            ) : (
+              <>
+                <Text style={styles.postButtonIcon}>📤</Text>
+                <Text style={styles.postButtonText}>Post Job</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => navigation.goBack()}
+            disabled={loading}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Summary Card */}
-        {calculateDuration() > 0 && rate && (
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Job Summary</Text>
-            
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>📅 Date:</Text>
-              <Text style={styles.summaryValue}>{formatDate(jobDate)}</Text>
-            </View>
-            
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>🕐 Time:</Text>
-              <Text style={styles.summaryValue}>
-                {formatTime(startTime)} - {formatTime(endTime)}
-              </Text>
-            </View>
-            
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>⏱️ Duration:</Text>
-              <Text style={styles.summaryValue}>{calculateDuration()} hours</Text>
-            </View>
-            
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>💰 Rate:</Text>
-              <Text style={styles.summaryValue}>₹{rate}/hour</Text>
-            </View>
-            
-            <View style={styles.summaryDivider} />
-            
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryTotalLabel}>Total Payment:</Text>
-              <Text style={styles.summaryTotalValue}>₹{calculateTotal()}</Text>
-            </View>
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={[styles.postButton, loading && styles.disabledButton]}
-          onPress={handlePostJob}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <>
-              <Text style={styles.postButtonIcon}>✓</Text>
-              <Text style={styles.postButtonText}>Post Job</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <Text style={styles.hint}>
-          * All fields are required. Workers will be able to see the job schedule and apply.
+        <Text style={styles.footerHint}>
+          💡 Tip: Provide clear job details and competitive rates to attract more qualified workers.
         </Text>
 
-        <View style={{ height: 40 }} />
+        <View style={styles.bottomSpacing} />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -344,68 +447,116 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  topBar: {
+  header: {
+    backgroundColor: colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    paddingTop: 50,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    paddingTop: 50,
-    backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+  },
+  backButtonIcon: {
+    fontSize: 20,
+    color: colors.primary,
+    marginRight: 4,
+  },
+  backButtonText: {
     color: colors.primary,
     fontSize: 16,
     fontWeight: '600',
   },
-  topBarTitle: {
+  headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
   },
+  clearButton: {
+    padding: 8,
+  },
+  clearButtonText: {
+    color: colors.error,
+    fontSize: 16,
+    fontWeight: '600',
+  },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     padding: 20,
   },
-  sectionHeader: {
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  cardIcon: {
     fontSize: 20,
+    marginRight: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
-    marginTop: 20,
-    marginBottom: 15,
+  },
+  inputGroup: {
+    marginBottom: 20,
   },
   label: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
     marginBottom: 8,
-    marginTop: 15,
+  },
+  required: {
+    color: colors.error,
   },
   input: {
-    backgroundColor: colors.white,
-    padding: 15,
+    backgroundColor: colors.background,
+    padding: 16,
     borderRadius: 12,
     fontSize: 16,
+    color: colors.text,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
   },
   textArea: {
     height: 120,
     textAlignVertical: 'top',
   },
   dateTimeButton: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.background,
     padding: 16,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
   },
   dateTimeIcon: {
-    fontSize: 20,
+    fontSize: 18,
     marginRight: 12,
+    color: colors.textSecondary,
   },
   dateTimeText: {
     flex: 1,
@@ -416,6 +567,7 @@ const styles = StyleSheet.create({
   dateTimeArrow: {
     fontSize: 20,
     color: colors.textSecondary,
+    fontWeight: '300',
   },
   timeRow: {
     flexDirection: 'row',
@@ -424,14 +576,33 @@ const styles = StyleSheet.create({
   timeColumn: {
     flex: 1,
   },
+  durationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.info + '20',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  durationIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  durationText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.info,
+  },
   rateInputContainer: {
-    backgroundColor: colors.white,
-    padding: 15,
+    backgroundColor: colors.background,
+    padding: 16,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderLight,
   },
   rupeeSymbol: {
     fontSize: 18,
@@ -449,62 +620,61 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: 8,
   },
-  summaryCard: {
+  hint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
+  paymentSummary: {
     backgroundColor: colors.primaryLight,
-    padding: 20,
-    borderRadius: 16,
-    marginTop: 20,
-    borderWidth: 2,
-    borderColor: colors.primary,
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 12,
   },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.primary,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  summaryRow: {
+  paymentRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  summaryLabel: {
-    fontSize: 15,
+  paymentLabel: {
+    fontSize: 14,
     color: colors.text,
     fontWeight: '500',
   },
-  summaryValue: {
-    fontSize: 15,
+  paymentValue: {
+    fontSize: 14,
     color: colors.text,
     fontWeight: '600',
   },
-  summaryDivider: {
+  paymentDivider: {
     height: 1,
     backgroundColor: colors.primary,
-    marginVertical: 12,
+    marginVertical: 8,
     opacity: 0.3,
   },
-  summaryTotalLabel: {
+  paymentTotalLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  paymentTotalValue: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.primary,
   },
-  summaryTotalValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.primary,
+  actionsContainer: {
+    marginTop: 20,
   },
   postButton: {
     backgroundColor: colors.primary,
     padding: 18,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 30,
-    marginBottom: 20,
     flexDirection: 'row',
     justifyContent: 'center',
+    marginBottom: 12,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -524,10 +694,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  hint: {
+  cancelButton: {
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cancelButtonText: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  footerHint: {
     fontSize: 13,
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
+    marginTop: 20,
+    fontStyle: 'italic',
+  },
+  bottomSpacing: {
+    height: 40,
   },
 });

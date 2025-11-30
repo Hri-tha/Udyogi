@@ -1,4 +1,4 @@
-// src/screens/employer/EmployerHomeScreen.js - FINAL WITH COMPLETED JOBS
+// src/screens/employer/EmployerHomeScreen.js - UPDATED WITH FUTURE/PAST JOBS
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -11,12 +11,13 @@ import {
   StatusBar,
   Alert,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { 
-  fetchEmployerJobs, 
+  fetchAllEmployerJobs,
   fetchJobApplications,
-  deleteJob 
+  deletePastJob 
 } from '../../services/database';
 import { colors } from '../../constants/colors';
 import { useFocusEffect } from '@react-navigation/native';
@@ -25,9 +26,11 @@ const { width } = Dimensions.get('window');
 
 export default function EmployerHomeScreen({ navigation }) {
   const { user, userProfile, refreshUserProfile } = useAuth();
-  const [jobs, setJobs] = useState([]);
+  const [futureJobs, setFutureJobs] = useState([]);
+  const [pastJobs, setPastJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showPastJobs, setShowPastJobs] = useState(false);
 
   // Use useFocusEffect to refresh data when screen comes into focus
   useFocusEffect(
@@ -41,7 +44,7 @@ export default function EmployerHomeScreen({ navigation }) {
     try {
       console.log('Loading employer data for:', user?.uid);
       await loadJobs();
-      await refreshUserProfile?.(); // Refresh user profile to get updated stats
+      await refreshUserProfile?.();
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -57,14 +60,14 @@ export default function EmployerHomeScreen({ navigation }) {
         return;
       }
 
-      console.log('Fetching jobs for employer:', user.uid);
-      const result = await fetchEmployerJobs(user.uid);
+      console.log('Fetching all jobs for employer:', user.uid);
+      const result = await fetchAllEmployerJobs(user.uid);
       console.log('Jobs fetch result:', result);
       
       if (result.success) {
-        // Fetch applications for each job to get accurate counts
-        const jobsWithApplications = await Promise.all(
-          result.jobs.map(async (job) => {
+        // Fetch applications for each future job
+        const futureJobsWithApps = await Promise.all(
+          result.futureJobs.map(async (job) => {
             const appsResult = await fetchJobApplications(job.id);
             return {
               ...job,
@@ -73,8 +76,22 @@ export default function EmployerHomeScreen({ navigation }) {
           })
         );
         
-        console.log('Jobs loaded with applications:', jobsWithApplications.length);
-        setJobs(jobsWithApplications);
+        // Fetch applications for each past job
+        const pastJobsWithApps = await Promise.all(
+          result.pastJobs.map(async (job) => {
+            const appsResult = await fetchJobApplications(job.id);
+            return {
+              ...job,
+              applications: appsResult.success ? appsResult.applications : []
+            };
+          })
+        );
+        
+        console.log('Future jobs loaded:', futureJobsWithApps.length);
+        console.log('Past jobs loaded:', pastJobsWithApps.length);
+        
+        setFutureJobs(futureJobsWithApps);
+        setPastJobs(pastJobsWithApps);
       } else {
         console.error('Failed to load jobs:', result.error);
         Alert.alert('Error', 'Failed to load jobs: ' + result.error);
@@ -91,10 +108,10 @@ export default function EmployerHomeScreen({ navigation }) {
     loadData();
   };
 
-  const handleDeleteJob = (job) => {
+  const handleDeletePastJob = (job) => {
     Alert.alert(
-      '⚠️ Delete Job',
-      `Are you sure you want to delete "${job.title}"?\n\nThis action cannot be undone.\n\n${job.applications?.length > 0 ? `⚠️ Warning: This job has ${job.applications.length} application(s). All applicants will be notified.` : ''}`,
+      '🗑️ Delete Past Job',
+      `Are you sure you want to delete "${job.title}"?\n\nDate: ${job.jobDate}\nLocation: ${job.location}\n\nThis action cannot be undone.`,
       [
         {
           text: 'Cancel',
@@ -105,17 +122,17 @@ export default function EmployerHomeScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const result = await deleteJob(job.id, user.uid);
+              const result = await deletePastJob(job.id, user.uid);
               
               if (result.success) {
-                Alert.alert('✅ Success', result.message || 'Job deleted successfully');
+                Alert.alert('✅ Success', result.message || 'Past job deleted successfully');
                 loadData(); // Refresh data
               } else {
                 Alert.alert('❌ Error', result.error);
               }
             } catch (error) {
-              console.error('Error deleting job:', error);
-              Alert.alert('Error', 'Failed to delete job');
+              console.error('Error deleting past job:', error);
+              Alert.alert('Error', 'Failed to delete past job');
             }
           }
         }
@@ -123,7 +140,7 @@ export default function EmployerHomeScreen({ navigation }) {
     );
   };
 
-  const handleJobOptions = (job) => {
+  const handleJobOptions = (job, isPastJob = false) => {
     const options = [
       {
         text: '👁 View Applications',
@@ -138,22 +155,18 @@ export default function EmployerHomeScreen({ navigation }) {
           const completedApps = job.applications?.filter(app => app.status === 'completed').length || 0;
           Alert.alert(
             job.title, 
-            `📍 Location: ${job.location}\n💰 Rate: ₹${job.rate}/hour\n⏱️ Duration: ${job.hours || job.expectedDuration} hours\n📅 Date: ${job.jobDate || 'Not specified'}\n🕐 Time: ${job.startTime} - ${job.endTime}\n📝 Status: ${job.status === 'closed' ? 'Completed' : job.status}\n📊 Applications: ${job.applications?.length || 0}\n✅ Completed: ${completedApps}\n\n${job.description}`,
+            `📍 Location: ${job.location}\n💰 Rate: ₹${job.rate}/hour\n⏱️ Duration: ${job.hours || job.expectedDuration} hours\n📅 Date: ${job.jobDate || 'Not specified'}\n🕐 Time: ${job.startTime} - ${job.endTime}\n📝 Status: ${job.status}\n📊 Applications: ${job.applications?.length || 0}\n✅ Completed: ${completedApps}\n\n${job.description}`,
             [{ text: 'OK' }]
           );
         }
       }
     ];
 
-    // Add Delete option for jobs without accepted applications
-    const hasAcceptedOrCompletedApps = job.applications?.some(
-      app => app.status === 'accepted' || app.status === 'completed'
-    );
-    
-    if (!hasAcceptedOrCompletedApps) {
+    // Add Delete option for past jobs
+    if (isPastJob) {
       options.push({
         text: '🗑 Delete Job',
-        onPress: () => handleDeleteJob(job),
+        onPress: () => handleDeletePastJob(job),
         style: 'destructive'
       });
     }
@@ -177,20 +190,23 @@ export default function EmployerHomeScreen({ navigation }) {
     </View>
   );
 
-  // Calculate stats from jobs and applications
-  const activeJobs = jobs.filter(j => j.status === 'open').length;
-  const completedJobs = jobs.filter(j => {
-    // A job is considered completed if it has at least one completed application
-    return j.applications?.some(app => app.status === 'completed');
-  }).length;
-  
-  const totalApplications = jobs.reduce((sum, j) => sum + (j.applications?.length || 0), 0);
-
-  // Get completed applications count
-  const completedApplications = jobs.reduce((sum, j) => {
-    const completed = j.applications?.filter(app => app.status === 'completed').length || 0;
-    return sum + completed;
-  }, 0);
+  // Format job date for display
+  const formatJobDate = (jobDate, startTime) => {
+    if (!jobDate) return 'Date not set';
+    
+    const date = new Date(jobDate);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+      return `Today${startTime ? `, ${startTime}` : ''}`;
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return `Tomorrow${startTime ? `, ${startTime}` : ''}`;
+    } else {
+      return `${date.toLocaleDateString()}${startTime ? `, ${startTime}` : ''}`;
+    }
+  };
 
   if (loading && !refreshing) {
     return (
@@ -242,28 +258,28 @@ export default function EmployerHomeScreen({ navigation }) {
         <Text style={styles.sectionTitle}>Overview</Text>
         <View style={styles.statsGrid}>
           <StatCard 
-            value={activeJobs}
-            label="Active Jobs"
-            subtitle="Open positions"
+            value={futureJobs.length}
+            label="Upcoming Jobs"
+            subtitle="Future dates"
             color={colors.primary}
-            icon="📋"
+            icon="📅"
           />
           <StatCard 
-            value={totalApplications}
+            value={pastJobs.length}
+            label="Past Jobs"
+            subtitle="Completed/Expired"
+            color={colors.info}
+            icon="📝"
+          />
+          <StatCard 
+            value={futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0)}
             label="Applications"
             subtitle="Total received"
-            color={colors.info}
+            color={colors.success}
             icon="📨"
           />
           <StatCard 
-            value={completedJobs}
-            label="Completed"
-            subtitle="Finished jobs"
-            color={colors.success}
-            icon="✅"
-          />
-          <StatCard 
-            value={completedApplications}
+            value={pastJobs.reduce((sum, job) => sum + (job.applications?.filter(app => app.status === 'completed').length || 0), 0)}
             label="Total Hires"
             subtitle="Completed work"
             color={colors.warning}
@@ -295,9 +311,17 @@ export default function EmployerHomeScreen({ navigation }) {
               <Text style={styles.secondaryActionIcon}>👥</Text>
               <Text style={styles.secondaryActionText}>Applications</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryAction}>
-              <Text style={styles.secondaryActionIcon}>📊</Text>
-              <Text style={styles.secondaryActionText}>Analytics</Text>
+            <TouchableOpacity 
+              style={styles.secondaryAction}
+              onPress={() => setShowPastJobs(true)}
+            >
+              <Text style={styles.secondaryActionIcon}>📚</Text>
+              <Text style={styles.secondaryActionText}>Past Jobs</Text>
+              {pastJobs.length > 0 && (
+                <View style={styles.pastJobsBadge}>
+                  <Text style={styles.pastJobsBadgeText}>{pastJobs.length}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.secondaryAction}
@@ -309,40 +333,38 @@ export default function EmployerHomeScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Job Posts Section */}
+        {/* Upcoming Job Posts Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Your Job Posts</Text>
+            <Text style={styles.sectionTitle}>Upcoming Jobs</Text>
             <View style={styles.jobCountBadge}>
-              <Text style={styles.jobCountText}>{jobs.length}</Text>
+              <Text style={styles.jobCountText}>{futureJobs.length}</Text>
             </View>
           </View>
 
-          {jobs.length === 0 ? (
+          {futureJobs.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateIcon}>💼</Text>
-              <Text style={styles.emptyStateTitle}>No jobs posted yet</Text>
+              <Text style={styles.emptyStateIcon}>📅</Text>
+              <Text style={styles.emptyStateTitle}>No upcoming jobs</Text>
               <Text style={styles.emptyStateSubtitle}>
-                Start hiring by posting your first job opportunity
+                Post a new job to find workers for future dates
               </Text>
               <TouchableOpacity 
                 style={styles.emptyStateButton}
                 onPress={() => navigation.navigate('PostJob')}
               >
-                <Text style={styles.emptyStateButtonText}>Post Your First Job</Text>
+                <Text style={styles.emptyStateButtonText}>Post New Job</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.jobsList}>
-              {jobs.map((job) => {
-                // Check if job has any completed applications
-                const hasCompletedApp = job.applications?.some(app => app.status === 'completed');
+              {futureJobs.map((job) => {
                 const completedCount = job.applications?.filter(app => app.status === 'completed').length || 0;
                 
                 return (
                   <View key={job.id} style={styles.jobCard}>
                     <TouchableOpacity 
-                      onPress={() => handleJobOptions(job)}
+                      onPress={() => handleJobOptions(job, false)}
                       style={styles.jobContent}
                     >
                       <View style={styles.jobHeader}>
@@ -351,12 +373,12 @@ export default function EmployerHomeScreen({ navigation }) {
                           <View style={[
                             styles.statusBadge,
                             job.status === 'open' && styles.statusOpen,
-                            (job.status === 'closed' || hasCompletedApp) && styles.statusCompleted,
+                            job.status === 'closed' && styles.statusCompleted,
                             job.status === 'cancelled' && styles.statusCancelled
                           ]}>
                             <Text style={styles.statusText}>
                               {job.status === 'open' ? '🟢 Active' : 
-                               (job.status === 'closed' || hasCompletedApp) ? '✅ Completed' : 
+                               job.status === 'closed' ? '🔴 Closed' : 
                                '🔴 Cancelled'}
                             </Text>
                           </View>
@@ -364,6 +386,14 @@ export default function EmployerHomeScreen({ navigation }) {
                         <Text style={styles.jobSalary}>₹{job.rate}/hr</Text>
                       </View>
                       
+                      {/* Job Date */}
+                      <View style={styles.jobDateSection}>
+                        <Text style={styles.jobDateIcon}>📅</Text>
+                        <Text style={styles.jobDateText}>
+                          {formatJobDate(job.jobDate, job.startTime)}
+                        </Text>
+                      </View>
+
                       <View style={styles.jobDetails}>
                         <View style={styles.jobDetail}>
                           <Text style={styles.jobDetailIcon}>📍</Text>
@@ -400,9 +430,6 @@ export default function EmployerHomeScreen({ navigation }) {
                             {job.applications?.length || 0} applications
                           </Text>
                         </View>
-                        <Text style={styles.jobDate}>
-                          {job.createdAt?.toDate?.()?.toLocaleDateString() || 'Recently'}
-                        </Text>
                       </View>
                     </TouchableOpacity>
 
@@ -421,16 +448,6 @@ export default function EmployerHomeScreen({ navigation }) {
                           </Text>
                         </TouchableOpacity>
                       )}
-                      
-                      {/* Delete Button - only for jobs without accepted/completed applications */}
-                      {!job.applications?.some(app => app.status === 'accepted' || app.status === 'completed') && (
-                        <TouchableOpacity
-                          style={[styles.jobActionButton, styles.deleteButton]}
-                          onPress={() => handleDeleteJob(job)}
-                        >
-                          <Text style={styles.deleteButtonText}>🗑 Delete</Text>
-                        </TouchableOpacity>
-                      )}
                     </View>
                   </View>
                 );
@@ -442,6 +459,129 @@ export default function EmployerHomeScreen({ navigation }) {
         {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      {/* Past Jobs Modal */}
+      <Modal
+        visible={showPastJobs}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPastJobs(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Past Jobs</Text>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setShowPastJobs(false)}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {pastJobs.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateIcon}>📝</Text>
+                <Text style={styles.emptyStateTitle}>No past jobs</Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  Completed and expired jobs will appear here
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.jobsList}>
+                {pastJobs.map((job) => {
+                  const completedCount = job.applications?.filter(app => app.status === 'completed').length || 0;
+                  const totalApps = job.applications?.length || 0;
+                  
+                  return (
+                    <View key={job.id} style={styles.jobCard}>
+                      <TouchableOpacity 
+                        onPress={() => handleJobOptions(job, true)}
+                        style={styles.jobContent}
+                      >
+                        <View style={styles.jobHeader}>
+                          <View style={styles.jobTitleSection}>
+                            <Text style={styles.jobTitle}>{job.title}</Text>
+                            <View style={[
+                              styles.statusBadge,
+                              completedCount > 0 ? styles.statusCompleted : styles.statusExpired
+                            ]}>
+                              <Text style={styles.statusText}>
+                                {completedCount > 0 ? '✅ Completed' : '📅 Expired'}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.jobSalary}>₹{job.rate}/hr</Text>
+                        </View>
+                        
+                        {/* Job Date */}
+                        <View style={styles.jobDateSection}>
+                          <Text style={styles.jobDateIcon}>📅</Text>
+                          <Text style={styles.jobDateText}>
+                            {job.jobDate ? new Date(job.jobDate).toLocaleDateString() : 'Date not set'}
+                            {job.startTime ? `, ${job.startTime}` : ''}
+                          </Text>
+                        </View>
+
+                        <View style={styles.jobDetails}>
+                          <View style={styles.jobDetail}>
+                            <Text style={styles.jobDetailIcon}>📍</Text>
+                            <Text style={styles.jobDetailText}>{job.location}</Text>
+                          </View>
+                          <View style={styles.jobDetail}>
+                            <Text style={styles.jobDetailIcon}>👥</Text>
+                            <Text style={styles.jobDetailText}>
+                              {totalApps} application{totalApps !== 1 ? 's' : ''}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Completion Stats */}
+                        <View style={styles.completionStats}>
+                          <Text style={styles.completionText}>
+                            {completedCount} of {totalApps} completed
+                          </Text>
+                        </View>
+
+                        <Text style={styles.jobDescription} numberOfLines={2}>
+                          {job.description}
+                        </Text>
+                      </TouchableOpacity>
+
+                      {/* Delete Button for Past Jobs */}
+                      <View style={styles.jobActions}>
+                        <TouchableOpacity
+                          style={[styles.jobActionButton, styles.deleteButton]}
+                          onPress={() => handleDeletePastJob(job)}
+                        >
+                          <Text style={styles.deleteButtonText}>🗑 Delete</Text>
+                        </TouchableOpacity>
+                        
+                        {totalApps > 0 && (
+                          <TouchableOpacity
+                            style={[styles.jobActionButton, styles.viewAppsButton]}
+                            onPress={() => {
+                              setShowPastJobs(false);
+                              navigation.navigate('Applications', { 
+                                jobId: job.id, 
+                                jobTitle: job.title 
+                              });
+                            }}
+                          >
+                            <Text style={styles.jobActionText}>
+                              View Apps ({totalApps})
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -621,6 +761,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 1,
+    position: 'relative',
   },
   secondaryActionIcon: {
     fontSize: 20,
@@ -630,6 +771,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: colors.text,
+  },
+  pastJobsBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: colors.info,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  pastJobsBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: colors.white,
   },
   section: {
     marginBottom: 20,
@@ -734,6 +893,9 @@ const styles = StyleSheet.create({
   statusCompleted: {
     backgroundColor: colors.success + '30',
   },
+  statusExpired: {
+    backgroundColor: colors.warning + '30',
+  },
   statusCancelled: {
     backgroundColor: colors.errorLight,
   },
@@ -745,6 +907,23 @@ const styles = StyleSheet.create({
   jobSalary: {
     fontSize: 18,
     fontWeight: '700',
+    color: colors.primary,
+  },
+  jobDateSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '10',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  jobDateIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  jobDateText: {
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.primary,
   },
   jobDetails: {
@@ -778,6 +957,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.success,
+  },
+  completionStats: {
+    backgroundColor: colors.info + '20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  completionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.info,
   },
   jobDescription: {
     fontSize: 14,
@@ -843,5 +1035,38 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 20,
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    backgroundColor: colors.white,
+    paddingTop: 50,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  closeButtonText: {
+    fontSize: 24,
+    color: colors.textSecondary,
+    fontWeight: '300',
+  },
+  modalContent: {
+    flex: 1,
+    padding: 20,
   },
 });

@@ -1,4 +1,4 @@
-// src/screens/worker/WorkerHomeScreen.js
+// src/screens/worker/WorkerHomeScreen.js - FIXED VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -16,7 +16,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useJob } from '../../context/JobContext';
 import { colors } from '../../constants/colors';
-import { fetchWorkerApplications } from '../../services/database';
+import { fetchWorkerApplications, fetchFutureJobs } from '../../services/database';
 
 const { width } = Dimensions.get('window');
 
@@ -65,23 +65,27 @@ const DEFAULT_CATEGORIES = [
   { id: 'delivery', label: 'Delivery', icon: '📦' },
 ];
 
-export default function WorkerHomeScreen({ navigation }) {
+function WorkerHomeScreen({ navigation }) {
   const { user, userProfile } = useAuth();
-  const { jobs, loading, fetchJobs, currentLocation } = useJob();
+  const { currentLocation, fetchJobsByUserLocation } = useJob();
   const [refreshing, setRefreshing] = useState(false);
   const [myApplications, setMyApplications] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   useEffect(() => {
     loadData();
+    autoSelectUserLocation();
   }, []);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      console.log('🔄 Screen focused - reloading applications');
-      loadApplications();
+      console.log('🔄 Screen focused - reloading applications and jobs');
+      loadData();
     });
 
     return unsubscribe;
@@ -89,10 +93,47 @@ export default function WorkerHomeScreen({ navigation }) {
 
   const loadData = async () => {
     try {
-      await fetchJobs();
-      await loadApplications();
+      setLoading(true);
+      await Promise.all([loadFutureJobs(), loadApplications()]);
     } catch (error) {
+      console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load jobs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const autoSelectUserLocation = async () => {
+    try {
+      if (userProfile?.location && !currentLocation) {
+        setLocationLoading(true);
+        console.log('📍 Auto-selecting user location:', userProfile.location);
+        await fetchJobsByUserLocation(userProfile.location);
+        console.log('✅ Location auto-selected successfully');
+      }
+    } catch (error) {
+      console.error('Error auto-selecting location:', error);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const loadFutureJobs = async () => {
+    try {
+      const filters = {};
+      if (currentLocation) {
+        filters.location = currentLocation;
+      }
+      
+      const result = await fetchFutureJobs(filters);
+      if (result.success) {
+        setJobs(result.jobs);
+        console.log('✅ Loaded future jobs:', result.jobs.length);
+      } else {
+        console.error('Failed to load future jobs:', result.error);
+      }
+    } catch (error) {
+      console.error('Error loading future jobs:', error);
     }
   };
 
@@ -102,7 +143,6 @@ export default function WorkerHomeScreen({ navigation }) {
       if (result.success) {
         setMyApplications(result.applications);
         console.log('✅ Loaded applications:', result.applications.length);
-        console.log('📋 Application Job IDs:', result.applications.map(a => `${a.jobId} (${a.status})`));
       }
     } catch (error) {
       console.error('Error loading applications:', error);
@@ -117,30 +157,27 @@ export default function WorkerHomeScreen({ navigation }) {
 
   const appliedJobIds = myApplications.map(app => app.jobId);
 
+  // Only show future jobs that are open and not applied to
   const availableJobs = jobs.filter(job => {
     const isOpen = job.status === 'open';
     const notApplied = !appliedJobIds.includes(job.id);
-    
-    if (isOpen && !notApplied) {
-      console.log(`🚫 Hiding applied job: "${job.title}" (ID: ${job.id})`);
-    }
     
     return isOpen && notApplied;
   });
 
   console.log('═══════════════════════════════════════');
-  console.log('📊 JOB FILTERING DEBUG:');
-  console.log('   Total Jobs in System:', jobs.length);
-  console.log('   Total Applications:', myApplications.length);
-  console.log('   Applied Job IDs:', appliedJobIds);
-  console.log('   Available Jobs (after filter):', availableJobs.length);
-  console.log('   Available Job Titles:', availableJobs.map(j => j.title));
+  console.log('📊 HOME SCREEN DEBUG:');
+  console.log('   User Location:', userProfile?.location);
+  console.log('   Current Filter Location:', currentLocation);
+  console.log('   Total Future Jobs:', jobs.length);
+  console.log('   Available Jobs:', availableJobs.length);
+  console.log('   My Applications:', myApplications.length);
   console.log('═══════════════════════════════════════');
 
   const pendingJobIds = myApplications
     .filter(app => app.status === 'pending')
     .map(app => app.jobId);
-  
+
   const acceptedJobIds = myApplications
     .filter(app => app.status === 'accepted')
     .map(app => app.jobId);
@@ -184,6 +221,24 @@ export default function WorkerHomeScreen({ navigation }) {
   };
 
   const filteredJobs = getFilteredJobs();
+
+  // Format date for display
+  const formatJobDate = (jobDate, startTime) => {
+    if (!jobDate) return 'Date not set';
+    
+    const date = new Date(jobDate);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+      return `Today${startTime ? `, ${startTime}` : ''}`;
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return `Tomorrow${startTime ? `, ${startTime}` : ''}`;
+    } else {
+      return `${date.toLocaleDateString()}${startTime ? `, ${startTime}` : ''}`;
+    }
+  };
 
   // Improved Category Button Component
   const CategoryButton = ({ label, value, icon, count }) => {
@@ -243,6 +298,36 @@ export default function WorkerHomeScreen({ navigation }) {
         <Text style={styles.quickStatValue}>{value}</Text>
         <Text style={styles.quickStatLabel}>{label}</Text>
       </View>
+    </TouchableOpacity>
+  );
+
+  // Improved Location Display Component with job count
+  const LocationDisplay = () => (
+    <TouchableOpacity 
+      style={styles.locationButton}
+      onPress={() => navigation.navigate('LocationFilter')}
+    >
+      <View style={[
+        styles.locationIconContainer,
+        currentLocation && styles.locationIconContainerActive
+      ]}>
+        <Text style={styles.locationIcon}>
+          {currentLocation ? '📍' : '🌍'}
+        </Text>
+      </View>
+      <View style={styles.locationTextContainer}>
+        <Text style={styles.locationLabel}>
+          {currentLocation ? 'Location' : 'All India'}
+        </Text>
+        <Text style={styles.locationValue} numberOfLines={1}>
+          {currentLocation ? `${currentLocation.split(',')[0]} • ${availableJobs.length} jobs` : 'Showing jobs across India'}
+        </Text>
+      </View>
+      {locationLoading ? (
+        <ActivityIndicator size="small" color={colors.primary} />
+      ) : (
+        <Text style={styles.locationArrow}>›</Text>
+      )}
     </TouchableOpacity>
   );
 
@@ -315,7 +400,7 @@ export default function WorkerHomeScreen({ navigation }) {
             <View style={styles.searchHeaderLeft}>
               <Text style={styles.sectionTitle}>Find Your Next Job</Text>
               <Text style={styles.sectionSubtitle}>
-                {filteredJobs.length} opportunities waiting
+                {filteredJobs.length} upcoming opportunities
               </Text>
             </View>
             <TouchableOpacity 
@@ -352,20 +437,11 @@ export default function WorkerHomeScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Location Filter */}
-          <TouchableOpacity 
-            style={styles.locationButton}
-            onPress={() => navigation.navigate('LocationFilter')}
-          >
-            <View style={styles.locationIconContainer}>
-              <Text style={styles.locationIcon}>📍</Text>
-            </View>
-            <Text style={styles.locationText}>
-              {currentLocation || 'All Locations'}
-            </Text>
-            <Text style={styles.locationArrow}>›</Text>
-          </TouchableOpacity>
+          {/* Improved Location Filter - SINGLE LOCATION DISPLAY */}
+          <LocationDisplay />
         </View>
+
+        {/* REMOVED the duplicate location notice section */}
 
         {/* Improved Category Filter */}
         <View style={styles.categorySection}>
@@ -440,24 +516,26 @@ export default function WorkerHomeScreen({ navigation }) {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Finding perfect jobs for you...</Text>
+            <Text style={styles.loadingText}>
+              {locationLoading ? 'Setting up your location...' : 'Finding upcoming jobs for you...'}
+            </Text>
           </View>
         ) : filteredJobs.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>
-              {searchQuery !== '' || selectedCategory !== 'all' ? '🔍' : '💼'}
+              {searchQuery !== '' || selectedCategory !== 'all' ? '🔍' : '📅'}
             </Text>
             <Text style={styles.emptyTitle}>
               {searchQuery !== '' || selectedCategory !== 'all'
-                ? 'No Jobs Found' 
-                : 'No Jobs Available'}
+                ? 'No Upcoming Jobs Found' 
+                : 'No Upcoming Jobs'}
             </Text>
             <Text style={styles.emptySubtitle}>
               {searchQuery !== '' || selectedCategory !== 'all'
-                ? 'Try adjusting your search or filters to find more jobs.'
+                ? 'Try adjusting your search or filters to find more upcoming jobs.'
                 : currentLocation 
-                  ? `No jobs found in ${currentLocation}. Try changing location.`
-                  : 'New opportunities will appear here soon. Check back later!'}
+                  ? `No upcoming jobs found in ${currentLocation}. Try changing location or check back later.`
+                  : 'New upcoming opportunities will appear here. Check back later!'}
             </Text>
             {(searchQuery !== '' || selectedCategory !== 'all') ? (
               <TouchableOpacity 
@@ -468,6 +546,17 @@ export default function WorkerHomeScreen({ navigation }) {
                 }}
               >
                 <Text style={styles.emptyButtonText}>Clear Filters</Text>
+              </TouchableOpacity>
+            ) : currentLocation ? (
+              <TouchableOpacity 
+                style={styles.emptyButton}
+                onPress={async () => {
+                  setLocationLoading(true);
+                  await fetchJobsByUserLocation('');
+                  setLocationLoading(false);
+                }}
+              >
+                <Text style={styles.emptyButtonText}>Show All India Jobs</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity 
@@ -482,7 +571,8 @@ export default function WorkerHomeScreen({ navigation }) {
           <View style={styles.jobsContainer}>
             <View style={styles.jobsHeader}>
               <Text style={styles.jobsHeaderText}>
-                {filteredJobs.length} Job{filteredJobs.length !== 1 ? 's' : ''} Available
+                {filteredJobs.length} Upcoming Job{filteredJobs.length !== 1 ? 's' : ''}
+                {currentLocation && ` in ${currentLocation.split(',')[0]}`}
               </Text>
               <Text style={styles.jobsHeaderSubtext}>
                 {myApplications.length > 0 && `${myApplications.length} already applied`}
@@ -520,6 +610,14 @@ export default function WorkerHomeScreen({ navigation }) {
                         {job.companyName || job.company}
                       </Text>
                     </View>
+                  </View>
+
+                  {/* Job Date and Time */}
+                  <View style={styles.jobDateTime}>
+                    <Text style={styles.jobDateTimeIcon}>📅</Text>
+                    <Text style={styles.jobDateTimeText}>
+                      {formatJobDate(job.jobDate, job.startTime)}
+                    </Text>
                   </View>
 
                   {/* Job Details Grid */}
@@ -763,12 +861,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
+  // IMPROVED LOCATION STYLES
   locationButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -776,29 +875,40 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   locationIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primary + '20',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.textSecondary + '20',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
+  locationIconContainerActive: {
+    backgroundColor: colors.primary + '20',
+  },
   locationIcon: {
     fontSize: 18,
   },
-  locationText: {
+  locationTextContainer: {
     flex: 1,
+  },
+  locationLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  locationValue: {
     fontSize: 15,
-    color: colors.text,
     fontWeight: '600',
+    color: colors.text,
   },
   locationArrow: {
-    fontSize: 24,
+    fontSize: 20,
     color: colors.textSecondary,
+    marginLeft: 8,
   },
-  
-  // IMPROVED CATEGORY SECTION
+  // REMOVED the duplicate location notice styles
+  // CATEGORY SECTION
   categorySection: {
     paddingVertical: 20,
     backgroundColor: colors.white,
@@ -888,7 +998,6 @@ const styles = StyleSheet.create({
   categoryBadgeTextActive: {
     color: colors.white,
   },
-  
   activeFiltersContainer: {
     paddingHorizontal: 20,
     paddingVertical: 12,
@@ -1020,7 +1129,7 @@ const styles = StyleSheet.create({
   jobCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   companyLogo: {
     width: 48,
@@ -1066,6 +1175,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primary,
     fontWeight: '600',
+  },
+  jobDateTime: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '10',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  jobDateTimeIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  jobDateTimeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   jobDetailsGrid: {
     flexDirection: 'row',
@@ -1133,3 +1259,5 @@ const styles = StyleSheet.create({
     height: 24,
   },
 });
+
+export default WorkerHomeScreen;

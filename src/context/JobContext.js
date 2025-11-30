@@ -1,4 +1,4 @@
-// src/context/JobContext.js
+// src/context/JobContext.js - FIXED VERSION
 import React, { createContext, useState, useContext } from 'react';
 import { 
   collection, 
@@ -7,14 +7,16 @@ import {
   updateDoc, 
   arrayUnion,
   query,
-  where
+  where,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { 
   createApplication, 
   createNotification,
   fetchJobApplications,
-  updateApplicationStatus 
+  updateApplicationStatus,
+  fetchJobById 
 } from '../services/database';
 
 const JobContext = createContext();
@@ -57,21 +59,63 @@ export const JobProvider = ({ children }) => {
     }
   };
 
-  const fetchJobsByUserLocation = async (userLocation) => {
-    if (userLocation && userLocation.trim() !== '') {
-      await fetchJobs(userLocation);
-    } else {
-      await fetchJobs(); // Fetch all jobs if no user location
-    }
-  };
+ const fetchJobsByUserLocation = async (userLocation) => {
+  if (userLocation && userLocation.trim() !== '') {
+    await fetchJobs(userLocation);
+    setCurrentLocation(userLocation); // This sets the current location
+  } else {
+    await fetchJobs(); // Fetch all jobs if no user location
+    setCurrentLocation(''); // Clear current location
+  }
+};
 
-  const applyForJob = async (jobId, userId, userProfile) => {
+const autoSetUserLocation = async () => {
+  try {
+    if (userProfile?.location) {
+      await fetchJobsByUserLocation(userProfile.location);
+    } else {
+      await fetchJobs(); // Show all jobs if no location
+    }
+  } catch (error) {
+    console.error('Error auto-setting location:', error);
+    await fetchJobs(); // Fallback to all jobs
+  }
+};
+
+  const applyForJob = async (jobId, userId, userProfile, jobData = null) => {
     try {
-      // Find the job to get employer details
-      const job = jobs.find(j => j.id === jobId);
+      let job;
+      
+      // First try to use the jobData passed from the screen
+      if (jobData) {
+        job = jobData;
+      } else {
+        // If no jobData provided, try to find in local state
+        job = jobs.find(j => j.id === jobId);
+        
+        // If not found in local state, fetch from database
+        if (!job) {
+          console.log('Job not found in local state, fetching from database...');
+          const result = await fetchJobById(jobId);
+          if (result.success) {
+            job = result.job;
+          } else {
+            throw new Error('Job not found in database');
+          }
+        }
+      }
+
       if (!job) {
         throw new Error('Job not found');
       }
+
+      console.log('Applying for job:', {
+        jobId,
+        jobTitle: job.title,
+        employerId: job.employerId,
+        workerId: userId,
+        workerName: userProfile?.name
+      });
 
       // Create application
       const applicationData = {
@@ -79,28 +123,32 @@ export const JobProvider = ({ children }) => {
         workerId: userId,
         workerName: userProfile?.name || 'Worker',
         workerPhone: userProfile?.phoneNumber || '',
-        status: 'pending',
-        jobTitle: job.title,
         employerId: job.employerId,
-        companyName: job.companyName || job.company
+        jobTitle: job.title,
+        companyName: job.companyName || job.company || 'Company',
+        status: 'pending',
+        appliedAt: new Date()
       };
 
       const applicationResult = await createApplication(applicationData);
       
       if (applicationResult.success) {
+        console.log('Application created successfully:', applicationResult.applicationId);
+        
         // Create notification for employer
-        await createNotification({
-          userId: job.employerId,
-          type: 'new_application',
-          title: 'New Job Application',
-          message: `${userProfile?.name || 'A worker'} applied for your job: ${job.title}`,
-          data: {
-            jobId,
-            applicationId: applicationResult.applicationId,
-            workerId: userId,
-            workerName: userProfile?.name || 'Worker'
-          }
-        });
+        try {
+          await createNotification(job.employerId, {
+            title: '📥 New Application Received',
+            message: `${userProfile?.name || 'A worker'} has applied for your "${job.title}" position.`,
+            type: 'new_application',
+            actionType: 'view_applications',
+            actionId: jobId,
+          });
+          console.log('Notification sent to employer');
+        } catch (notifError) {
+          console.error('Error sending notification:', notifError);
+          // Don't fail the application if notification fails
+        }
 
         // Update local jobs state to reflect the application
         const updatedJobs = jobs.map(j => {
@@ -114,9 +162,9 @@ export const JobProvider = ({ children }) => {
         });
         setJobs(updatedJobs);
 
-        return { success: true };
+        return { success: true, applicationId: applicationResult.applicationId };
       } else {
-        throw new Error('Failed to create application');
+        throw new Error(applicationResult.error || 'Failed to create application');
       }
     } catch (error) {
       console.error('Error applying for job:', error);
@@ -140,16 +188,14 @@ export const JobProvider = ({ children }) => {
       
       if (result.success) {
         // Create notification for worker
-        await createNotification({
-          userId: workerId,
+        await createNotification(workerId, {
+          title: status === 'accepted' ? '🎉 Application Accepted!' : 'Application Update',
+          message: status === 'accepted' 
+            ? `Congratulations! Your application for "${jobTitle}" has been accepted.` 
+            : `Your application for "${jobTitle}" was not selected.`,
           type: 'application_update',
-          title: `Application ${status}`,
-          message: `Your application for "${jobTitle}" has been ${status}`,
-          data: {
-            applicationId,
-            status,
-            employerId
-          }
+          actionType: status === 'accepted' ? 'view_job_tracking' : 'view_jobs',
+          actionId: applicationId,
         });
 
         return { success: true };
