@@ -1,4 +1,4 @@
-// App.js – Fixed Version with All Employer Screens + Job Tracking Banner + EMPLOYER BANNER
+// App.js – Updated Version with Platform Fee Payment Screen and PostJobSuccessScreen
 
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
@@ -30,6 +30,8 @@ import EmployerProfileScreen from './src/screens/employer/EmployerProfileScreen'
 import PaymentProcessingScreen from './src/screens/employer/PaymentProcessingScreen';
 import CompleteJobScreen from './src/screens/employer/CompleteJobScreen';
 import EmployerJobTrackingScreen from './src/screens/employer/EmployerJobTrackingScreen';
+import PlatformFeePaymentScreen from './src/screens/employer/PlatformFeePaymentScreen';
+import PostJobSuccessScreen from './src/screens/employer/PostJobSuccessScreen';
 
 // Screens - Shared
 import JobLocationScreen from './src/screens/shared/JobLocationScreen';
@@ -127,6 +129,8 @@ function AppContent() {
             <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
             <Stack.Screen name="CompleteJob" component={CompleteJobScreen} />
             <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
+            <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
+            <Stack.Screen name="PostJobSuccess" component={PostJobSuccessScreen} />
             <Stack.Screen name="JobLocation" component={JobLocationScreen} />
             <Stack.Screen name="ChatScreen" component={ChatScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />

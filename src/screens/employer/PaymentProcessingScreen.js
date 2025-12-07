@@ -1,4 +1,4 @@
-// src/screens/employer/PaymentProcessingScreen.js - COMPLETE FIXED VERSION
+// src/screens/employer/PaymentProcessingScreen.js - COMPLETE UPDATED VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -23,6 +23,7 @@ import {
   verifyRazorpayPayment,
   isRazorpayAvailable
 } from '../../services/razorpay';
+import RazorpayWebView from '../../components/RazorpayWebView';
 import { db } from '../../services/firebase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
@@ -44,6 +45,8 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   const [needsFix, setNeedsFix] = useState(false);
   const [error, setError] = useState(null);
   const [timeoutReached, setTimeoutReached] = useState(false);
+  const [showRazorpayWebView, setShowRazorpayWebView] = useState(false);
+  const [webViewPaymentData, setWebViewPaymentData] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -109,38 +112,14 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
     }
   };
 
-  // Helper function for payment calculation
-  // const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
-  //   let calculatedPayment = 0;
-
-  //   if (durationMinutes < 60) {
-  //     // For work less than 1 hour, pay proportionally with minimum payment
-  //     const proportion = durationMinutes / 60;
-  //     calculatedPayment = Math.round(hourlyRate * proportion);
-
-  //     // Ensure minimum payment (at least 15 minutes worth of work)
-  //     const minPayment = Math.round(hourlyRate * 0.25); // 15 minutes = 0.25 hours
-  //     if (calculatedPayment < minPayment && durationMinutes > 0) {
-  //       calculatedPayment = minPayment;
-  //     }
-  //   } else {
-  //     // For 1 hour or more, pay normally
-  //     const durationHours = durationMinutes / 60;
-  //     calculatedPayment = Math.round(durationHours * hourlyRate);
-  //   }
-
-  //   // Ensure payment is at least 1 rupee
-  //   return Math.max(1, calculatedPayment);
-  // };
-  // In PaymentProcessingScreen - FIXED helper function
-const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
-  // CORRECTED CALCULATION: Simple per-minute calculation
-  const ratePerMinute = hourlyRate / 60;
-  let calculatedPayment = Math.round(durationMinutes * ratePerMinute);
-  
-  // Ensure payment is at least 1 rupee
-  return Math.max(1, calculatedPayment);
-};
+  const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
+    // CORRECTED CALCULATION: Simple per-minute calculation
+    const ratePerMinute = hourlyRate / 60;
+    let calculatedPayment = Math.round(durationMinutes * ratePerMinute);
+    
+    // Ensure payment is at least 1 rupee
+    return Math.max(1, calculatedPayment);
+  };
 
   // Helper function to calculate work duration in hours
   const calculateWorkDurationHours = (appData) => {
@@ -373,23 +352,24 @@ const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
 
   const handleProcessPayment = async () => {
     // Use calculated payment as the default and force it
-    const amount = actualPayment; // Always use calculated payment
+    const amount = parseFloat(paymentAmount) || actualPayment; // Allow user override
 
     if (amount <= 0 || isNaN(amount)) {
       Alert.alert('Invalid Amount', 'Cannot process payment with invalid amount');
       return;
     }
 
-    console.log('Processing payment with calculated amount:', {
+    console.log('Processing payment with amount:', {
+      enteredAmount: paymentAmount,
       calculatedAmount: actualPayment,
       workDuration: workDuration,
-      hourlyRate: hourlyRate
+      hourlyRate: application?.hourlyRate
     });
 
     // Show confirmation with actual work details
     Alert.alert(
       'Confirm Payment',
-      `You are about to pay ₹${amount} for ${formatDuration(workDuration)} of work at ₹${hourlyRate}/hour.\n\nThis amount is calculated based on actual work duration.`,
+      `You are about to pay ₹${amount} for ${formatDuration(workDuration)} of work.\n\nThis amount is calculated based on actual work duration.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -423,78 +403,91 @@ const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
       console.log('Initiating online payment for amount:', amount);
 
       const paymentData = {
-        amount: amount * 100, // Convert to paise for Razorpay
+        amount: Math.round(amount * 100), // Convert to paise for Razorpay
         description: `Payment for job: ${job?.title || 'Job'}`,
-        employerName: application.employerName || 'Employer',
-        workerName: application.workerName || 'Worker',
+        employerName: application?.employerName || 'Employer',
+        employerId: application?.employerId,
+        workerName: application?.workerName || 'Worker',
+        workerId: application?.workerId,
         jobTitle: job?.title || 'Job',
-        applicationId: applicationId,
-        employerId: application.employerId,
-        workerId: application.workerId
+        jobId: application?.jobId,
+        applicationId: applicationId
       };
 
       const razorpayResult = await initiateRazorpayPayment(paymentData);
 
       console.log('Razorpay result:', razorpayResult);
 
-      if (razorpayResult.success) {
-        // Verify payment
-        const verificationResult = await verifyRazorpayPayment(razorpayResult);
+      if (razorpayResult.success && razorpayResult.useWebView) {
+        // Show WebView modal
+        const webViewData = {
+          ...razorpayResult.webViewConfig,
+          htmlContent: razorpayResult.htmlContent,
+          onSuccess: async (paymentResult) => {
+            console.log('✅ Payment success received:', paymentResult);
+            
+            try {
+              // Verify payment
+              console.log('🔍 Verifying payment...');
+              const verificationResult = await verifyRazorpayPayment(paymentResult);
+              console.log('🔍 Verification result:', verificationResult);
 
-        console.log('Verification result:', verificationResult);
+              if (verificationResult.success && verificationResult.verified) {
+                console.log('✅ Payment verified, processing application:', applicationId);
+                
+                // Process successful online payment
+                const processResult = await processOnlinePayment(applicationId, {
+                  ...paymentResult,
+                  verified: true,
+                  amount: amount,
+                  method: 'online',
+                  notes: paymentNotes.trim()
+                });
 
-        if (verificationResult.success && verificationResult.verified) {
-          // Process successful online payment
-          const processResult = await processOnlinePayment(applicationId, {
-            ...razorpayResult,
-            verified: true,
-            amount: amount // Use the original amount in rupees
-          });
-
-          if (processResult.success) {
-            Alert.alert(
-              '🎉 Payment Successful',
-              `Online payment of ₹${amount} processed successfully!\n\nThe worker has been notified.`,
-              [{
-                text: 'Done',
-                onPress: () => navigation.navigate('EmployerHome')
-              }]
-            );
-          } else {
-            Alert.alert(
-              'Payment Issue',
-              'Payment was processed by Razorpay but failed to update in our system.\n\nPlease contact support with Payment ID: ' + razorpayResult.paymentId,
-              [{ text: 'OK', onPress: () => navigation.goBack() }]
-            );
+                if (processResult.success) {
+                  Alert.alert(
+                    '🎉 Payment Successful',
+                    `Online payment of ₹${amount} processed successfully!\n\nThe worker has been notified.`,
+                    [{
+                      text: 'Done',
+                      onPress: () => navigation.navigate('EmployerHome')
+                    }]
+                  );
+                } else {
+                  Alert.alert(
+                    'Payment Issue',
+                    'Payment was processed by Razorpay but failed to update in our system.\n\nPlease contact support with Payment ID: ' + paymentResult.paymentId,
+                    [{ text: 'OK', onPress: () => navigation.goBack() }]
+                  );
+                }
+              } else {
+                Alert.alert(
+                  'Payment Verification Failed',
+                  verificationResult.error || 'Could not verify payment. Please contact support.'
+                );
+              }
+            } catch (verificationError) {
+              console.error('❌ Verification error:', verificationError);
+              Alert.alert('Error', 'Failed to verify payment. Please try again or contact support.');
+            }
+          },
+          onError: (error) => {
+            console.error('❌ Payment error:', error);
+            Alert.alert('Payment Failed', error.error || 'Payment could not be completed');
           }
-        } else {
-          Alert.alert(
-            'Payment Failed',
-            'Payment verification failed. Please try again or contact support.',
-            [{ text: 'OK' }]
-          );
-        }
-      } else {
-        // Payment failed or cancelled
-        if (razorpayResult.code === 0 || razorpayResult.code === 2) {
-          // User cancelled - silent, just log
-          console.log('Payment cancelled by user');
-        } else {
-          Alert.alert(
-            'Payment Failed',
-            razorpayResult.error || 'Payment could not be completed. Please try again.',
-            [{ text: 'OK' }]
-          );
-        }
+        };
+        
+        console.log('🌐 Setting WebView data');
+        setWebViewPaymentData(webViewData);
+        setShowRazorpayWebView(true);
+        setProcessing(false);
+      } else if (!razorpayResult.success) {
+        Alert.alert('Payment Failed', razorpayResult.error || 'Payment could not be initialized');
+        setProcessing(false);
       }
     } catch (error) {
-      console.error('Online Payment Error:', error);
-      Alert.alert(
-        'Error',
-        'Failed to process online payment. Please try again or use an alternative payment method.',
-        [{ text: 'OK' }]
-      );
-    } finally {
+      console.error('❌ Online payment error:', error);
+      Alert.alert('Error', 'Failed to process online payment: ' + error.message);
       setProcessing(false);
     }
   };
@@ -504,7 +497,7 @@ const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
 
     Alert.alert(
       `Confirm ${methodName}`,
-      `Are you sure you want to record ${methodName.toLowerCase()} of ₹${amount} to ${application.workerName}?\n\n⚠️ Make sure you have completed the payment before confirming.`,
+      `Are you sure you want to record ${methodName.toLowerCase()} of ₹${amount} to ${application?.workerName}?\n\n⚠️ Make sure you have completed the payment before confirming.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -738,6 +731,25 @@ const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
 
   return (
     <View style={styles.container}>
+      <RazorpayWebView
+        visible={showRazorpayWebView}
+        onClose={() => {
+          setShowRazorpayWebView(false);
+          setProcessing(false);
+        }}
+        paymentData={webViewPaymentData}
+        onPaymentSuccess={(result) => {
+          console.log('✅ WebView payment success:', result);
+          setShowRazorpayWebView(false);
+          webViewPaymentData?.onSuccess(result);
+        }}
+        onPaymentFailed={(error) => {
+          console.log('❌ WebView payment failed:', error);
+          setShowRazorpayWebView(false);
+          webViewPaymentData?.onError(error);
+        }}
+      />
+      
       {/* Header */}
       <LinearGradient
         colors={[colors.primary, '#4A90E2']}

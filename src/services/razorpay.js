@@ -1,202 +1,214 @@
-// src/services/razorpay.js - FIXED VERSION
-import RazorpayCheckout from 'react-native-razorpay';
-import { Alert, Platform } from 'react-native';
+// src/services/razorpay.js
+import { generateRazorpayHTML } from './WebRazorpay';
 
-const RAZORPAY_KEY_ID = 'rzp_live_RMdzh3tFYlmgp4';
+const RAZORPAY_KEY_ID = 'rzp_test_RoZeBxu75pF1SX';
 
 export const initiateRazorpayPayment = async (paymentData) => {
   const {
     amount,
     currency = 'INR',
-    description = 'Payment for job completion',
+    description = 'Platform Fee Payment',
     employerName,
-    workerName,
-    jobTitle,
-    applicationId,
     employerId,
-    workerId
+    feeIds = []
   } = paymentData;
 
   try {
+    console.log('🚀 Starting Razorpay payment (WebView) for platform fee...');
+    console.log('💰 Amount:', amount, 'paise (₹', amount / 100, ')');
+    console.log('📝 Description:', description);
+    console.log('👤 Employer:', employerName, employerId);
+    console.log('📋 Fee IDs:', feeIds);
+    
     // Validate payment amount
     if (!amount || amount <= 0 || isNaN(amount)) {
+      console.error('❌ Invalid amount:', amount);
       return { 
         success: false, 
         error: 'Invalid payment amount' 
       };
     }
 
-    // Check if RazorpayCheckout module exists
-    if (!RazorpayCheckout) {
-      console.error('RazorpayCheckout module is null or undefined');
+    if (amount < 100) {
+      console.error('❌ Amount too small:', amount);
       return { 
         success: false, 
-        error: 'Payment gateway not initialized. Please restart the app.' 
+        error: 'Minimum amount is ₹1 (100 paise)' 
       };
     }
 
-    // Prepare options
-    const options = {
-      description: description,
+    // Create webViewConfig with all required fields
+    const webViewConfig = {
+      amount: amount, // Already in paise
       currency: currency,
+      description: description,
       key: RAZORPAY_KEY_ID,
-      amount: Math.round(amount * 100), // Convert to paise
-      name: 'Udyogi',
+      name: 'Udyogi Platform Fee',
       prefill: {
-        email: 'employer@udyogi.com',
+        email: employerName ? `${employerName.toLowerCase().replace(/\s+/g, '')}@udyogi.com` : 'employer@udyogi.com',
         contact: '9999999999',
         name: employerName || 'Employer',
       },
-      theme: { 
-        color: '#667eea',
-        hide_topbar: false
-      },
       notes: {
-        jobTitle: jobTitle || 'Job',
-        applicationId: applicationId || '',
+        type: 'platform_fee',
         employerId: employerId || '',
-        workerId: workerId || '',
-        workerName: workerName || 'Worker'
+        feeIds: JSON.stringify(feeIds),
+        paymentFor: 'platform_fee',
+        environment: 'test',
+        timestamp: new Date().toISOString()
       },
-      modal: {
-        ondismiss: () => {
-          console.log('Razorpay modal dismissed');
-        }
+      theme: {
+        color: '#667eea'
       }
     };
 
-    console.log('Opening Razorpay with options:', {
-      key: RAZORPAY_KEY_ID,
-      amount: options.amount,
-      amountInRupees: amount,
-      name: options.name
-    });
+    console.log('🔧 WebView config created:', webViewConfig);
 
-    // Use Promise-based approach instead of await
-    return new Promise((resolve, reject) => {
-      RazorpayCheckout.open(options)
-        .then((data) => {
-          console.log('Razorpay Success Response:', data);
-          resolve({
-            success: true,
-            paymentId: data.razorpay_payment_id,
-            orderId: data.razorpay_order_id || null,
-            signature: data.razorpay_signature || null,
-            amount: amount
-          });
-        })
-        .catch((error) => {
-          console.error('Razorpay Error:', error);
-          
-          // Handle different error scenarios
-          if (error.code === 0 || error.code === 2) {
-            // User cancelled
-            resolve({ 
-              success: false, 
-              error: 'Payment cancelled',
-              code: error.code 
-            });
-          } else if (error.code === 4) {
-            // Network error
-            resolve({ 
-              success: false, 
-              error: 'Network error. Please check your internet connection',
-              code: 4 
-            });
-          } else if (error.code === 5) {
-            // Payment failed
-            resolve({ 
-              success: false, 
-              error: 'Payment failed. Please try again',
-              code: 5 
-            });
-          } else {
-            // Unknown error
-            resolve({ 
-              success: false, 
-              error: error.description || error.message || 'Payment failed. Please try again.',
-              code: error.code || 'unknown'
-            });
-          }
-        });
-    });
+    // Generate HTML for WebView
+    const htmlContent = generateRazorpayHTML(webViewConfig);
+
+    return {
+      success: true,
+      useWebView: true,
+      webViewConfig: webViewConfig,
+      htmlContent: htmlContent
+    };
 
   } catch (error) {
-    console.error('Razorpay Payment Exception:', error);
+    console.error('💥 Razorpay Payment Exception:', error);
     return { 
       success: false, 
       error: 'Failed to initialize payment. Please try again.',
-      code: 'exception'
+      code: 'exception',
+      details: error.message
     };
   }
 };
 
 export const verifyRazorpayPayment = async (paymentData) => {
   try {
-    // Basic validation
+    console.log('🔍 Starting payment verification:', paymentData);
+    
     if (!paymentData.paymentId) {
+      console.error('❌ Missing paymentId in verification');
       return {
         success: false,
         verified: false,
-        error: 'Invalid payment data'
+        error: 'Invalid payment data: Missing payment ID'
       };
     }
 
-    // In production, verify on backend server
-    console.log('Payment verification (client-side):', paymentData);
+    if (!paymentData.orderId) {
+      console.warn('⚠️ Missing orderId in verification');
+    }
+
+    if (!paymentData.signature) {
+      console.warn('⚠️ Missing signature in verification');
+    }
+
+    // Log payment details for debugging
+    console.log('🔍 Payment verification details:', {
+      paymentId: paymentData.paymentId,
+      orderId: paymentData.orderId || 'N/A',
+      signaturePresent: !!paymentData.signature,
+      amount: paymentData.amount || 'N/A',
+      isTest: true
+    });
     
-    return {
+    // For testing, always verify successfully
+    // In production, you would make an API call to your backend
+    // to verify the payment signature
+    
+    const verificationResult = {
       success: true,
       verified: true,
       paymentId: paymentData.paymentId,
       orderId: paymentData.orderId,
-      message: 'Payment verified successfully'
+      signature: paymentData.signature,
+      amount: paymentData.amount,
+      currency: paymentData.currency || 'INR',
+      message: 'Payment verified successfully (TEST MODE)',
+      isTest: true,
+      timestamp: new Date().toISOString()
     };
     
+    console.log('✅ Verification result:', verificationResult);
+    
+    return verificationResult;
+    
   } catch (error) {
-    console.error('Payment Verification Error:', error);
+    console.error('❌ Payment Verification Error:', error);
     return {
       success: false,
       verified: false,
-      error: error.message || 'Payment verification failed'
+      error: error.message || 'Payment verification failed',
+      details: error.stack
     };
   }
 };
 
-// Helper function to format amount for display
-export const formatPaymentAmount = (amount) => {
-  if (!amount || isNaN(amount)) return '₹0';
-  return `₹${Math.round(amount).toLocaleString('en-IN')}`;
-};
-
-// Helper function to check if Razorpay is available
 export const isRazorpayAvailable = () => {
-  try {
-    // More thorough check
-    const isAvailable = RazorpayCheckout !== null && 
-                       RazorpayCheckout !== undefined && 
-                       typeof RazorpayCheckout.open === 'function';
-    
-    console.log('Razorpay availability check:', {
-      module: RazorpayCheckout ? 'exists' : 'null',
-      openFunction: typeof RazorpayCheckout?.open,
-      isAvailable
-    });
-    
-    return isAvailable;
-  } catch (error) {
-    console.error('Error checking Razorpay availability:', error);
-    return false;
-  }
+  const isAvailable = true; // WebView is always available
+  console.log('🔧 Razorpay available:', isAvailable);
+  return isAvailable;
 };
 
-// Test function to verify Razorpay setup
 export const testRazorpaySetup = () => {
-  console.log('=== Razorpay Setup Test ===');
-  console.log('RazorpayCheckout:', RazorpayCheckout);
-  console.log('Type:', typeof RazorpayCheckout);
-  console.log('Has open method:', RazorpayCheckout?.open ? 'Yes' : 'No');
-  console.log('Open method type:', typeof RazorpayCheckout?.open);
-  console.log('Platform:', Platform.OS);
-  console.log('========================');
+  console.log('🧪 === Razorpay Setup Test ===');
+  console.log('🧪 MODE: TEST');
+  console.log('🧪 Key ID (partial):', RAZORPAY_KEY_ID.substring(0, 15) + '...');
+  console.log('🧪 Key valid length:', RAZORPAY_KEY_ID.length === 29 ? 'Yes' : 'No');
+  console.log('🧪 =========================');
+};
+
+export const getTestCards = () => {
+  return {
+    success: [
+      {
+        name: 'Success Card (Visa)',
+        number: '4111 1111 1111 1111',
+        cvv: '123',
+        expiry: 'Any future date',
+        description: 'Payment will succeed'
+      },
+      {
+        name: 'Success Card (MasterCard)',
+        number: '5104 0600 0000 0008',
+        cvv: '123',
+        expiry: 'Any future date',
+        description: 'Payment will succeed'
+      }
+    ],
+    failure: [
+      {
+        name: 'Failure Card',
+        number: '4111 1111 1111 1234',
+        cvv: '123',
+        expiry: 'Any future date',
+        description: 'Payment will fail'
+      }
+    ],
+    upi: [
+      {
+        name: 'Success UPI',
+        id: 'success@razorpay',
+        description: 'UPI payment will succeed'
+      },
+      {
+        name: 'Failure UPI',
+        id: 'failure@razorpay',
+        description: 'UPI payment will fail'
+      }
+    ]
+  };
+};
+
+export const showTestPaymentInstructions = () => {
+  const testCards = getTestCards();
+  
+  return {
+    successCard: testCards.success[0],
+    failureCard: testCards.failure[0],
+    successUpi: testCards.upi[0]
+  };
 };

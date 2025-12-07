@@ -1,5 +1,5 @@
-// src/screens/employer/PostJobScreen.js
-import React, { useState } from 'react';
+// src/screens/employer/PostJobScreen.js - COMPLETE FIXED VERSION
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,22 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { createJobWithTiming } from '../../services/database';
 import { colors } from '../../constants/colors';
 import CustomDateTimePicker from '../../components/CustomDateTimePicker';
+import {
+  canPostJob,
+  calculateJobPostingFee,
+  createPlatformFee,
+} from '../../services/platformFeeService';
+import {
+  isRazorpayAvailable
+} from '../../services/razorpay';
 
-export default function PostJobScreen({ navigation }) {
+export default function PostJobScreen({ navigation, route }) {
   const { user, userProfile } = useAuth();
   
   const [title, setTitle] = useState('');
@@ -26,6 +35,15 @@ export default function PostJobScreen({ navigation }) {
   const [location, setLocation] = useState(userProfile?.location || '');
   const [rate, setRate] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingEligibility, setCheckingEligibility] = useState(true);
+  
+  // Platform fee states
+  const [feeInfo, setFeeInfo] = useState(null);
+  const [showFeeModal, setShowFeeModal] = useState(false);
+  const [selectedPaymentOption, setSelectedPaymentOption] = useState(null);
+  const [processingFee, setProcessingFee] = useState(false);
+  const [razorpayEnabled, setRazorpayEnabled] = useState(false);
+  const [pendingFeesExist, setPendingFeesExist] = useState(false);
   
   // Date and Time states
   const [jobDate, setJobDate] = useState(new Date());
@@ -35,7 +53,67 @@ export default function PostJobScreen({ navigation }) {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
-  // Format date for storage (YYYY-MM-DD format) - FIXED
+  useEffect(() => {
+    checkPostingEligibility();
+    checkRazorpayAvailability();
+  }, []);
+
+  useEffect(() => {
+    if (route.params?.refresh) {
+      clearForm();
+    }
+  }, [route.params?.refresh]);
+
+  const checkRazorpayAvailability = () => {
+    const available = isRazorpayAvailable();
+    setRazorpayEnabled(available);
+  };
+
+  const checkPostingEligibility = async () => {
+    try {
+      const result = await canPostJob(user.uid);
+      
+      if (!result.success) {
+        Alert.alert('Error', result.error);
+        navigation.goBack();
+        return;
+      }
+
+      if (!result.canPost && result.requiresPayment) {
+        // Has blocking pending fees
+        Alert.alert(
+          '💰 Payment Required',
+          `You have pending platform fees totaling ₹${result.totalDue} from completed jobs.\n\nPlease clear these fees before posting new jobs.`,
+          [
+            {
+              text: 'Pay Now',
+              onPress: () => {
+                navigation.navigate('PlatformFeePayment', {
+                  totalAmount: result.totalDue,
+                  returnTo: 'PostJob',
+                  source: 'eligibility_check'
+                });
+              }
+            },
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => navigation.goBack()
+            }
+          ],
+          { cancelable: false }
+        );
+        setPendingFeesExist(true);
+      } else {
+        setPendingFeesExist(false);
+      }
+    } catch (error) {
+      console.error('Error checking posting eligibility:', error);
+    } finally {
+      setCheckingEligibility(false);
+    }
+  };
+
   const formatDateForStorage = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -43,7 +121,6 @@ export default function PostJobScreen({ navigation }) {
     return `${year}-${month}-${day}`;
   };
 
-  // Format date for display
   const formatDateForDisplay = (date) => {
     return date.toLocaleDateString('en-IN', { 
       year: 'numeric', 
@@ -52,7 +129,6 @@ export default function PostJobScreen({ navigation }) {
     });
   };
 
-  // Format time for display
   const formatTime = (date) => {
     return date.toLocaleTimeString('en-IN', { 
       hour: '2-digit', 
@@ -61,21 +137,18 @@ export default function PostJobScreen({ navigation }) {
     });
   };
 
-  // Format time for storage (HH:mm format)
   const formatTimeForStorage = (date) => {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
   };
 
-  // Helper function to compare only time portions
   const isEndTimeAfterStartTime = (start, end) => {
     const startTotalMinutes = start.getHours() * 60 + start.getMinutes();
     const endTotalMinutes = end.getHours() * 60 + end.getMinutes();
     return endTotalMinutes > startTotalMinutes;
   };
 
-  // Calculate duration and total payment
   const calculateDuration = () => {
     const startTotalMinutes = startTime.getHours() * 60 + startTime.getMinutes();
     const endTotalMinutes = endTime.getHours() * 60 + endTime.getMinutes();
@@ -107,7 +180,6 @@ export default function PostJobScreen({ navigation }) {
       return;
     }
 
-    // Validate date is not in the past
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const selectedDate = new Date(jobDate);
@@ -118,7 +190,6 @@ export default function PostJobScreen({ navigation }) {
       return;
     }
 
-    // Validate end time is after start time
     if (!isEndTimeAfterStartTime(startTime, endTime)) {
       Alert.alert('Error', 'End time must be after start time');
       return;
@@ -130,44 +201,270 @@ export default function PostJobScreen({ navigation }) {
       return;
     }
 
+    // Calculate platform fee
+    const totalPayment = calculateTotal();
+    const feeResult = await calculateJobPostingFee(totalPayment, user.uid);
+    
+    if (!feeResult.success) {
+      Alert.alert('Error', feeResult.error);
+      return;
+    }
+
+    setFeeInfo(feeResult);
+
+    // If free or no fee, post directly
+    if (feeResult.isFree || feeResult.platformFee === 0) {
+      await proceedWithJobPosting(null);
+    } else {
+      // Show fee modal for payment selection
+      setShowFeeModal(true);
+    }
+  };
+
+  const handleFeePaymentSelection = async (option) => {
+    setSelectedPaymentOption(option);
+    setShowFeeModal(false);
+
+    if (option === 'now') {
+      await handlePayNowAndPost();
+    } else {
+      await handlePayLaterAndPost();
+    }
+  };
+
+  const handlePayNowAndPost = async () => {
+    setProcessingFee(true);
+
+    try {
+      // Calculate everything
+      const totalPayment = calculateTotal();
+      const duration = calculateDuration();
+      
+      // Create job data
+      const jobData = {
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        rate: parseInt(rate),
+        employerId: user.uid,
+        companyName: userProfile?.companyName || userProfile?.name || 'Company',
+        employerPhone: userProfile?.phoneNumber || '',
+        jobDate: formatDateForStorage(jobDate),
+        startTime: formatTimeForStorage(startTime),
+        endTime: formatTimeForStorage(endTime),
+        category: 'General',
+      };
+
+      // Create the job first
+      console.log('📝 Creating job...');
+      const result = await createJobWithTiming(jobData);
+      
+      if (!result.success) {
+        throw new Error('Failed to create job');
+      }
+
+      const jobId = result.jobId;
+      
+      // Create platform fee record
+      const feeData = {
+        employerId: user.uid,
+        employerName: userProfile?.name || 'Employer',
+        jobId: jobId,
+        jobTitle: title.trim(),
+        amount: feeInfo.platformFee,
+        totalJobPayment: totalPayment,
+        paymentOption: 'now',
+        status: 'pending_payment',
+        needsPayment: true
+      };
+
+      console.log('💰 Creating fee record...');
+      const feeResult = await createPlatformFee(feeData);
+      
+      if (!feeResult.success) {
+        throw new Error('Failed to create fee record');
+      }
+
+      // Navigate to payment screen with job data
+      console.log('📍 Navigating to payment screen with fee ID:', feeResult.feeId);
+      
+      navigation.navigate('PlatformFeePayment', {
+        feeIds: [feeResult.feeId],
+        totalAmount: feeInfo.platformFee,
+        immediateFeeAmount: feeInfo.platformFee,
+        returnTo: 'PostJobSuccess',
+        postJobData: {
+          jobId: jobId,
+          title: title.trim(),
+          description: description.trim(),
+          location: location.trim(),
+          jobDate: formatDateForDisplay(jobDate),
+          startTime: formatTime(startTime),
+          endTime: formatTime(endTime),
+          duration: duration,
+          rate: parseInt(rate),
+          totalPayment: totalPayment,
+          platformFee: feeInfo.platformFee
+        },
+        fromPostJob: true,
+        isNewJobPayment: true,
+        source: 'post_job'
+      });
+
+    } catch (error) {
+      console.error('❌ Error in pay now flow:', error);
+      Alert.alert('Error', error.message || 'Failed to process payment');
+      setShowFeeModal(true);
+    } finally {
+      setProcessingFee(false);
+    }
+  };
+
+  const handlePayLaterAndPost = async () => {
+    setProcessingFee(true);
+
+    try {
+      const totalPayment = calculateTotal();
+      const duration = calculateDuration();
+      
+      // Create job data
+      const jobData = {
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        rate: parseInt(rate),
+        employerId: user.uid,
+        companyName: userProfile?.companyName || userProfile?.name || 'Company',
+        employerPhone: userProfile?.phoneNumber || '',
+        jobDate: formatDateForStorage(jobDate),
+        startTime: formatTimeForStorage(startTime),
+        endTime: formatTimeForStorage(endTime),
+        category: 'General',
+      };
+
+      // Create the job
+      console.log('📝 Creating job...');
+      const result = await createJobWithTiming(jobData);
+      
+      if (!result.success) {
+        throw new Error('Failed to create job');
+      }
+
+      const jobId = result.jobId;
+      
+      // Create platform fee record with 'later' option
+      if (feeInfo && !feeInfo.isFree && feeInfo.platformFee > 0) {
+        const feeData = {
+          employerId: user.uid,
+          employerName: userProfile?.name || 'Employer',
+          jobId: jobId,
+          jobTitle: title.trim(),
+          amount: feeInfo.platformFee,
+          totalJobPayment: totalPayment,
+          paymentOption: 'later',
+          status: 'pending',
+          needsPayment: false // Will be true when job completes
+        };
+
+        console.log('💰 Creating deferred fee record...');
+        await createPlatformFee(feeData);
+      }
+
+      // Navigate to success screen
+      navigation.replace('PostJobSuccess', {
+        jobData: {
+          jobId: jobId,
+          title: title.trim(),
+          description: description.trim(),
+          location: location.trim(),
+          jobDate: formatDateForDisplay(jobDate),
+          startTime: formatTime(startTime),
+          endTime: formatTime(endTime),
+          duration: duration,
+          rate: parseInt(rate),
+          totalPayment: totalPayment,
+          platformFee: feeInfo?.platformFee || 0
+        },
+        isPaid: false
+      });
+
+    } catch (error) {
+      console.error('❌ Error in pay later flow:', error);
+      Alert.alert('Error', error.message || 'Failed to post job');
+    } finally {
+      setProcessingFee(false);
+    }
+  };
+
+  const proceedWithJobPosting = async (feePaymentData) => {
     setLoading(true);
 
-    const jobData = {
-      title: title.trim(),
-      description: description.trim(),
-      location: location.trim(),
-      rate: parseInt(rate),
-      employerId: user.uid,
-      companyName: userProfile?.companyName || userProfile?.name || 'Company',
-      employerPhone: userProfile?.phoneNumber || '',
-      jobDate: formatDateForStorage(jobDate), // Use correct format for storage
-      startTime: formatTimeForStorage(startTime),
-      endTime: formatTimeForStorage(endTime),
-      category: 'General', // Default category
-    };
+    try {
+      const totalPayment = calculateTotal();
+      const duration = calculateDuration();
+      
+      const jobData = {
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        rate: parseInt(rate),
+        employerId: user.uid,
+        companyName: userProfile?.companyName || userProfile?.name || 'Company',
+        employerPhone: userProfile?.phoneNumber || '',
+        jobDate: formatDateForStorage(jobDate),
+        startTime: formatTimeForStorage(startTime),
+        endTime: formatTimeForStorage(endTime),
+        category: 'General',
+      };
 
-    console.log('Posting job with data:', jobData);
+      const result = await createJobWithTiming(jobData);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to post job');
+      }
 
-    const result = await createJobWithTiming(jobData);
-    setLoading(false);
+      const jobId = result.jobId;
+      
+      // Create platform fee record if applicable
+      if (feeInfo && !feeInfo.isFree && feeInfo.platformFee > 0) {
+        const feeData = {
+          employerId: user.uid,
+          jobId: jobId,
+          jobTitle: title.trim(),
+          amount: feeInfo.platformFee,
+          totalJobPayment: totalPayment,
+          paymentOption: feePaymentData?.paymentOption || 'later',
+          status: feePaymentData?.paymentOption === 'now' ? 'paid' : 'pending',
+          needsPayment: false
+        };
 
-    if (result.success) {
-      Alert.alert(
-        '🎉 Success!', 
-        `Job posted successfully!\n\n📅 Date: ${formatDateForDisplay(jobDate)}\n🕐 Time: ${formatTime(startTime)} - ${formatTime(endTime)}\n⏱️ Duration: ${duration} hours\n💰 Total Payment: ₹${calculateTotal()}`,
-        [
-          {
-            text: 'View Jobs',
-            onPress: () => navigation.navigate('EmployerHome'),
-          },
-          {
-            text: 'Post Another',
-            style: 'cancel',
-          },
-        ]
-      );
-    } else {
-      Alert.alert('❌ Error', result.error || 'Failed to post job. Please try again.');
+        await createPlatformFee(feeData);
+      }
+
+      // Navigate to success screen
+      navigation.replace('PostJobSuccess', {
+        jobData: {
+          jobId: jobId,
+          title: title.trim(),
+          description: description.trim(),
+          location: location.trim(),
+          jobDate: formatDateForDisplay(jobDate),
+          startTime: formatTime(startTime),
+          endTime: formatTime(endTime),
+          duration: duration,
+          rate: parseInt(rate),
+          totalPayment: totalPayment,
+          platformFee: feeInfo?.platformFee || 0
+        },
+        isPaid: feePaymentData?.paymentOption === 'now'
+      });
+
+    } catch (error) {
+      console.error('❌ Error in job posting:', error);
+      Alert.alert('Error', error.message || 'Failed to post job. Please try again.');
+    } finally {
+      setLoading(false);
+      setProcessingFee(false);
     }
   };
 
@@ -179,12 +476,55 @@ export default function PostJobScreen({ navigation }) {
     setJobDate(new Date());
     setStartTime(new Date());
     setEndTime(new Date());
+    setFeeInfo(null);
+    setShowFeeModal(false);
+    setSelectedPaymentOption(null);
   };
+
+  const handleBackPress = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('EmployerHome');
+    }
+  };
+
+  if (checkingEligibility) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Checking eligibility...</Text>
+      </View>
+    );
+  }
+
+  if (pendingFeesExist) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            onPress={handleBackPress}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonIcon}>←</Text>
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Post New Job</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <View style={styles.centerContent}>
+          <Text style={styles.errorIcon}>💰</Text>
+          <Text style={styles.errorText}>Please clear pending fees to post new jobs</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
       
@@ -192,7 +532,7 @@ export default function PostJobScreen({ navigation }) {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <TouchableOpacity 
-            onPress={() => navigation.goBack()}
+            onPress={handleBackPress}
             style={styles.backButton}
           >
             <Text style={styles.backButtonIcon}>←</Text>
@@ -212,7 +552,18 @@ export default function PostJobScreen({ navigation }) {
         style={styles.content} 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
       >
+        {/* Free Jobs Remaining Banner */}
+        {feeInfo?.isFree && (
+          <View style={styles.freeBanner}>
+            <Text style={styles.freeBannerIcon}>🎉</Text>
+            <Text style={styles.freeBannerText}>
+              Free job posting! {feeInfo.freeJobsRemaining} free post{feeInfo.freeJobsRemaining !== 1 ? 's' : ''} remaining
+            </Text>
+          </View>
+        )}
+
         {/* Job Details Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
@@ -230,6 +581,7 @@ export default function PostJobScreen({ navigation }) {
               placeholderTextColor={colors.textSecondary}
               value={title}
               onChangeText={setTitle}
+              returnKeyType="next"
             />
           </View>
 
@@ -246,6 +598,7 @@ export default function PostJobScreen({ navigation }) {
               multiline
               numberOfLines={4}
               textAlignVertical="top"
+              returnKeyType="next"
             />
           </View>
 
@@ -259,6 +612,7 @@ export default function PostJobScreen({ navigation }) {
               placeholderTextColor={colors.textSecondary}
               value={location}
               onChangeText={setLocation}
+              returnKeyType="done"
             />
           </View>
         </View>
@@ -314,7 +668,6 @@ export default function PostJobScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Duration Display */}
           {calculateDuration() > 0 && (
             <View style={styles.durationBadge}>
               <Text style={styles.durationIcon}>⏱️</Text>
@@ -345,13 +698,13 @@ export default function PostJobScreen({ navigation }) {
                 keyboardType="numeric"
                 value={rate}
                 onChangeText={(text) => setRate(text.replace(/[^0-9]/g, ''))}
+                returnKeyType="done"
               />
               <Text style={styles.perHourText}>/ hour</Text>
             </View>
             <Text style={styles.hint}>Minimum rate: ₹50/hour</Text>
           </View>
 
-          {/* Payment Summary */}
           {calculateDuration() > 0 && rate && (
             <View style={styles.paymentSummary}>
               <View style={styles.paymentRow}>
@@ -409,11 +762,11 @@ export default function PostJobScreen({ navigation }) {
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
-            style={[styles.postButton, loading && styles.disabledButton]}
+            style={[styles.postButton, (loading || processingFee) && styles.disabledButton]}
             onPress={handlePostJob}
-            disabled={loading}
+            disabled={loading || processingFee}
           >
-            {loading ? (
+            {(loading || processingFee) ? (
               <ActivityIndicator color={colors.white} size="small" />
             ) : (
               <>
@@ -425,8 +778,8 @@ export default function PostJobScreen({ navigation }) {
 
           <TouchableOpacity
             style={styles.cancelButton}
-            onPress={() => navigation.goBack()}
-            disabled={loading}
+            onPress={handleBackPress}
+            disabled={loading || processingFee}
           >
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
@@ -438,6 +791,81 @@ export default function PostJobScreen({ navigation }) {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      {/* Platform Fee Modal */}
+      <Modal
+        visible={showFeeModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowFeeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>💰 Platform Fee</Text>
+            
+            <View style={styles.feeInfoBox}>
+              <Text style={styles.feeAmount}>₹{feeInfo?.platformFee || 0}</Text>
+              <Text style={styles.feeDescription}>
+                5% platform fee on total payment of ₹{calculateTotal()}
+              </Text>
+            </View>
+
+            <Text style={styles.modalSubtitle}>Choose Payment Option:</Text>
+
+            <TouchableOpacity
+              style={[styles.paymentOptionCard, !razorpayEnabled && styles.disabledOption]}
+              onPress={() => handleFeePaymentSelection('now')}
+              disabled={!razorpayEnabled || processingFee}
+            >
+              <View style={styles.optionHeader}>
+                <Text style={styles.optionIcon}>💳</Text>
+                <View style={styles.optionInfo}>
+                  <Text style={styles.optionTitle}>Pay Now</Text>
+                  <Text style={styles.optionSubtitle}>
+                    {razorpayEnabled 
+                      ? 'Instant online payment via UPI/Card'
+                      : 'Currently unavailable'}
+                  </Text>
+                </View>
+                {processingFee && selectedPaymentOption === 'now' && (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.paymentOptionCard, processingFee && styles.disabledOption]}
+              onPress={() => handleFeePaymentSelection('later')}
+              disabled={processingFee}
+            >
+              <View style={styles.optionHeader}>
+                <Text style={styles.optionIcon}>⏰</Text>
+                <View style={styles.optionInfo}>
+                  <Text style={styles.optionTitle}>Pay After Job Completion</Text>
+                  <Text style={styles.optionSubtitle}>
+                    Post now, pay when job is completed
+                  </Text>
+                </View>
+                {processingFee && selectedPaymentOption === 'later' && (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            <Text style={styles.modalNote}>
+              ℹ️ If you choose "Pay Later", payment will be required before posting your next job.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowFeeModal(false)}
+              disabled={processingFee}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -447,11 +875,37 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 18,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
   header: {
     backgroundColor: colors.white,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 50 : 40,
   },
   headerContent: {
     flexDirection: 'row',
@@ -493,6 +947,26 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
+  },
+  freeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success + '20',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.success,
+  },
+  freeBannerIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  freeBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.success,
   },
   card: {
     backgroundColor: colors.white,
@@ -556,7 +1030,6 @@ const styles = StyleSheet.create({
   dateTimeIcon: {
     fontSize: 18,
     marginRight: 12,
-    color: colors.textSecondary,
   },
   dateTimeText: {
     flex: 1,
@@ -567,7 +1040,6 @@ const styles = StyleSheet.create({
   dateTimeArrow: {
     fontSize: 20,
     color: colors.textSecondary,
-    fontWeight: '300',
   },
   timeRow: {
     flexDirection: 'row',
@@ -716,5 +1188,105 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 40,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 30,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  feeInfoBox: {
+    backgroundColor: colors.primary + '20',
+    padding: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 24,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  feeAmount: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  feeDescription: {
+    fontSize: 14,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 16,
+  },
+  paymentOptionCard: {
+    backgroundColor: colors.background,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  disabledOption: {
+    opacity: 0.5,
+  },
+  optionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  optionIcon: {
+    fontSize: 32,
+    marginRight: 16,
+  },
+  optionInfo: {
+    flex: 1,
+  },
+  optionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  optionSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  modalNote: {
+    fontSize: 13,
+    color: colors.info,
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  modalCancelButton: {
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
 });

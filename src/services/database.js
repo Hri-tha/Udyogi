@@ -17,6 +17,7 @@ import {
   arrayRemove
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { updateFeeOnJobCompletion } from './platformFeeService';
 
 // ========== JOB FUNCTIONS ==========
 
@@ -1409,31 +1410,13 @@ export const processPayment = async (applicationId, paymentData) => {
       return { success: false, error: 'Application not found' };
     }
 
-    // Use calculated payment if available, otherwise use the provided amount
     const finalAmount = application.calculatedPayment || paymentData.amount;
     
-    console.log('Processing Payment:', {
-      providedAmount: paymentData.amount,
-      calculatedPayment: application.calculatedPayment,
-      finalAmount: finalAmount,
-      actualWorkDuration: application.actualWorkDuration,
-      hourlyRate: application.hourlyRate
-    });
-
-    // CRITICAL FIX: Ensure all required fields have values
     const employerName = application.employerName || 'Employer';
     const workerName = application.workerName || 'Worker';
     const jobTitle = application.jobTitle || 'Job';
     const actualWorkDuration = application.actualWorkDuration || 0;
     const hourlyRate = application.hourlyRate || 0;
-
-    console.log('Payment data validation:', {
-      employerName,
-      workerName,
-      jobTitle,
-      actualWorkDuration,
-      hourlyRate
-    });
 
     // Update application with payment details
     await updateDoc(appRef, {
@@ -1442,9 +1425,9 @@ export const processPayment = async (applicationId, paymentData) => {
       paymentMethod: paymentData.method,
       paymentNotes: paymentData.notes || '',
       paidAt: serverTimestamp(),
-      status: 'completed', // CRITICAL: Change from 'awaiting_rating' to 'completed'
+      status: 'completed',
       hasRating: false,
-      journeyStatus: 'completed', // Ensure journey status is also completed
+      journeyStatus: 'completed',
     });
 
     // Update job status to completed
@@ -1474,7 +1457,7 @@ export const processPayment = async (applicationId, paymentData) => {
       totalHires: (employerData.totalHires || 0) + 1,
     });
 
-    // Add to worker's earnings history - FIXED: Ensure no undefined values
+    // Add to worker's earnings history
     const earningsData = {
       workerId: application.workerId,
       applicationId: applicationId,
@@ -1488,10 +1471,27 @@ export const processPayment = async (applicationId, paymentData) => {
       paidAt: serverTimestamp(),
       createdAt: serverTimestamp()
     };
-
-    console.log('Creating earnings record:', earningsData);
     
     await addDoc(collection(db, 'earnings'), earningsData);
+
+    // 🆕 UPDATE PLATFORM FEE STATUS - Mark as due for payment
+    try {
+      const feeUpdateResult = await updateFeeOnJobCompletion(application.jobId);
+      
+      if (feeUpdateResult.success && feeUpdateResult.feeAmount) {
+        // Send notification to employer about platform fee due
+        await createNotification(application.employerId, {
+          title: '💰 Platform Fee Due',
+          message: `Your job "${jobTitle}" is complete. Platform fee of ₹${feeUpdateResult.feeAmount} is now due.`,
+          type: 'platform_fee_due',
+          actionType: 'pay_platform_fee',
+          actionId: feeUpdateResult.feeId,
+        });
+      }
+    } catch (feeError) {
+      console.error('Error updating platform fee:', feeError);
+      // Don't fail payment processing if fee update fails
+    }
 
     // Send notifications
     await createNotification(application.workerId, {
@@ -1515,6 +1515,7 @@ export const processPayment = async (applicationId, paymentData) => {
     return { success: false, error: error.message };
   }
 };
+
 
 
 /**
@@ -1936,17 +1937,8 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
       return { success: false, error: 'Application not found' };
     }
 
-    // Use calculated payment if available, otherwise use the provided amount
     const finalAmount = application.calculatedPayment || paymentData.amount;
     
-    console.log('Processing Online Payment:', {
-      providedAmount: paymentData.amount,
-      calculatedPayment: application.calculatedPayment,
-      finalAmount: finalAmount,
-      actualWorkDuration: application.actualWorkDuration
-    });
-
-    // CRITICAL FIX: Ensure all required fields have values
     const employerName = application.employerName || 'Employer';
     const workerName = application.workerName || 'Worker';
     const jobTitle = application.jobTitle || 'Job';
@@ -1972,9 +1964,9 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
       paymentProvider: 'razorpay',
       paymentDetails: paymentRecord,
       paidAt: serverTimestamp(),
-      status: 'completed', // CRITICAL: Change from 'awaiting_rating' to 'completed'
+      status: 'completed',
       hasRating: false,
-      journeyStatus: 'completed', // Ensure journey status is also completed
+      journeyStatus: 'completed',
     });
 
     // Update job status to completed
@@ -2007,7 +1999,7 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
       onlinePayments: (employerData.onlinePayments || 0) + finalAmount
     });
 
-    // Add to worker's earnings history - FIXED: Ensure no undefined values
+    // Add to worker's earnings history
     const earningsData = {
       workerId: application.workerId,
       applicationId: applicationId,
@@ -2023,10 +2015,27 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
       paidAt: serverTimestamp(),
       createdAt: serverTimestamp()
     };
-
-    console.log('Creating online earnings record:', earningsData);
     
     await addDoc(collection(db, 'earnings'), earningsData);
+
+    // 🆕 UPDATE PLATFORM FEE STATUS - Mark as due for payment
+    try {
+      const feeUpdateResult = await updateFeeOnJobCompletion(application.jobId);
+      
+      if (feeUpdateResult.success && feeUpdateResult.feeAmount) {
+        // Send notification to employer about platform fee due
+        await createNotification(application.employerId, {
+          title: '💰 Platform Fee Due',
+          message: `Your job "${jobTitle}" is complete. Platform fee of ₹${feeUpdateResult.feeAmount} is now due.`,
+          type: 'platform_fee_due',
+          actionType: 'pay_platform_fee',
+          actionId: feeUpdateResult.feeId,
+        });
+      }
+    } catch (feeError) {
+      console.error('Error updating platform fee:', feeError);
+      // Don't fail payment processing if fee update fails
+    }
 
     // Send notifications
     await createNotification(application.workerId, {

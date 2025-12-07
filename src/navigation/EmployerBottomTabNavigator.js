@@ -1,14 +1,18 @@
-// src/navigation/EmployerBottomTabNavigator.js - UPDATED
+// src/navigation/EmployerBottomTabNavigator.js - COMPLETE UPDATED
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, Text } from 'react-native';
 import EmployerHomeScreen from '../screens/employer/EmployerHomeScreen';
+import PostJobScreen from '../screens/employer/PostJobScreen';
 import ApplicationsScreen from '../screens/employer/ApplicationsScreen';
 import EmployerProfileScreen from '../screens/employer/EmployerProfileScreen';
 import NotificationsScreen from '../screens/common/NotificationsScreen';
 import EmployerJobTrackingScreen from '../screens/employer/EmployerJobTrackingScreen';
 import PaymentProcessingScreen from '../screens/employer/PaymentProcessingScreen';
+import CompleteJobScreen from '../screens/employer/CompleteJobScreen';
+import PlatformFeePaymentScreen from '../screens/employer/PlatformFeePaymentScreen';
+import PostJobSuccessScreen from '../screens/employer/PostJobSuccessScreen';
 import { colors } from '../constants/colors';
 
 // Import the employer banner
@@ -22,9 +26,10 @@ const TabIcon = ({ name, focused }) => {
   const getIconChar = (iconName) => {
     const iconMap = {
       'home': '🏠',
+      'post-job': '📤',
       'applications': '📄',
-      'profile': '👤',
       'notifications': '🔔',
+      'profile': '👤',
     };
     return iconMap[iconName] || '❓';
   };
@@ -44,7 +49,22 @@ function HomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="EmployerHomeMain" component={EmployerHomeScreen} />
+      <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
+      <Stack.Screen name="PostJobSuccess" component={PostJobSuccessScreen} />
       <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
+      <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
+      <Stack.Screen name="CompleteJob" component={CompleteJobScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Post Job Stack Navigator
+function PostJobStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="PostJobMain" component={PostJobScreen} />
+      <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
+      <Stack.Screen name="PostJobSuccess" component={PostJobSuccessScreen} />
       <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
     </Stack.Navigator>
   );
@@ -57,6 +77,8 @@ function ApplicationsStack() {
       <Stack.Screen name="ApplicationsMain" component={ApplicationsScreen} />
       <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
       <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
+      <Stack.Screen name="CompleteJob" component={CompleteJobScreen} />
+      <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
     </Stack.Navigator>
   );
 }
@@ -66,6 +88,7 @@ function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="EmployerProfileMain" component={EmployerProfileScreen} />
+      <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
     </Stack.Navigator>
   );
 }
@@ -75,6 +98,9 @@ function NotificationsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="NotificationsMain" component={NotificationsScreen} />
+      <Stack.Screen name="Applications" component={ApplicationsScreen} />
+      <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
+      <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
     </Stack.Navigator>
   );
 }
@@ -103,11 +129,19 @@ const TabNavigatorWithBanner = () => {
         }}
       >
         <Tab.Screen 
-          name="EmployerHome" 
+          name="Home" 
           component={HomeStack}
           options={{
             tabBarLabel: 'Home',
             tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
+          }}
+        />
+        <Tab.Screen 
+          name="PostJob" 
+          component={PostJobStack}
+          options={{
+            tabBarLabel: 'Post Job',
+            tabBarIcon: ({ focused }) => <TabIcon name="post-job" focused={focused} />,
           }}
         />
         <Tab.Screen 
@@ -127,7 +161,7 @@ const TabNavigatorWithBanner = () => {
           }}
         />
         <Tab.Screen 
-          name="EmployerProfile" 
+          name="Profile" 
           component={ProfileStack}
           options={{
             tabBarLabel: 'Profile',
