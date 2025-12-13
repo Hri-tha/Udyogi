@@ -140,6 +140,9 @@ export default function LoginScreen({ navigation, route }) {
         const userCredential = await signInWithCustomToken(auth, result.data.customToken);
         const userId = userCredential.user.uid;
 
+        // Navigate to LoadingScreen immediately after successful verification
+        navigation.replace('Loading');
+
         // Check if user profile exists
         const userDocRef = doc(db, 'users', userId);
         const userDoc = await getDoc(userDocRef);
@@ -157,12 +160,7 @@ export default function LoginScreen({ navigation, route }) {
                 {
                   text: 'Switch',
                   onPress: () => {
-                    // Clear current state
-                    setPhoneNumber('');
-                    setOtp('');
-                    setOtpSent(false);
-
-                    // Navigate to login with correct user type
+                    // Navigate back to login with correct user type
                     navigation.replace('Login', { userType: userData.userType });
                   }
                 }
@@ -178,7 +176,7 @@ export default function LoginScreen({ navigation, route }) {
             navigation.replace('EmployerMain');
           }
         } else {
-          // New user
+          // New user - navigate to ProfileSetup
           await setDoc(userDocRef, {
             uid: userId,
             phoneNumber: '+91' + phoneNumber,
@@ -201,9 +199,9 @@ export default function LoginScreen({ navigation, route }) {
         errorMessage = 'OTP verification timeout. Please try again.';
       }
 
+      // Navigate back to login on error
+      navigation.replace('Login', { userType });
       Alert.alert('Verification Failed', errorMessage);
-    } finally {
-      setLoading(false);
     }
   };
 

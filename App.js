@@ -1,5 +1,4 @@
-// App.js – Updated Version with Platform Fee Payment Screen and PostJobSuccessScreen
-
+// App.js – Updated Version
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -17,8 +16,10 @@ import WelcomeScreen from './src/screens/auth/WelcomeScreen';
 import LanguageScreen from './src/screens/auth/LanguageScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import ProfileSetupScreen from './src/screens/auth/ProfileSetupScreen';
+import LoadingScreen from './src/screens/LoadingScreen'; // Add this import
 
 // Screens - Worker
+import WorkerHomeScreen from './src/screens/worker/WorkerHomeScreen'; // Add this if missing
 import JobDetailsScreen from './src/screens/worker/JobDetailsScreen';
 import LocationFilterScreen from './src/screens/worker/LocationFilterScreen';
 import JobTrackingScreen from './src/screens/worker/JobTrackingScreen';
@@ -136,6 +137,13 @@ function AppContent() {
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
           </>
         )}
+        
+        {/* Add Loading Screen route */}
+        <Stack.Screen 
+          name="Loading" 
+          component={LoadingScreen} 
+          options={{ headerShown: false }}
+        />
       </Stack.Navigator>
 
       {/* Global Job Tracking Banner - Only for Workers */}

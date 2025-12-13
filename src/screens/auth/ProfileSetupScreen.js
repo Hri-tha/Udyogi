@@ -1,3 +1,4 @@
+// src/screens/auth/ProfileSetupScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -15,7 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function ProfileSetupScreen({ navigation, route }) {
   const { userType } = route?.params || { userType: 'worker' };
-  const { user, updateUserProfile } = useAuth();
+  const { user, userProfile, updateUserProfile } = useAuth();
   
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
@@ -24,10 +25,26 @@ export default function ProfileSetupScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(true);
 
   useEffect(() => {
-    getCurrentLocation();
-  }, []);
+    // Check if user already has a profile
+    const checkExistingProfile = async () => {
+      if (userProfile && userProfile.name) {
+        // User already has a profile, redirect to main screen
+        if (userType === 'worker') {
+          navigation.replace('WorkerMain');
+        } else {
+          navigation.replace('EmployerMain');
+        }
+      } else {
+        setCheckingProfile(false);
+        getCurrentLocation();
+      }
+    };
+
+    checkExistingProfile();
+  }, [userProfile, navigation, userType]);
 
   const getCurrentLocation = async () => {
     setLocationLoading(true);
@@ -133,6 +150,15 @@ export default function ProfileSetupScreen({ navigation, route }) {
     }
   };
 
+  if (checkingProfile) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Checking your profile...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -232,6 +258,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
   header: {
     alignItems: 'center',
