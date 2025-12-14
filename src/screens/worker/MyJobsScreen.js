@@ -1,4 +1,4 @@
-// src/screens/worker/MyJobsScreen.js
+// src/screens/worker/MyJobsScreen.js - HINDI VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useJob } from '../../context/JobContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { colors } from '../../constants/colors';
 import { fetchWorkerApplications } from '../../services/database';
 
@@ -24,6 +25,109 @@ const MyJobsScreen = ({ navigation }) => {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const { jobs, fetchJobs } = useJob();
   const { user, userProfile } = useAuth();
+  const { locale, t } = useLanguage();
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      greeting: 'Hello,',
+      applications: 'Applications',
+      statsTitle: 'Filter Applications',
+      allApplications: 'All Applications',
+      acceptedApplications: 'Accepted Applications',
+      pendingApplications: 'Pending Applications',
+      rejectedApplications: 'Rejected Applications',
+      accepted: 'Accepted',
+      pending: 'Pending',
+      rejected: 'Rejected',
+      all: 'All',
+      total: 'Total',
+      appliedOn: 'Applied',
+      perDay: '/day',
+      perHour: '/hour',
+      congratulations: "Congratulations! You've been selected for this job.",
+      beingReviewed: 'Your application is being reviewed by the employer',
+      keepTrying: 'Keep trying! More opportunities are waiting for you.',
+      trackJob: 'Track Job',
+      location: 'Location',
+      chat: 'Chat',
+      jobDetails: 'Job Details',
+      findSimilarJobs: 'Find Similar Jobs',
+      noApplications: 'No applications yet',
+      noFilteredApplications: 'No {filter} applications',
+      startApplying: 'Start applying to jobs and track them here',
+      tryDifferentFilter: 'Try selecting a different filter',
+      browseJobs: 'Browse Jobs',
+      readyToStart: 'Ready to Start',
+      onTheWay: 'On the Way',
+      reachedLocation: 'Reached Location',
+      workStarted: 'Work Started',
+      workCompleted: 'Work Completed',
+      locationNotAvailable: 'Location Not Available',
+      locationNotShared: 'The employer has not shared their location yet.',
+      chatNotAvailable: 'Chat Not Available',
+      chatNotEnabled: 'Chat is not yet enabled for this application.',
+      trackingNotAvailable: 'Not Available',
+      trackingForAccepted: 'Job tracking is only available for accepted applications.',
+      errorLoading: 'Error loading applications',
+      failedToLoad: 'Failed to load applications',
+      currentStatus: 'Current status: {status}',
+      loading: 'Loading...',
+      today: 'Today',
+      yesterday: 'Yesterday',
+      recent: 'Recent',
+    },
+    hi: {
+      greeting: 'नमस्ते,',
+      applications: 'आवेदन',
+      statsTitle: 'आवेदन फ़िल्टर करें',
+      allApplications: 'सभी आवेदन',
+      acceptedApplications: 'स्वीकृत आवेदन',
+      pendingApplications: 'लंबित आवेदन',
+      rejectedApplications: 'अस्वीकृत आवेदन',
+      accepted: 'स्वीकृत',
+      pending: 'लंबित',
+      rejected: 'अस्वीकृत',
+      all: 'सभी',
+      total: 'कुल',
+      appliedOn: 'आवेदन किया',
+      perDay: '/दिन',
+      perHour: '/घंटा',
+      congratulations: 'बधाई हो! आपको इस नौकरी के लिए चुना गया है।',
+      beingReviewed: 'आपका आवेदन नियोक्ता द्वारा समीक्षा के लिए है',
+      keepTrying: 'कोशिश जारी रखें! आपके लिए और अवसर इंतज़ार कर रहे हैं।',
+      trackJob: 'नौकरी ट्रैक करें',
+      location: 'स्थान',
+      chat: 'चैट',
+      jobDetails: 'नौकरी विवरण',
+      findSimilarJobs: 'समान नौकरियां खोजें',
+      noApplications: 'अभी तक कोई आवेदन नहीं',
+      noFilteredApplications: 'कोई {filter} आवेदन नहीं',
+      startApplying: 'नौकरियों के लिए आवेदन करना शुरू करें और उन्हें यहां ट्रैक करें',
+      tryDifferentFilter: 'एक अलग फ़िल्टर चुनने का प्रयास करें',
+      browseJobs: 'नौकरियां ब्राउज़ करें',
+      readyToStart: 'शुरुआत के लिए तैयार',
+      onTheWay: 'रास्ते में',
+      reachedLocation: 'स्थान पर पहुंचे',
+      workStarted: 'काम शुरू हुआ',
+      workCompleted: 'काम पूरा हुआ',
+      locationNotAvailable: 'स्थान उपलब्ध नहीं',
+      locationNotShared: 'नियोक्ता ने अभी तक अपना स्थान साझा नहीं किया है।',
+      chatNotAvailable: 'चैट उपलब्ध नहीं',
+      chatNotEnabled: 'चैट अभी तक इस आवेदन के लिए सक्षम नहीं है।',
+      trackingNotAvailable: 'उपलब्ध नहीं',
+      trackingForAccepted: 'नौकरी ट्रैकिंग केवल स्वीकृत आवेदनों के लिए उपलब्ध है।',
+      errorLoading: 'आवेदन लोड करने में त्रुटि',
+      failedToLoad: 'आवेदन लोड करने में विफल',
+      currentStatus: 'वर्तमान स्थिति: {status}',
+      loading: 'लोड हो रहा है...',
+      today: 'आज',
+      yesterday: 'कल',
+      recent: 'हालिया',
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   useEffect(() => {
     loadApplications();
@@ -37,7 +141,10 @@ const MyJobsScreen = ({ navigation }) => {
       }
     } catch (error) {
       console.error('Error loading applications:', error);
-      Alert.alert('Error', 'Failed to load applications');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        tr.failedToLoad
+      );
     }
   };
 
@@ -59,7 +166,7 @@ const MyJobsScreen = ({ navigation }) => {
           color: colors.success,
           bg: colors.successLight,
           icon: '✓',
-          text: 'Accepted',
+          text: tr.accepted,
           emoji: '🎉'
         };
       case 'rejected':
@@ -67,7 +174,7 @@ const MyJobsScreen = ({ navigation }) => {
           color: colors.error,
           bg: colors.errorLight,
           icon: '✕',
-          text: 'Rejected',
+          text: tr.rejected,
           emoji: '😔'
         };
       case 'pending':
@@ -75,7 +182,7 @@ const MyJobsScreen = ({ navigation }) => {
           color: colors.warning,
           bg: colors.warningLight,
           icon: '⏱',
-          text: 'Pending',
+          text: tr.pending,
           emoji: '⏳'
         };
       default:
@@ -96,6 +203,38 @@ const MyJobsScreen = ({ navigation }) => {
     const rejected = myApplications.filter(a => a.status === 'rejected').length;
     
     return { total, accepted, pending, rejected };
+  };
+
+  const getFilterLabel = (filter) => {
+    switch (filter) {
+      case 'all': return tr.all;
+      case 'accepted': return tr.accepted;
+      case 'pending': return tr.pending;
+      case 'rejected': return tr.rejected;
+      default: return filter;
+    }
+  };
+
+  const getFilterCountLabel = (filter) => {
+    const count = getStatsData()[filter === 'all' ? 'total' : filter];
+    return count > 0 ? count : 0;
+  };
+
+  const formatApplicationDate = (date) => {
+    if (!date?.toDate) return tr.recent;
+    
+    const appliedDate = date.toDate();
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (appliedDate.toDateString() === today.toDateString()) {
+      return `${tr.today}, ${appliedDate.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')}`;
+    } else if (appliedDate.toDateString() === yesterday.toDateString()) {
+      return `${tr.yesterday}, ${appliedDate.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')}`;
+    } else {
+      return `${tr.appliedOn} ${appliedDate.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')}`;
+    }
   };
 
   const stats = getStatsData();
@@ -148,7 +287,10 @@ const MyJobsScreen = ({ navigation }) => {
         isEmployer: false 
       });
     } else {
-      Alert.alert('Location Not Available', 'The employer has not shared their location yet.');
+      Alert.alert(
+        tr.locationNotAvailable,
+        tr.locationNotShared
+      );
     }
   };
 
@@ -161,7 +303,10 @@ const MyJobsScreen = ({ navigation }) => {
         otherUserName: application.companyName || 'Employer'
       });
     } else {
-      Alert.alert('Chat Not Available', 'Chat is not yet enabled for this application.');
+      Alert.alert(
+        tr.chatNotAvailable,
+        tr.chatNotEnabled
+      );
     }
   };
 
@@ -171,7 +316,10 @@ const MyJobsScreen = ({ navigation }) => {
         applicationId: application.id 
       });
     } else {
-      Alert.alert('Not Available', 'Job tracking is only available for accepted applications.');
+      Alert.alert(
+        tr.trackingNotAvailable,
+        tr.trackingForAccepted
+      );
     }
   };
 
@@ -182,11 +330,11 @@ const MyJobsScreen = ({ navigation }) => {
     const journeyStatus = application.journeyStatus || 'accepted';
     
     const statusConfigs = {
-      'accepted': { text: 'Ready to Start', color: colors.info, icon: '📋' },
-      'onTheWay': { text: 'On the Way', color: colors.warning, icon: '🚗' },
-      'reached': { text: 'Reached Location', color: colors.info, icon: '📍' },
-      'started': { text: 'Work Started', color: colors.primary, icon: '▶️' },
-      'completed': { text: 'Work Completed', color: colors.success, icon: '✅' }
+      'accepted': { text: tr.readyToStart, color: colors.info, icon: '📋' },
+      'onTheWay': { text: tr.onTheWay, color: colors.warning, icon: '🚗' },
+      'reached': { text: tr.reachedLocation, color: colors.info, icon: '📍' },
+      'started': { text: tr.workStarted, color: colors.primary, icon: '▶️' },
+      'completed': { text: tr.workCompleted, color: colors.success, icon: '✅' }
     };
     
     const config = statusConfigs[journeyStatus] || statusConfigs.accepted;
@@ -201,17 +349,50 @@ const MyJobsScreen = ({ navigation }) => {
     );
   };
 
+  const getApplicationsTitle = () => {
+    switch (selectedFilter) {
+      case 'all':
+        return tr.allApplications;
+      case 'accepted':
+        return tr.acceptedApplications;
+      case 'pending':
+        return tr.pendingApplications;
+      case 'rejected':
+        return tr.rejectedApplications;
+      default:
+        return tr.allApplications;
+    }
+  };
+
+  const getEmptyStateText = () => {
+    if (selectedFilter === 'all') {
+      return {
+        title: tr.noApplications,
+        subtitle: tr.startApplying,
+        showCTA: true
+      };
+    } else {
+      return {
+        title: tr.noFilteredApplications.replace('{filter}', getFilterLabel(selectedFilter)),
+        subtitle: tr.tryDifferentFilter,
+        showCTA: false
+      };
+    }
+  };
+
+  const emptyState = getEmptyStateText();
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.greeting}>Hello,</Text>
-          <Text style={styles.userName}>{userProfile?.name || 'Worker'} 👋</Text>
+          <Text style={styles.greeting}>{tr.greeting}</Text>
+          <Text style={styles.userName}>{userProfile?.name || (locale === 'hi' ? 'मजदूर' : 'Worker')} 👋</Text>
         </View>
         <View style={styles.headerStats}>
           <Text style={styles.headerStatsText}>{stats.total}</Text>
-          <Text style={styles.headerStatsLabel}>Applications</Text>
+          <Text style={styles.headerStatsLabel}>{tr.applications}</Text>
         </View>
       </View>
 
@@ -230,19 +411,19 @@ const MyJobsScreen = ({ navigation }) => {
         {/* Stats Overview */}
         <View style={styles.statsContainer}>
           <StatCard 
-            label="Accepted" 
+            label={tr.accepted} 
             value={stats.accepted} 
             color={colors.success}
             icon="✓"
           />
           <StatCard 
-            label="Pending" 
+            label={tr.pending} 
             value={stats.pending} 
             color={colors.warning}
             icon="⏱"
           />
           <StatCard 
-            label="Total" 
+            label={tr.total} 
             value={stats.total} 
             color={colors.primary}
             icon="📊"
@@ -251,23 +432,23 @@ const MyJobsScreen = ({ navigation }) => {
 
         {/* Filter Buttons */}
         <View style={styles.filtersSection}>
-          <Text style={styles.sectionTitle}>Filter Applications</Text>
+          <Text style={styles.sectionTitle}>{tr.statsTitle}</Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filtersContainer}
           >
-            <FilterButton label="All" value="all" count={stats.total} />
-            <FilterButton label="Accepted" value="accepted" count={stats.accepted} />
-            <FilterButton label="Pending" value="pending" count={stats.pending} />
-            <FilterButton label="Rejected" value="rejected" count={stats.rejected} />
+            <FilterButton label={tr.all} value="all" count={getFilterCountLabel('all')} />
+            <FilterButton label={tr.accepted} value="accepted" count={getFilterCountLabel('accepted')} />
+            <FilterButton label={tr.pending} value="pending" count={getFilterCountLabel('pending')} />
+            <FilterButton label={tr.rejected} value="rejected" count={getFilterCountLabel('rejected')} />
           </ScrollView>
         </View>
 
         {/* Applications List */}
         <View style={styles.applicationsSection}>
           <Text style={styles.sectionTitle}>
-            {selectedFilter === 'all' ? 'All Applications' : `${selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} Applications`}
+            {getApplicationsTitle()}
           </Text>
           
           {filteredApplications.length === 0 ? (
@@ -276,21 +457,17 @@ const MyJobsScreen = ({ navigation }) => {
                 {selectedFilter === 'all' ? '📋' : getStatusConfig(selectedFilter).emoji}
               </Text>
               <Text style={styles.emptyText}>
-                {selectedFilter === 'all' 
-                  ? 'No applications yet' 
-                  : `No ${selectedFilter} applications`}
+                {emptyState.title}
               </Text>
               <Text style={styles.emptySubtext}>
-                {selectedFilter === 'all'
-                  ? 'Start applying to jobs and track them here'
-                  : 'Try selecting a different filter'}
+                {emptyState.subtitle}
               </Text>
-              {selectedFilter === 'all' && (
+              {emptyState.showCTA && (
                 <TouchableOpacity 
                   style={styles.ctaButton}
                   onPress={() => navigation.navigate('WorkerHome')}
                 >
-                  <Text style={styles.ctaButtonText}>Browse Jobs</Text>
+                  <Text style={styles.ctaButtonText}>{tr.browseJobs}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -332,23 +509,23 @@ const MyJobsScreen = ({ navigation }) => {
                       <View style={styles.detailRow}>
                         <Text style={styles.detailIcon}>📅</Text>
                         <Text style={styles.detailText}>
-                          Applied {application.appliedAt?.toDate().toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric',
-                            year: 'numeric'
-                          })}
+                          {formatApplicationDate(application.appliedAt)}
                         </Text>
                       </View>
                       {application.salary && (
                         <View style={styles.detailRow}>
                           <Text style={styles.detailIcon}>💰</Text>
-                          <Text style={styles.detailText}>₹{application.salary}/day</Text>
+                          <Text style={styles.detailText}>
+                            ₹{application.salary}{tr.perDay}
+                          </Text>
                         </View>
                       )}
                       {application.rate && (
                         <View style={styles.detailRow}>
                           <Text style={styles.detailIcon}>💰</Text>
-                          <Text style={styles.detailText}>₹{application.rate}/hour</Text>
+                          <Text style={styles.detailText}>
+                            ₹{application.rate}{tr.perHour}
+                          </Text>
                         </View>
                       )}
                     </View>
@@ -360,8 +537,8 @@ const MyJobsScreen = ({ navigation }) => {
                       <View style={styles.congratsBox}>
                         <Text style={styles.congratsEmoji}>🎉</Text>
                         <Text style={styles.congratsText}>
-                          Congratulations! You've been selected for this job.
-                          {application.journeyStatus && ` Current status: ${application.journeyStatus}`}
+                          {tr.congratulations}
+                          {application.journeyStatus && ` ${tr.currentStatus.replace('{status}', application.journeyStatus)}`}
                         </Text>
                       </View>
                       
@@ -371,7 +548,7 @@ const MyJobsScreen = ({ navigation }) => {
                           onPress={() => handleTrackJob(application)}
                         >
                           <Text style={styles.actionButtonIcon}>📱</Text>
-                          <Text style={styles.actionButtonLabel}>Track Job</Text>
+                          <Text style={styles.actionButtonLabel}>{tr.trackJob}</Text>
                         </TouchableOpacity>
                         
                         <TouchableOpacity 
@@ -379,7 +556,7 @@ const MyJobsScreen = ({ navigation }) => {
                           onPress={() => handleViewLocation(application)}
                         >
                           <Text style={styles.actionButtonIcon}>📍</Text>
-                          <Text style={styles.actionButtonLabel}>Location</Text>
+                          <Text style={styles.actionButtonLabel}>{tr.location}</Text>
                         </TouchableOpacity>
                         
                         <TouchableOpacity 
@@ -387,7 +564,7 @@ const MyJobsScreen = ({ navigation }) => {
                           onPress={() => handleOpenChat(application)}
                         >
                           <Text style={styles.actionButtonIcon}>💬</Text>
-                          <Text style={styles.actionButtonLabel}>Chat</Text>
+                          <Text style={styles.actionButtonLabel}>{tr.chat}</Text>
                         </TouchableOpacity>
                       </View>
 
@@ -397,7 +574,7 @@ const MyJobsScreen = ({ navigation }) => {
                           onPress={() => navigation.navigate('JobDetails', { jobId: application.jobId })}
                         >
                           <Text style={styles.actionButtonIcon}>📋</Text>
-                          <Text style={styles.actionButtonLabel}>Job Details</Text>
+                          <Text style={styles.actionButtonLabel}>{tr.jobDetails}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -408,7 +585,7 @@ const MyJobsScreen = ({ navigation }) => {
                       <View style={styles.infoBox}>
                         <Text style={styles.infoIcon}>⏳</Text>
                         <Text style={styles.infoText}>
-                          Your application is being reviewed by the employer
+                          {tr.beingReviewed}
                         </Text>
                       </View>
                     </View>
@@ -419,14 +596,14 @@ const MyJobsScreen = ({ navigation }) => {
                       <View style={styles.infoBox}>
                         <Text style={styles.infoIcon}>💼</Text>
                         <Text style={styles.infoText}>
-                          Keep trying! More opportunities are waiting for you.
+                          {tr.keepTrying}
                         </Text>
                       </View>
                       <TouchableOpacity 
                         style={styles.secondaryButton}
                         onPress={() => navigation.navigate('WorkerHome')}
                       >
-                        <Text style={styles.secondaryButtonText}>Find Similar Jobs</Text>
+                        <Text style={styles.secondaryButtonText}>{tr.findSimilarJobs}</Text>
                       </TouchableOpacity>
                     </View>
                   )}

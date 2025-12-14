@@ -1,4 +1,4 @@
-// src/screens/worker/JobLocationScreen.js
+// src/screens/worker/JobLocationScreen.js - HINDI VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,18 +9,82 @@ import {
   ActivityIndicator,
   ScrollView,
   StatusBar,
+  Linking,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { colors } from '../../constants/colors';
 
 export default function JobLocationScreen({ route, navigation }) {
   const { application } = route.params;
   const { user } = useAuth();
+  const { locale, t } = useLanguage();
+  
   const [location, setLocation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      headerTitle: 'Job Location',
+      backButton: '← Back',
+      loadingText: 'Loading location...',
+      locationNotAvailable: 'Location Not Available',
+      locationNotShared: 'The employer hasn\'t shared the location yet or there was an error loading it.',
+      jobTitle: 'Job Title',
+      workLocation: 'Work Location',
+      getDirections: '🚗 Get Directions',
+      beforeYouGo: 'Before You Go',
+      confirmArrival: 'Confirm your arrival time with the employer',
+      keepPhoneCharged: 'Keep your phone charged and accessible',
+      askSupervisor: 'Ask for the site supervisor when you arrive',
+      loadingMap: 'Loading map...',
+      openInMaps: 'Open in Maps',
+      navigateTo: 'Navigate to: {location}',
+      cancel: 'Cancel',
+      chat: '💬',
+      error: 'Error',
+      failedToLoad: 'Failed to load location',
+      openMaps: 'Open Maps',
+      coordinates: 'Coordinates',
+      additionalInfo: 'Additional Information',
+      success: 'Success',
+      directionsOpened: 'Directions opened in maps app',
+      mapError: 'Unable to open maps. Please install a maps app.',
+    },
+    hi: {
+      headerTitle: 'नौकरी स्थान',
+      backButton: '← वापस',
+      loadingText: 'स्थान लोड हो रहा है...',
+      locationNotAvailable: 'स्थान उपलब्ध नहीं',
+      locationNotShared: 'नियोक्ता ने अभी तक स्थान साझा नहीं किया है या लोड करने में त्रुटि हुई।',
+      jobTitle: 'नौकरी शीर्षक',
+      workLocation: 'काम का स्थान',
+      getDirections: '🚗 दिशा-निर्देश प्राप्त करें',
+      beforeYouGo: 'जाने से पहले',
+      confirmArrival: 'नियोक्ता के साथ अपने आगमन समय की पुष्टि करें',
+      keepPhoneCharged: 'अपना फोन चार्ज रखें और सुलभ रखें',
+      askSupervisor: 'पहुंचने पर साइट सुपरवाइजर से पूछें',
+      loadingMap: 'मानचित्र लोड हो रहा है...',
+      openInMaps: 'मानचित्र में खोलें',
+      navigateTo: 'नेविगेट करें: {location}',
+      cancel: 'रद्द करें',
+      chat: '💬',
+      error: 'त्रुटि',
+      failedToLoad: 'स्थान लोड करने में विफल',
+      openMaps: 'मानचित्र खोलें',
+      coordinates: 'निर्देशांक',
+      additionalInfo: 'अतिरिक्त जानकारी',
+      success: 'सफल',
+      directionsOpened: 'मानचित्र ऐप में दिशाएं खोली गईं',
+      mapError: 'मानचित्र खोलने में असमर्थ। कृपया एक मानचित्र ऐप इंस्टॉल करें।',
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   useEffect(() => {
     loadLocation();
@@ -35,25 +99,41 @@ export default function JobLocationScreen({ route, navigation }) {
       }
     } catch (error) {
       console.error('Error loading location:', error);
-      Alert.alert('Error', 'Failed to load location');
+      Alert.alert(tr.error, tr.failedToLoad);
     } finally {
       setLoading(false);
     }
   };
 
-  const openInMaps = () => {
+  const openInMaps = async () => {
     if (!location) return;
     
     const { latitude, longitude, address } = location;
+    const destination = address || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    
     const url = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`;
     
-    // You can use Linking.openURL(url) or a maps library
     Alert.alert(
-      'Open in Maps',
-      `Navigate to: ${address || 'Job Location'}`,
+      tr.openInMaps,
+      tr.navigateTo.replace('{location}', destination),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Open Maps', onPress: () => console.log('Open maps:', url) }
+        { text: tr.cancel, style: 'cancel' },
+        { 
+          text: tr.openMaps, 
+          onPress: async () => {
+            try {
+              const supported = await Linking.canOpenURL(url);
+              if (supported) {
+                await Linking.openURL(url);
+              } else {
+                Alert.alert(tr.error, tr.mapError);
+              }
+            } catch (error) {
+              console.error('Error opening maps:', error);
+              Alert.alert(tr.error, tr.failedToLoad);
+            }
+          }
+        }
       ]
     );
   };
@@ -66,11 +146,17 @@ export default function JobLocationScreen({ route, navigation }) {
     });
   };
 
+  const getAddressDisplay = () => {
+    if (!location) return '';
+    if (location.address) return location.address;
+    return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading location...</Text>
+        <Text style={styles.loadingText}>{tr.loadingText}</Text>
       </View>
     );
   }
@@ -81,17 +167,17 @@ export default function JobLocationScreen({ route, navigation }) {
         <StatusBar barStyle="dark-content" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Back</Text>
+            <Text style={styles.backButton}>{tr.backButton}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Job Location</Text>
+          <Text style={styles.headerTitle}>{tr.headerTitle}</Text>
           <View style={styles.headerRight} />
         </View>
         
         <View style={styles.errorContainer}>
           <Text style={styles.errorIcon}>📍</Text>
-          <Text style={styles.errorTitle}>Location Not Available</Text>
+          <Text style={styles.errorTitle}>{tr.locationNotAvailable}</Text>
           <Text style={styles.errorMessage}>
-            The employer hasn't shared the location yet or there was an error loading it.
+            {tr.locationNotShared}
           </Text>
         </View>
       </View>
@@ -105,15 +191,15 @@ export default function JobLocationScreen({ route, navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+          <Text style={styles.backButton}>{tr.backButton}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Job Location</Text>
+        <Text style={styles.headerTitle}>{tr.headerTitle}</Text>
         <TouchableOpacity onPress={handleChat}>
-          <Text style={styles.chatButton}>💬</Text>
+          <Text style={styles.chatButton}>{tr.chat}</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Location Details */}
         <View style={styles.locationCard}>
           <Text style={styles.jobTitle}>{application.jobTitle}</Text>
@@ -122,15 +208,15 @@ export default function JobLocationScreen({ route, navigation }) {
           <View style={styles.addressSection}>
             <Text style={styles.addressIcon}>📍</Text>
             <View style={styles.addressText}>
-              <Text style={styles.addressTitle}>Work Location</Text>
+              <Text style={styles.addressTitle}>{tr.workLocation}</Text>
               <Text style={styles.address}>
-                {location.address || `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`}
+                {getAddressDisplay()}
               </Text>
             </View>
           </View>
 
           <TouchableOpacity style={styles.navigateButton} onPress={openInMaps}>
-            <Text style={styles.navigateButtonText}>🚗 Get Directions</Text>
+            <Text style={styles.navigateButtonText}>{tr.getDirections}</Text>
           </TouchableOpacity>
         </View>
 
@@ -145,42 +231,79 @@ export default function JobLocationScreen({ route, navigation }) {
               longitudeDelta: 0.01,
             }}
             onMapReady={() => setMapReady(true)}
+            showsUserLocation={true}
+            showsMyLocationButton={true}
           >
             <Marker
               coordinate={{
                 latitude: location.latitude,
                 longitude: location.longitude,
               }}
-              title="Work Location"
+              title={tr.workLocation}
               description={application.companyName}
+              pinColor={colors.primary}
             />
           </MapView>
           
           {!mapReady && (
             <View style={styles.mapOverlay}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.mapLoadingText}>Loading map...</Text>
+              <Text style={styles.mapLoadingText}>{tr.loadingMap}</Text>
             </View>
           )}
         </View>
 
         {/* Additional Information */}
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Before You Go</Text>
+          <Text style={styles.infoTitle}>{tr.beforeYouGo}</Text>
           
           <View style={styles.infoItem}>
             <Text style={styles.infoIcon}>✅</Text>
-            <Text style={styles.infoText}>Confirm your arrival time with the employer</Text>
+            <Text style={styles.infoText}>{tr.confirmArrival}</Text>
           </View>
           
           <View style={styles.infoItem}>
             <Text style={styles.infoIcon}>📞</Text>
-            <Text style={styles.infoText}>Keep your phone charged and accessible</Text>
+            <Text style={styles.infoText}>{tr.keepPhoneCharged}</Text>
           </View>
           
           <View style={styles.infoItem}>
             <Text style={styles.infoIcon}>👥</Text>
-            <Text style={styles.infoText}>Ask for the site supervisor when you arrive</Text>
+            <Text style={styles.infoText}>{tr.askSupervisor}</Text>
+          </View>
+        </View>
+
+        {/* Safety Tips */}
+        <View style={[styles.infoCard, { marginTop: 0 }]}>
+          <Text style={styles.infoTitle}>
+            {locale === 'hi' ? 'सुरक्षा युक्तियाँ' : 'Safety Tips'}
+          </Text>
+          
+          <View style={styles.infoItem}>
+            <Text style={styles.infoIcon}>🛡️</Text>
+            <Text style={styles.infoText}>
+              {locale === 'hi' 
+                ? 'सार्वजनिक स्थान पर मिलें और अनुभव साझा करें'
+                : 'Meet in public places and share your experience'}
+            </Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Text style={styles.infoIcon}>📱</Text>
+            <Text style={styles.infoText}>
+              {locale === 'hi' 
+                ? 'आपात स्थिति के लिए आपातकालीन संपर्क साझा करें'
+                : 'Share emergency contact for emergencies'}
+            </Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Text style={styles.infoIcon}>⏰</Text>
+            <Text style={styles.infoText}>
+              {locale === 'hi' 
+                ? 'समय पर पहुंचें और व्यावसायिक रहें'
+                : 'Arrive on time and remain professional'}
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -239,6 +362,7 @@ const styles = StyleSheet.create({
   errorIcon: {
     fontSize: 64,
     marginBottom: 20,
+    opacity: 0.5,
   },
   errorTitle: {
     fontSize: 20,
@@ -256,6 +380,7 @@ const styles = StyleSheet.create({
   locationCard: {
     backgroundColor: colors.white,
     margin: 20,
+    marginBottom: 10,
     padding: 20,
     borderRadius: 16,
     shadowColor: colors.black,
@@ -305,6 +430,11 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   navigateButtonText: {
     color: colors.white,
@@ -313,9 +443,12 @@ const styles = StyleSheet.create({
   },
   mapContainer: {
     height: 300,
-    margin: 20,
+    marginHorizontal: 20,
+    marginVertical: 10,
     borderRadius: 16,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   map: {
     flex: 1,
@@ -333,7 +466,8 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     backgroundColor: colors.white,
-    margin: 20,
+    marginHorizontal: 20,
+    marginTop: 20,
     padding: 20,
     borderRadius: 16,
     shadowColor: colors.black,

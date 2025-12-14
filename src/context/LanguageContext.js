@@ -6,6 +6,37 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Create translations
 const translations = {
   en: {
+    login: {
+      title: "Enter Mobile Number",
+      titleOtp: "Enter Verification Code",
+      subtitle: "We'll send you a one-time password (OTP) to verify your number",
+      subtitleOtp: "We've sent a 6-digit code to +91 {phoneNumber}",
+      phonePlaceholder: "99999 99999",
+      sendOtp: "Send OTP",
+      verifyContinue: "Verify & Continue",
+      resendOtp: "↻ Resend OTP",
+      changeNumber: "✏️ Change Number",
+      continueAs: "Continue as",
+      terms: "By continuing, you agree to our Terms of Service and Privacy Policy",
+      needHelp: "Need help?",
+      contactSupport: "Contact our support team",
+      invalidNumber: "Invalid Number",
+      invalidNumberMessage: "Please enter a valid 10-digit mobile number",
+      invalidOtp: "Invalid OTP",
+      invalidOtpMessage: "Please enter the 6-digit OTP",
+      otpSentTitle: "OTP Sent",
+      otpSentMessage: "Development Mode: OTP is",
+      switchAccount: "Switch Account Type",
+      switchMessage: "Are you sure you want to switch from {from} to {to} login?",
+      switch: "Switch",
+      cancel: "Cancel",
+      verificationFailed: "Verification Failed",
+      error: "Error",
+      enterOtp: "Enter OTP",
+      worker: "Worker",
+      employer: "Employer",
+      tapToSwitch: "Tap to switch"
+    },
     welcome: {
       title: "Udyogi",
       subtitle: "Connect workers with opportunities.\nBuild your future today.",
@@ -23,6 +54,11 @@ const translations = {
       hindi: "हिन्दी",
       continue: "Continue"
     },
+    loading: {
+      loadingProfile: "Loading your profile...",
+      secureLogin: "Securely logging you in...",
+      tagline: "Connecting Skills & Opportunities"
+    },
     common: {
       loading: "Loading...",
       error: "Error",
@@ -32,6 +68,37 @@ const translations = {
     }
   },
   hi: {
+    login: {
+      title: "मोबाइल नंबर दर्ज करें",
+      titleOtp: "सत्यापन कोड दर्ज करें",
+      subtitle: "हम आपके नंबर को सत्यापित करने के लिए एक वन-टाइम पासवर्ड (OTP) भेजेंगे",
+      subtitleOtp: "हमने +91 {phoneNumber} पर 6-अंकीय कोड भेजा है",
+      phonePlaceholder: "99999 99999",
+      sendOtp: "OTP भेजें",
+      verifyContinue: "सत्यापित करें और जारी रखें",
+      resendOtp: "↻ OTP फिर से भेजें",
+      changeNumber: "✏️ नंबर बदलें",
+      continueAs: "के रूप में जारी रखें",
+      terms: "जारी रखकर, आप हमारी सेवा की शर्तों और गोपनीयता नीति से सहमत होते हैं",
+      needHelp: "मदद चाहिए?",
+      contactSupport: "हमारी सहायता टीम से संपर्क करें",
+      invalidNumber: "अमान्य नंबर",
+      invalidNumberMessage: "कृपया एक वैध 10-अंकीय मोबाइल नंबर दर्ज करें",
+      invalidOtp: "अमान्य OTP",
+      invalidOtpMessage: "कृपया 6-अंकीय OTP दर्ज करें",
+      otpSentTitle: "OTP भेजा गया",
+      otpSentMessage: "डेवलपमेंट मोड: OTP है",
+      switchAccount: "खाता प्रकार बदलें",
+      switchMessage: "क्या आप वाकई {from} से {to} लॉगिन में बदलना चाहते हैं?",
+      switch: "बदलें",
+      cancel: "रद्द करें",
+      verificationFailed: "सत्यापन विफल",
+      error: "त्रुटि",
+      enterOtp: "OTP दर्ज करें",
+      worker: "मजदूर",
+      employer: "नियोक्ता",
+      tapToSwitch: "बदलने के लिए टैप करें"
+    },
     welcome: {
       title: "उद्योगी",
       subtitle: "मजदूरों को अवसरों से जोड़ें।\nआज ही अपना भविष्य बनाएं।",
@@ -48,6 +115,11 @@ const translations = {
       english: "अंग्रेजी",
       hindi: "हिन्दी",
       continue: "जारी रखें"
+    },
+    loading: {
+      loadingProfile: "आपकी प्रोफाइल लोड हो रही है...",
+      secureLogin: "सुरक्षित रूप से आपको लॉग इन कर रहे हैं...",
+      tagline: "कौशल और अवसरों को जोड़ना"
     },
     common: {
       loading: "लोड हो रहा है...",
@@ -75,25 +147,25 @@ export const LanguageProvider = ({ children }) => {
     loadLanguagePreference();
   }, []);
 
- const loadLanguagePreference = async () => {
-  try {
-    const savedLanguage = await AsyncStorage.getItem('userLanguage');
-    const languageSelected = await AsyncStorage.getItem('isLanguageSelected');
+  const loadLanguagePreference = async () => {
+    try {
+      const savedLanguage = await AsyncStorage.getItem('userLanguage');
+      const languageSelected = await AsyncStorage.getItem('isLanguageSelected');
 
-    if (savedLanguage) {
-      setLocale(savedLanguage);
-      i18n.locale = savedLanguage;
-      setIsLanguageSelected(languageSelected === 'true');
-    } else {
+      if (savedLanguage) {
+        setLocale(savedLanguage);
+        i18n.locale = savedLanguage;
+        setIsLanguageSelected(languageSelected === 'true');
+      } else {
+        setIsLanguageSelected(false);
+      }
+    } catch (error) {
+      console.error('Error loading language preference:', error);
       setIsLanguageSelected(false);
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Error loading language preference:', error);
-    setIsLanguageSelected(false);
-  } finally {
-    setLoading(false); // ✅ Ensure loading stops no matter what
-  }
-};
+  };
 
   const changeLanguage = async (language) => {
     try {
@@ -108,7 +180,7 @@ export const LanguageProvider = ({ children }) => {
   };
 
   const t = (key) => {
-    return i18n.t(key) || key; // Return key if translation not found
+    return i18n.t(key) || key;
   };
 
   return (

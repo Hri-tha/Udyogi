@@ -1,4 +1,4 @@
-// src/screens/worker/WorkerHomeScreen.js - FIXED VERSION
+// src/screens/worker/WorkerHomeScreen.js - HINDI VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -15,10 +15,24 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useJob } from '../../context/JobContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { colors } from '../../constants/colors';
 import { fetchWorkerApplications, fetchFutureJobs } from '../../services/database';
 
 const { width } = Dimensions.get('window');
+
+// Hindi job categories
+const HINDI_CATEGORIES = [
+  { id: 'all', label: 'सभी', icon: '💼', english: 'All' },
+  { id: 'daily-worker', label: 'दैनिक मजदूर', icon: '🔨', english: 'Daily Worker' },
+  { id: 'barber', label: 'नाई', icon: '💈', english: 'Barber' },
+  { id: 'tailor', label: 'दर्जी', icon: '🧵', english: 'Tailor' },
+  { id: 'coder', label: 'कोडर', icon: '💻', english: 'Coder' },
+  { id: 'driver', label: 'ड्राइवर', icon: '🚗', english: 'Driver' },
+  { id: 'cleaner', label: 'सफाईकर्मी', icon: '🧹', english: 'Cleaner' },
+  { id: 'cook', label: 'रसोइया', icon: '👨‍🍳', english: 'Cook' },
+  { id: 'delivery', label: 'डिलीवरी', icon: '📦', english: 'Delivery' },
+];
 
 // Simple icon component
 const Icon = ({ name, size = 24, color = colors.text, style }) => {
@@ -52,22 +66,11 @@ const Icon = ({ name, size = 24, color = colors.text, style }) => {
   );
 };
 
-// Improved job categories with better sizing
-const DEFAULT_CATEGORIES = [
-  { id: 'all', label: 'All', icon: '💼' },
-  { id: 'daily-worker', label: 'Daily Worker', icon: '🔨' },
-  { id: 'barber', label: 'Barber', icon: '💈' },
-  { id: 'tailor', label: 'Tailor', icon: '🧵' },
-  { id: 'coder', label: 'Coder', icon: '💻' },
-  { id: 'driver', label: 'Driver', icon: '🚗' },
-  { id: 'cleaner', label: 'Cleaner', icon: '🧹' },
-  { id: 'cook', label: 'Cook', icon: '👨‍🍳' },
-  { id: 'delivery', label: 'Delivery', icon: '📦' },
-];
-
 function WorkerHomeScreen({ navigation }) {
   const { user, userProfile } = useAuth();
   const { currentLocation, fetchJobsByUserLocation } = useJob();
+  const { locale, t } = useLanguage();
+  
   const [refreshing, setRefreshing] = useState(false);
   const [myApplications, setMyApplications] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -76,6 +79,91 @@ function WorkerHomeScreen({ navigation }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [locationLoading, setLocationLoading] = useState(false);
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      welcome: 'Welcome back! 👋',
+      findJob: 'Find Your Next Job',
+      upcomingOpportunities: 'upcoming opportunities',
+      searchPlaceholder: 'Search jobs, companies, categories...',
+      location: 'Location',
+      allIndia: 'All India',
+      showingJobs: 'Showing jobs across India',
+      browseByCategory: 'Browse by Category',
+      allCategories: 'All categories',
+      activeFilters: 'Active filters:',
+      clearAll: 'Clear all',
+      available: 'Available',
+      pending: 'Pending',
+      accepted: 'Accepted',
+      jobs: 'jobs',
+      alreadyApplied: 'already applied',
+      applyNow: 'Apply Now',
+      noUpcomingJobs: 'No Upcoming Jobs',
+      noJobsFound: 'No Upcoming Jobs Found',
+      noJobsDesc: 'New upcoming opportunities will appear here. Check back later!',
+      noJobsFilterDesc: 'Try adjusting your search or filters to find more upcoming jobs.',
+      noJobsLocationDesc: 'No upcoming jobs found in {location}. Try changing location or check back later.',
+      clearFilters: 'Clear Filters',
+      showAllIndiaJobs: 'Show All India Jobs',
+      viewApplications: 'View My Applications',
+      settingLocation: 'Setting up your location...',
+      findingJobs: 'Finding upcoming jobs for you...',
+      perHour: 'per hour',
+      duration: 'duration',
+      hourlyWork: 'Hourly work',
+      anyExperience: 'Any Experience',
+      dateNotSet: 'Date not set',
+      today: 'Today',
+      tomorrow: 'Tomorrow',
+      new: 'NEW',
+      jobIn: 'jobs in',
+      opportunities: 'opportunities',
+    },
+    hi: {
+      welcome: 'वापसी पर स्वागत है! 👋',
+      findJob: 'अपनी अगली नौकरी खोजें',
+      upcomingOpportunities: 'आने वाले अवसर',
+      searchPlaceholder: 'नौकरियां, कंपनियां, श्रेणियां खोजें...',
+      location: 'स्थान',
+      allIndia: 'पूरे भारत में',
+      showingJobs: 'पूरे भारत में नौकरियां दिखाई जा रही हैं',
+      browseByCategory: 'श्रेणी के अनुसार ब्राउज़ करें',
+      allCategories: 'सभी श्रेणियां',
+      activeFilters: 'सक्रिय फ़िल्टर्स:',
+      clearAll: 'सभी साफ करें',
+      available: 'उपलब्ध',
+      pending: 'लंबित',
+      accepted: 'स्वीकृत',
+      jobs: 'नौकरियां',
+      alreadyApplied: 'पहले ही आवेदन किया है',
+      applyNow: 'अभी आवेदन करें',
+      noUpcomingJobs: 'कोई आगामी नौकरी नहीं',
+      noJobsFound: 'कोई आगामी नौकरी नहीं मिली',
+      noJobsDesc: 'नए आगामी अवसर यहां दिखाई देंगे। बाद में पुनः जांचें!',
+      noJobsFilterDesc: 'अधिक आगामी नौकरियां खोजने के लिए अपनी खोज या फ़िल्टर समायोजित करें।',
+      noJobsLocationDesc: '{location} में कोई आगामी नौकरी नहीं मिली। स्थान बदलने का प्रयास करें या बाद में पुनः जांचें।',
+      clearFilters: 'फ़िल्टर साफ करें',
+      showAllIndiaJobs: 'पूरे भारत की नौकरियां दिखाएं',
+      viewApplications: 'मेरे आवेदन देखें',
+      settingLocation: 'आपका स्थान सेटअप हो रहा है...',
+      findingJobs: 'आपके लिए आगामी नौकरियां ढूंढ रहे हैं...',
+      perHour: 'प्रति घंटा',
+      duration: 'अवधि',
+      hourlyWork: 'घंटे का काम',
+      anyExperience: 'कोई भी अनुभव',
+      dateNotSet: 'तारीख सेट नहीं है',
+      today: 'आज',
+      tomorrow: 'कल',
+      new: 'नया',
+      jobIn: 'नौकरियां',
+      opportunities: 'अवसर',
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
+  const categories = locale === 'hi' ? HINDI_CATEGORIES : HINDI_CATEGORIES.map(cat => ({...cat, label: cat.english}));
 
   useEffect(() => {
     loadData();
@@ -97,7 +185,10 @@ function WorkerHomeScreen({ navigation }) {
       await Promise.all([loadFutureJobs(), loadApplications()]);
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('Error', 'Failed to load jobs');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        locale === 'hi' ? 'नौकरियां लोड करने में विफल' : 'Failed to load jobs'
+      );
     } finally {
       setLoading(false);
     }
@@ -165,23 +256,6 @@ function WorkerHomeScreen({ navigation }) {
     return isOpen && notApplied;
   });
 
-  console.log('═══════════════════════════════════════');
-  console.log('📊 HOME SCREEN DEBUG:');
-  console.log('   User Location:', userProfile?.location);
-  console.log('   Current Filter Location:', currentLocation);
-  console.log('   Total Future Jobs:', jobs.length);
-  console.log('   Available Jobs:', availableJobs.length);
-  console.log('   My Applications:', myApplications.length);
-  console.log('═══════════════════════════════════════');
-
-  const pendingJobIds = myApplications
-    .filter(app => app.status === 'pending')
-    .map(app => app.jobId);
-
-  const acceptedJobIds = myApplications
-    .filter(app => app.status === 'accepted')
-    .map(app => app.jobId);
-
   const getFilteredJobs = () => {
     let filtered = availableJobs;
 
@@ -224,7 +298,7 @@ function WorkerHomeScreen({ navigation }) {
 
   // Format date for display
   const formatJobDate = (jobDate, startTime) => {
-    if (!jobDate) return 'Date not set';
+    if (!jobDate) return tr.dateNotSet;
     
     const date = new Date(jobDate);
     const today = new Date();
@@ -232,11 +306,11 @@ function WorkerHomeScreen({ navigation }) {
     tomorrow.setDate(tomorrow.getDate() + 1);
     
     if (date.toDateString() === today.toDateString()) {
-      return `Today${startTime ? `, ${startTime}` : ''}`;
+      return `${tr.today}${startTime ? `, ${startTime}` : ''}`;
     } else if (date.toDateString() === tomorrow.toDateString()) {
-      return `Tomorrow${startTime ? `, ${startTime}` : ''}`;
+      return `${tr.tomorrow}${startTime ? `, ${startTime}` : ''}`;
     } else {
-      return `${date.toLocaleDateString()}${startTime ? `, ${startTime}` : ''}`;
+      return `${date.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')}${startTime ? `, ${startTime}` : ''}`;
     }
   };
 
@@ -317,10 +391,12 @@ function WorkerHomeScreen({ navigation }) {
       </View>
       <View style={styles.locationTextContainer}>
         <Text style={styles.locationLabel}>
-          {currentLocation ? 'Location' : 'All India'}
+          {tr.location}
         </Text>
         <Text style={styles.locationValue} numberOfLines={1}>
-          {currentLocation ? `${currentLocation.split(',')[0]} • ${availableJobs.length} jobs` : 'Showing jobs across India'}
+          {currentLocation 
+            ? `${currentLocation.split(',')[0]} • ${availableJobs.length} ${tr.jobs}`
+            : tr.allIndia}
         </Text>
       </View>
       {locationLoading ? (
@@ -340,8 +416,8 @@ function WorkerHomeScreen({ navigation }) {
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View style={styles.welcomeSection}>
-              <Text style={styles.welcomeText}>Welcome back! 👋</Text>
-              <Text style={styles.userName}>{userProfile?.name || 'Worker'}</Text>
+              <Text style={styles.welcomeText}>{tr.welcome}</Text>
+              <Text style={styles.userName}>{userProfile?.name || (locale === 'hi' ? 'मजदूर' : 'Worker')}</Text>
             </View>
             <TouchableOpacity 
               style={styles.profileButton} 
@@ -349,7 +425,7 @@ function WorkerHomeScreen({ navigation }) {
             >
               <View style={styles.avatarCircle}>
                 <Text style={styles.avatarText}>
-                  {userProfile?.name?.charAt(0) || 'W'}
+                  {userProfile?.name?.charAt(0) || (locale === 'hi' ? 'म' : 'W')}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -360,21 +436,21 @@ function WorkerHomeScreen({ navigation }) {
             <QuickStatCard
               icon="💼"
               value={availableJobs.length}
-              label="Available"
+              label={tr.available}
               color={colors.primary}
               onPress={() => setSelectedCategory('all')}
             />
             <QuickStatCard
               icon="⏳"
-              value={pendingJobIds.length}
-              label="Pending"
+              value={myApplications.filter(app => app.status === 'pending').length}
+              label={tr.pending}
               color={colors.warning}
               onPress={() => navigation.navigate('MyJobs')}
             />
             <QuickStatCard
               icon="✓"
-              value={acceptedJobIds.length}
-              label="Accepted"
+              value={myApplications.filter(app => app.status === 'accepted').length}
+              label={tr.accepted}
               color={colors.success}
               onPress={() => navigation.navigate('MyJobs')}
             />
@@ -398,9 +474,9 @@ function WorkerHomeScreen({ navigation }) {
         <View style={styles.searchSection}>
           <View style={styles.searchHeader}>
             <View style={styles.searchHeaderLeft}>
-              <Text style={styles.sectionTitle}>Find Your Next Job</Text>
+              <Text style={styles.sectionTitle}>{tr.findJob}</Text>
               <Text style={styles.sectionSubtitle}>
-                {filteredJobs.length} upcoming opportunities
+                {filteredJobs.length} {tr.upcomingOpportunities}
               </Text>
             </View>
             <TouchableOpacity 
@@ -420,7 +496,7 @@ function WorkerHomeScreen({ navigation }) {
               <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search jobs, companies, categories..."
+                placeholder={tr.searchPlaceholder}
                 placeholderTextColor={colors.textSecondary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -441,14 +517,14 @@ function WorkerHomeScreen({ navigation }) {
           <LocationDisplay />
         </View>
 
-        {/* REMOVED the duplicate location notice section */}
-
         {/* Improved Category Filter */}
         <View style={styles.categorySection}>
           <View style={styles.categorySectionHeader}>
-            <Text style={styles.categorySectionTitle}>Browse by Category</Text>
+            <Text style={styles.categorySectionTitle}>{tr.browseByCategory}</Text>
             <Text style={styles.categorySectionSubtitle}>
-              {selectedCategory === 'all' ? 'All categories' : DEFAULT_CATEGORIES.find(c => c.id === selectedCategory)?.label}
+              {selectedCategory === 'all' 
+                ? tr.allCategories 
+                : categories.find(c => c.id === selectedCategory)?.label}
             </Text>
           </View>
           <ScrollView 
@@ -456,7 +532,7 @@ function WorkerHomeScreen({ navigation }) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.categoryScroll}
           >
-            {DEFAULT_CATEGORIES.map(category => (
+            {categories.map(category => (
               <CategoryButton
                 key={category.id}
                 label={category.label}
@@ -471,12 +547,12 @@ function WorkerHomeScreen({ navigation }) {
         {/* Active Filters Display */}
         {(selectedCategory !== 'all' || searchQuery !== '') && (
           <View style={styles.activeFiltersContainer}>
-            <Text style={styles.activeFiltersText}>Active filters:</Text>
+            <Text style={styles.activeFiltersText}>{tr.activeFilters}</Text>
             <View style={styles.activeFiltersRow}>
               {selectedCategory !== 'all' && (
                 <View style={styles.activeFilterChip}>
                   <Text style={styles.activeFilterText}>
-                    {DEFAULT_CATEGORIES.find(c => c.id === selectedCategory)?.label}
+                    {categories.find(c => c.id === selectedCategory)?.label}
                   </Text>
                   <TouchableOpacity 
                     onPress={() => setSelectedCategory('all')}
@@ -506,7 +582,7 @@ function WorkerHomeScreen({ navigation }) {
                 }}
                 style={styles.clearAllButton}
               >
-                <Text style={styles.clearAllText}>Clear all</Text>
+                <Text style={styles.clearAllText}>{tr.clearAll}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -517,7 +593,7 @@ function WorkerHomeScreen({ navigation }) {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingText}>
-              {locationLoading ? 'Setting up your location...' : 'Finding upcoming jobs for you...'}
+              {locationLoading ? tr.settingLocation : tr.findingJobs}
             </Text>
           </View>
         ) : filteredJobs.length === 0 ? (
@@ -527,15 +603,15 @@ function WorkerHomeScreen({ navigation }) {
             </Text>
             <Text style={styles.emptyTitle}>
               {searchQuery !== '' || selectedCategory !== 'all'
-                ? 'No Upcoming Jobs Found' 
-                : 'No Upcoming Jobs'}
+                ? tr.noJobsFound 
+                : tr.noUpcomingJobs}
             </Text>
             <Text style={styles.emptySubtitle}>
               {searchQuery !== '' || selectedCategory !== 'all'
-                ? 'Try adjusting your search or filters to find more upcoming jobs.'
+                ? tr.noJobsFilterDesc
                 : currentLocation 
-                  ? `No upcoming jobs found in ${currentLocation}. Try changing location or check back later.`
-                  : 'New upcoming opportunities will appear here. Check back later!'}
+                  ? tr.noJobsLocationDesc.replace('{location}', currentLocation)
+                  : tr.noJobsDesc}
             </Text>
             {(searchQuery !== '' || selectedCategory !== 'all') ? (
               <TouchableOpacity 
@@ -545,7 +621,7 @@ function WorkerHomeScreen({ navigation }) {
                   setSelectedCategory('all');
                 }}
               >
-                <Text style={styles.emptyButtonText}>Clear Filters</Text>
+                <Text style={styles.emptyButtonText}>{tr.clearFilters}</Text>
               </TouchableOpacity>
             ) : currentLocation ? (
               <TouchableOpacity 
@@ -556,14 +632,14 @@ function WorkerHomeScreen({ navigation }) {
                   setLocationLoading(false);
                 }}
               >
-                <Text style={styles.emptyButtonText}>Show All India Jobs</Text>
+                <Text style={styles.emptyButtonText}>{tr.showAllIndiaJobs}</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity 
                 style={styles.emptyButton}
                 onPress={() => navigation.navigate('MyJobs')}
               >
-                <Text style={styles.emptyButtonText}>View My Applications</Text>
+                <Text style={styles.emptyButtonText}>{tr.viewApplications}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -571,11 +647,11 @@ function WorkerHomeScreen({ navigation }) {
           <View style={styles.jobsContainer}>
             <View style={styles.jobsHeader}>
               <Text style={styles.jobsHeaderText}>
-                {filteredJobs.length} Upcoming Job{filteredJobs.length !== 1 ? 's' : ''}
-                {currentLocation && ` in ${currentLocation.split(',')[0]}`}
+                {filteredJobs.length} {tr.jobIn}
+                {currentLocation && ` ${currentLocation.split(',')[0]}`}
               </Text>
               <Text style={styles.jobsHeaderSubtext}>
-                {myApplications.length > 0 && `${myApplications.length} already applied`}
+                {myApplications.length > 0 && `${myApplications.length} ${tr.alreadyApplied}`}
               </Text>
             </View>
             {filteredJobs.map((job, index) => {
@@ -602,7 +678,7 @@ function WorkerHomeScreen({ navigation }) {
                         </Text>
                         {isNew && (
                           <View style={styles.newBadge}>
-                            <Text style={styles.newBadgeText}>NEW</Text>
+                            <Text style={styles.newBadgeText}>{tr.new}</Text>
                           </View>
                         )}
                       </View>
@@ -627,7 +703,7 @@ function WorkerHomeScreen({ navigation }) {
                       <Text style={styles.jobDetailValue}>
                         ₹{job.rate || job.salary}
                       </Text>
-                      <Text style={styles.jobDetailLabel}>per hour</Text>
+                      <Text style={styles.jobDetailLabel}>{tr.perHour}</Text>
                     </View>
                     
                     <View style={styles.jobDetailBox}>
@@ -635,15 +711,17 @@ function WorkerHomeScreen({ navigation }) {
                       <Text style={styles.jobDetailValue} numberOfLines={1}>
                         {job.location?.split(',')[0] || job.location}
                       </Text>
-                      <Text style={styles.jobDetailLabel}>location</Text>
+                      <Text style={styles.jobDetailLabel}>
+                        {locale === 'hi' ? 'स्थान' : 'location'}
+                      </Text>
                     </View>
                     
                     <View style={styles.jobDetailBox}>
                       <Text style={styles.jobDetailIcon}>⏰</Text>
                       <Text style={styles.jobDetailValue}>
-                        {job.duration || 'Flexible'}
+                        {job.duration || (locale === 'hi' ? 'लचीला' : 'Flexible')}
                       </Text>
-                      <Text style={styles.jobDetailLabel}>duration</Text>
+                      <Text style={styles.jobDetailLabel}>{tr.duration}</Text>
                     </View>
                   </View>
 
@@ -655,11 +733,11 @@ function WorkerHomeScreen({ navigation }) {
                       </View>
                     )}
                     <View style={styles.jobTag}>
-                      <Text style={styles.jobTagText}>{job.jobType || 'Hourly work'}</Text>
+                      <Text style={styles.jobTagText}>{job.jobType || tr.hourlyWork}</Text>
                     </View>
                     <View style={styles.jobTag}>
                       <Text style={styles.jobTagText}>
-                        {job.experienceLevel || 'Any Experience'}
+                        {job.experienceLevel || tr.anyExperience}
                       </Text>
                     </View>
                   </View>
@@ -669,7 +747,7 @@ function WorkerHomeScreen({ navigation }) {
                     style={styles.jobActionButton}
                     onPress={() => navigation.navigate('JobDetails', { jobId: job.id })}
                   >
-                    <Text style={styles.jobActionText}>Apply Now</Text>
+                    <Text style={styles.jobActionText}>{tr.applyNow}</Text>
                     <Text style={styles.jobActionArrow}>→</Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
@@ -684,6 +762,7 @@ function WorkerHomeScreen({ navigation }) {
   );
 }
 
+// Styles remain the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -861,7 +940,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
-  // IMPROVED LOCATION STYLES
   locationButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -907,8 +985,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: 8,
   },
-  // REMOVED the duplicate location notice styles
-  // CATEGORY SECTION
   categorySection: {
     paddingVertical: 20,
     backgroundColor: colors.white,

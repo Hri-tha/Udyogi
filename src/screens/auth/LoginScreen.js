@@ -15,17 +15,20 @@ import {
   Animated,
   Dimensions,
   Keyboard,
+  Image
 } from 'react-native';
 import { auth, db, functions } from '../../services/firebase';
 import { signInWithCustomToken } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { colors } from '../../constants/colors';
+import { useLanguage } from '../../context/LanguageContext';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation, route }) {
   const { userType } = route.params;
+  const { t, locale } = useLanguage();
 
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
@@ -35,26 +38,97 @@ export default function LoginScreen({ navigation, route }) {
   const [otpFocusedIndex, setOtpFocusedIndex] = useState(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const otpInputRefs = useRef([]);
 
+  const translations = {
+    en: {
+      title: otpSent ? 'Enter Verification Code' : 'Welcome Back',
+      subtitle: otpSent 
+        ? `We've sent a 6-digit code to +91 ${phoneNumber}`
+        : 'Enter your mobile number to continue',
+      phonePlaceholder: 'Enter mobile number',
+      sendOtp: 'Send OTP',
+      verifyContinue: 'Verify & Continue',
+      resendOtp: 'Resend OTP',
+      changeNumber: 'Change Number',
+      continueAs: 'Continue as',
+      terms: 'By continuing, you agree to our Terms of Service and Privacy Policy',
+      needHelp: 'Need help?',
+      contactSupport: 'Contact our support team',
+      invalidNumber: 'Invalid Number',
+      invalidNumberMessage: 'Please enter a valid 10-digit mobile number',
+      invalidOtp: 'Invalid OTP',
+      invalidOtpMessage: 'Please enter the 6-digit OTP',
+      otpSentTitle: 'OTP Sent',
+      otpSentMessage: 'Development Mode: OTP is',
+      switchAccount: 'Switch Account Type',
+      switchMessage: `Are you sure you want to switch from ${userType === 'worker' ? 'Worker' : 'Employer'} to ${userType === 'worker' ? 'Employer' : 'Worker'} login?`,
+      switch: 'Switch',
+      cancel: 'Cancel',
+      verificationFailed: 'Verification Failed',
+      error: 'Error',
+      enterOtp: 'Enter OTP',
+      worker: 'Worker',
+      employer: 'Employer',
+      tapToSwitch: 'Tap to switch',
+      appName: 'Udyogi',
+      welcome: 'Welcome to',
+      orContinueAs: 'Or continue as'
+    },
+    hi: {
+      title: otpSent ? 'सत्यापन कोड दर्ज करें' : 'वापसी पर स्वागत है',
+      subtitle: otpSent 
+        ? `हमने +91 ${phoneNumber} पर 6-अंकीय कोड भेजा है`
+        : 'जारी रखने के लिए अपना मोबाइल नंबर दर्ज करें',
+      phonePlaceholder: 'मोबाइल नंबर दर्ज करें',
+      sendOtp: 'OTP भेजें',
+      verifyContinue: 'सत्यापित करें और जारी रखें',
+      resendOtp: 'OTP फिर से भेजें',
+      changeNumber: 'नंबर बदलें',
+      continueAs: 'के रूप में जारी रखें',
+      terms: 'जारी रखकर, आप हमारी सेवा की शर्तों और गोपनीयता नीति से सहमत होते हैं',
+      needHelp: 'मदद चाहिए?',
+      contactSupport: 'हमारी सहायता टीम से संपर्क करें',
+      invalidNumber: 'अमान्य नंबर',
+      invalidNumberMessage: 'कृपया एक वैध 10-अंकीय मोबाइल नंबर दर्ज करें',
+      invalidOtp: 'अमान्य OTP',
+      invalidOtpMessage: 'कृपया 6-अंकीय OTP दर्ज करें',
+      otpSentTitle: 'OTP भेजा गया',
+      otpSentMessage: 'डेवलपमेंट मोड: OTP है',
+      switchAccount: 'खाता प्रकार बदलें',
+      switchMessage: `क्या आप वाकई ${userType === 'worker' ? 'मजदूर' : 'नियोक्ता'} से ${userType === 'worker' ? 'नियोक्ता' : 'मजदूर'} लॉगिन में बदलना चाहते हैं?`,
+      switch: 'बदलें',
+      cancel: 'रद्द करें',
+      verificationFailed: 'सत्यापन विफल',
+      error: 'त्रुटि',
+      enterOtp: 'OTP दर्ज करें',
+      worker: 'मजदूर',
+      employer: 'नियोक्ता',
+      tapToSwitch: 'बदलने के लिए टैप करें',
+      appName: 'उद्योगी',
+      welcome: 'आपका स्वागत है',
+      orContinueAs: 'या के रूप में जारी रखें'
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
+
   useEffect(() => {
-    // Entrance animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 600,
+        duration: 800,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 600,
+        duration: 800,
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Keyboard listeners
     const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
       setKeyboardVisible(true);
     });
@@ -80,7 +154,7 @@ export default function LoginScreen({ navigation, route }) {
   const handleSendOTP = async () => {
     if (phoneNumber.length !== 10) {
       shakeAnimation();
-      Alert.alert('Invalid Number', 'Please enter a valid 10-digit mobile number');
+      Alert.alert(tr.invalidNumber, tr.invalidNumberMessage);
       return;
     }
 
@@ -94,12 +168,11 @@ export default function LoginScreen({ navigation, route }) {
       if (result.data.success) {
         setOtpSent(true);
 
-        // Show OTP in development mode
         if (result.data.devOTP) {
           Alert.alert(
-            'OTP Sent',
-            `Development Mode: OTP is ${result.data.devOTP}`,
-            [{ text: 'Got it', style: 'default' }]
+            tr.otpSentTitle,
+            `${tr.otpSentMessage} ${result.data.devOTP}`,
+            [{ text: locale === 'hi' ? 'समझ गया' : 'Got it', style: 'default' }]
           );
         }
       } else {
@@ -108,14 +181,14 @@ export default function LoginScreen({ navigation, route }) {
     } catch (err) {
       console.error('Send OTP Error:', err);
 
-      let errorMessage = 'Failed to send OTP. Please try again.';
+      let errorMessage = locale === 'hi' ? 'OTP भेजने में विफल। कृपया पुनः प्रयास करें।' : 'Failed to send OTP. Please try again.';
       if (err.code === 'functions/invalid-argument') {
-        errorMessage = 'Invalid phone number format';
+        errorMessage = locale === 'hi' ? 'अमान्य फोन नंबर प्रारूप' : 'Invalid phone number format';
       } else if (err.message.includes('quota')) {
-        errorMessage = 'Too many attempts. Please try again later.';
+        errorMessage = locale === 'hi' ? 'बहुत अधिक प्रयास। कृपया बाद में पुनः प्रयास करें।' : 'Too many attempts. Please try again later.';
       }
 
-      Alert.alert('Error', errorMessage);
+      Alert.alert(tr.error, errorMessage);
     } finally {
       setLoading(false);
     }
@@ -124,7 +197,7 @@ export default function LoginScreen({ navigation, route }) {
   const handleVerifyOTP = async () => {
     if (otp.length !== 6) {
       shakeAnimation();
-      Alert.alert('Invalid OTP', 'Please enter the 6-digit OTP');
+      Alert.alert(tr.invalidOtp, tr.invalidOtpMessage);
       return;
     }
 
@@ -140,10 +213,8 @@ export default function LoginScreen({ navigation, route }) {
         const userCredential = await signInWithCustomToken(auth, result.data.customToken);
         const userId = userCredential.user.uid;
 
-        // Navigate to LoadingScreen immediately after successful verification
         navigation.replace('Loading');
 
-        // Check if user profile exists
         const userDocRef = doc(db, 'users', userId);
         const userDoc = await getDoc(userDocRef);
 
@@ -152,15 +223,23 @@ export default function LoginScreen({ navigation, route }) {
 
           if (userData.userType && userData.userType !== userType) {
             await auth.signOut();
+            const userTypeText = userData.userType === 'worker' 
+              ? (locale === 'hi' ? 'मजदूर' : 'Worker')
+              : (locale === 'hi' ? 'नियोक्ता' : 'Employer');
+            
             Alert.alert(
-              'Account Type Mismatch',
-              `This number is registered as ${userData.userType === 'worker' ? 'Worker' : 'Employer'}. Please use the correct login option.`,
+              locale === 'hi' ? 'खाता प्रकार असंगत' : 'Account Type Mismatch',
+              locale === 'hi' 
+                ? `यह नंबर ${userTypeText} के रूप में पंजीकृत है। कृपया सही लॉगिन विकल्प का उपयोग करें।`
+                : `This number is registered as ${userTypeText}. Please use the correct login option.`,
               [
-                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: locale === 'hi' ? 'रद्द करें' : 'Cancel', 
+                  style: 'cancel' 
+                },
                 {
-                  text: 'Switch',
+                  text: locale === 'hi' ? 'बदलें' : 'Switch',
                   onPress: () => {
-                    // Navigate back to login with correct user type
                     navigation.replace('Login', { userType: userData.userType });
                   }
                 }
@@ -169,14 +248,12 @@ export default function LoginScreen({ navigation, route }) {
             return;
           }
 
-          // Navigate based on user type
           if (userData.userType === 'worker') {
             navigation.replace('WorkerMain');
           } else {
             navigation.replace('EmployerMain');
           }
         } else {
-          // New user - navigate to ProfileSetup
           await setDoc(userDocRef, {
             uid: userId,
             phoneNumber: '+91' + phoneNumber,
@@ -192,16 +269,15 @@ export default function LoginScreen({ navigation, route }) {
     } catch (err) {
       console.error('Verify OTP Error:', err);
 
-      let errorMessage = 'Invalid OTP. Please try again.';
+      let errorMessage = locale === 'hi' ? 'अमान्य OTP। कृपया पुनः प्रयास करें।' : 'Invalid OTP. Please try again.';
       if (err.code === 'functions/not-found') {
-        errorMessage = 'OTP expired. Please request a new one.';
+        errorMessage = locale === 'hi' ? 'OTP समाप्त हो गया। कृपया एक नया अनुरोध करें।' : 'OTP expired. Please request a new one.';
       } else if (err.code === 'functions/deadline-exceeded') {
-        errorMessage = 'OTP verification timeout. Please try again.';
+        errorMessage = locale === 'hi' ? 'OTP सत्यापन समय समाप्त। कृपया पुनः प्रयास करें।' : 'OTP verification timeout. Please try again.';
       }
 
-      // Navigate back to login on error
       navigation.replace('Login', { userType });
-      Alert.alert('Verification Failed', errorMessage);
+      Alert.alert(tr.verificationFailed, errorMessage);
     }
   };
 
@@ -211,7 +287,6 @@ export default function LoginScreen({ navigation, route }) {
     const joinedOtp = newOtp.join('');
     setOtp(joinedOtp);
 
-    // Auto focus next input
     if (text && index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     }
@@ -231,25 +306,22 @@ export default function LoginScreen({ navigation, route }) {
 
   const handleSwitchUserType = () => {
     Alert.alert(
-      'Switch Account Type',
-      `Are you sure you want to switch from ${userType === 'worker' ? 'Worker' : 'Employer'} to ${userType === 'worker' ? 'Employer' : 'Worker'} login?`,
+      tr.switchAccount,
+      tr.switchMessage,
       [
         {
-          text: 'Cancel',
+          text: tr.cancel,
           style: 'cancel'
         },
         {
-          text: 'Switch',
+          text: tr.switch,
           onPress: () => {
-            // Clear current state
             setPhoneNumber('');
             setOtp('');
             setOtpSent(false);
 
-            // Get the opposite user type
             const oppositeUserType = userType === 'worker' ? 'employer' : 'worker';
 
-            // Replace current screen with LoginScreen with opposite userType
             navigation.replace('Login', { userType: oppositeUserType });
           },
           style: 'default'
@@ -265,87 +337,89 @@ export default function LoginScreen({ navigation, route }) {
     >
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }]
-          }
-        ]}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.backIcon}>←</Text>
-            </TouchableOpacity>
+          {/* Logo and App Name Section */}
+          <View style={styles.logoSection}>
+            <Image 
+              source={require('../../assets/images/UdyogiLogo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={styles.welcomeText}>{tr.welcome}</Text>
+            <Text style={styles.appName}>{tr.appName}</Text>
+            <Text style={styles.tagline}>
+              {userType === 'worker' 
+                ? (locale === 'hi' ? 'नौकरी खोजें, आगे बढ़ें' : 'Find Jobs, Grow Forward')
+                : (locale === 'hi' ? 'प्रतिभा खोजें, व्यवसाय बढ़ाएं' : 'Find Talent, Grow Business')
+              }
+            </Text>
+          </View>
 
-            <View style={styles.logoContainer}>
-              <View style={styles.logoCircle}>
-                <Text style={styles.logoText}>🔧</Text>
-              </View>
-              <Text style={styles.appName}>SkillConnect</Text>
-            </View>
-
+          {/* Main Form Section */}
+          <View style={styles.formSection}>
+            {/* User Type Badge */}
             <TouchableOpacity
               style={[
                 styles.userTypeBadge,
                 userType === 'worker' ? styles.workerBadge : styles.employerBadge
               ]}
               onPress={handleSwitchUserType}
+              activeOpacity={0.7}
             >
-              <Text style={styles.userTypeText}>
-                {userType === 'worker' ? '👷 Worker' : '💼 Employer'}
-              </Text>
-              <Text style={styles.switchText}>Tap to switch</Text>
+              <View style={styles.badgeContent}>
+                <Text style={styles.badgeIcon}>
+                  {userType === 'worker' ? '👷' : '💼'}
+                </Text>
+                <View style={styles.badgeTextContainer}>
+                  <Text style={styles.badgeTitle}>
+                    {userType === 'worker' ? tr.worker : tr.employer}
+                  </Text>
+                  <Text style={styles.badgeSubtitle}>{tr.tapToSwitch}</Text>
+                </View>
+              </View>
             </TouchableOpacity>
-          </View>
 
-          {/* Main Content */}
-          <View style={styles.mainContent}>
-            <Text style={styles.title}>
-              {otpSent ? 'Enter Verification Code' : 'Enter Mobile Number'}
-            </Text>
-
-            <Text style={styles.subtitle}>
-              {otpSent
-                ? `We've sent a 6-digit code to +91 ${phoneNumber}`
-                : `We'll send you a one-time password (OTP) to verify your number`
-              }
-            </Text>
+            <View style={styles.formHeader}>
+              <Text style={styles.title}>{tr.title}</Text>
+              <Text style={styles.subtitle}>{tr.subtitle}</Text>
+            </View>
 
             {!otpSent ? (
-              <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
-                <View style={styles.phoneInputContainer}>
-                  <View style={styles.countryCodeContainer}>
-                    <Text style={styles.countryCodeText}>🇮🇳 +91</Text>
+              <Animated.View style={[styles.inputContainer, { transform: [{ translateX: shakeAnim }] }]}>
+                <View style={styles.phoneInputWrapper}>
+                  <View style={styles.countryCodeWrapper}>
+                    <Text style={styles.countryCode}>🇮🇳 +91</Text>
                   </View>
                   <TextInput
                     style={styles.phoneInput}
-                    placeholder="99999 99999"
+                    placeholder={tr.phonePlaceholder}
                     placeholderTextColor={colors.textPlaceholder}
                     keyboardType="phone-pad"
                     maxLength={10}
                     value={phoneNumber}
                     onChangeText={setPhoneNumber}
                     editable={!loading}
-                    autoFocus
+                    autoFocus={!keyboardVisible}
                     selectionColor={colors.primary}
                   />
                 </View>
               </Animated.View>
             ) : (
               <View style={styles.otpContainer}>
-                <Text style={styles.otpLabel}>Enter OTP</Text>
+                <Text style={styles.otpLabel}>{tr.enterOtp}</Text>
                 <View style={styles.otpInputsContainer}>
                   {[0, 1, 2, 3, 4, 5].map((index) => (
                     <TextInput
@@ -368,120 +442,115 @@ export default function LoginScreen({ navigation, route }) {
                     />
                   ))}
                 </View>
-              </View>
-            )}
-
-            {/* Action Buttons */}
-            {!otpSent ? (
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  (!phoneNumber || phoneNumber.length !== 10) && styles.buttonDisabled
-                ]}
-                onPress={handleSendOTP}
-                disabled={loading || phoneNumber.length !== 10}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Send OTP</Text>
-                )}
-              </TouchableOpacity>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={[
-                    styles.primaryButton,
-                    otp.length !== 6 && styles.buttonDisabled
-                  ]}
-                  onPress={handleVerifyOTP}
-                  disabled={loading || otp.length !== 6}
-                  activeOpacity={0.8}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.primaryButtonText}>Verify & Continue</Text>
-                  )}
-                </TouchableOpacity>
-
-                <View style={styles.secondaryActions}>
-                  <TouchableOpacity
-                    onPress={handleResendOTP}
-                    disabled={loading}
-                    style={styles.secondaryButton}
-                  >
-                    <Text style={[
-                      styles.secondaryButtonText,
-                      loading && styles.buttonTextDisabled
-                    ]}>
-                      ↻ Resend OTP
-                    </Text>
-                  </TouchableOpacity>
-
+                {otpSent && (
                   <TouchableOpacity
                     onPress={() => {
                       setOtpSent(false);
                       setOtp('');
                       Keyboard.dismiss();
                     }}
-                    disabled={loading}
-                    style={styles.secondaryButton}
+                    style={styles.changeNumberButton}
                   >
-                    <Text style={[
-                      styles.secondaryButtonText,
-                      loading && styles.buttonTextDisabled
-                    ]}>
-                      ✏️ Change Number
-                    </Text>
+                    <Text style={styles.changeNumberText}>✏️ {tr.changeNumber}</Text>
                   </TouchableOpacity>
-                </View>
-              </>
+                )}
+              </View>
             )}
 
-            {/* Switch User Type Button */}
-            {!otpSent && !keyboardVisible && (
-              <TouchableOpacity
-                style={styles.switchTypeButton}
-                onPress={handleSwitchUserType}
-                disabled={loading}
-              >
-                <Text style={styles.switchTypeIcon}>🔄</Text>
-                <Text style={styles.switchTypeText}>
-                  Continue as {userType === 'worker' ? 'Employer' : 'Worker'}
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                (!otpSent && (!phoneNumber || phoneNumber.length !== 10)) ||
+                (otpSent && otp.length !== 6)
+                  ? styles.buttonDisabled
+                  : null
+              ]}
+              onPress={otpSent ? handleVerifyOTP : handleSendOTP}
+              disabled={
+                loading ||
+                (!otpSent && (!phoneNumber || phoneNumber.length !== 10)) ||
+                (otpSent && otp.length !== 6)
+              }
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>
+                  {otpSent ? tr.verifyContinue : tr.sendOtp}
                 </Text>
-              </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+
+            {otpSent && (
+              <View style={styles.resendContainer}>
+                <Text style={styles.resendText}>
+                  {locale === 'hi' ? 'कोड नहीं मिला?' : "Didn't receive code?"}
+                </Text>
+                <TouchableOpacity onPress={handleResendOTP} disabled={loading}>
+                  <Text style={[
+                    styles.resendButtonText,
+                    loading && styles.resendButtonTextDisabled
+                  ]}>
+                    {tr.resendOtp}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
 
-            {/* Terms & Privacy */}
+            {/* Switch User Type Option */}
+            {!otpSent && !keyboardVisible && (
+              <View style={styles.switchTypeContainer}>
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>{tr.orContinueAs}</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                <TouchableOpacity
+                  style={styles.switchTypeButton}
+                  onPress={handleSwitchUserType}
+                  disabled={loading}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.switchTypeIcon}>
+                    {userType === 'worker' ? '💼' : '👷'}
+                  </Text>
+                  <Text style={styles.switchTypeText}>
+                    {userType === 'worker' ? tr.employer : tr.worker}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Terms and Conditions */}
             <Text style={styles.termsText}>
-              By continuing, you agree to our{' '}
-              <Text style={styles.linkText}>Terms of Service</Text> and{' '}
-              <Text style={styles.linkText}>Privacy Policy</Text>
+              {tr.terms}
             </Text>
           </View>
 
-          {/* Footer */}
+          {/* Help Section */}
           {!keyboardVisible && (
-            <View style={styles.footer}>
-              <View style={styles.helpContainer}>
-                <TouchableOpacity
-                  style={styles.helpButton}
-                  onPress={() => Alert.alert('Help', 'Contact support@skillconnect.com\n\nPhone: +91 1800-XXX-XXX')}
-                >
-                  <Text style={styles.helpIcon}>❓</Text>
-                  <View style={styles.helpTextContainer}>
-                    <Text style={styles.helpTitle}>Need help?</Text>
-                    <Text style={styles.helpSubtitle}>Contact our support team</Text>
-                  </View>
-                  <Text style={styles.helpArrow}>→</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={styles.helpSection}>
+              <TouchableOpacity
+                style={styles.helpButton}
+                onPress={() => Alert.alert(
+                  locale === 'hi' ? 'मदद' : 'Help', 
+                  locale === 'hi' 
+                    ? 'संपर्क करें: udyogitechnology@gmail.com\n\nफोन: +91 9137-532-150'
+                    : 'Contact: udyogitechnology@gmail.com\n\nPhone: +91 9137-532-150'
+                )}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.helpIcon}>?</Text>
+                <View style={styles.helpTextContainer}>
+                  <Text style={styles.helpTitle}>{tr.needHelp}</Text>
+                  <Text style={styles.helpSubtitle}>{tr.contactSupport}</Text>
+                </View>
+              </TouchableOpacity>
             </View>
           )}
-        </ScrollView>
-      </Animated.View>
+        </Animated.View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -491,112 +560,138 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  scrollContainer: {
+    flexGrow: 1,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+  },
   content: {
     flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 30,
-  },
-  header: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  backButton: {
-    padding: 8,
-  },
-  backIcon: {
-    fontSize: 24,
-    color: colors.text,
-  },
-  logoContainer: {
+  logoSection: {
     alignItems: 'center',
+    marginBottom: 40,
+    paddingHorizontal: 20,
   },
-  logoCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 16,
   },
-  logoText: {
-    fontSize: 24,
+  welcomeText: {
+    fontSize: 18,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   appName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
+    fontSize: 36,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  tagline: {
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    maxWidth: '80%',
+    lineHeight: 20,
+  },
+  formSection: {
+    width: '100%',
+    paddingHorizontal: 24,
+    alignItems: 'center',
   },
   userTypeBadge: {
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    width: '100%',
+    maxWidth: 200,
     borderRadius: 20,
-    minWidth: 100,
+    marginBottom: 32,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   workerBadge: {
     backgroundColor: colors.warningLight,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.warning,
   },
   employerBadge: {
     backgroundColor: colors.secondaryLight,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.secondary,
   },
-  userTypeText: {
-    fontSize: 12,
+  badgeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  badgeTextContainer: {
+    alignItems: 'center',
+  },
+  badgeTitle: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
   },
-  switchText: {
+  badgeSubtitle: {
     fontSize: 10,
     color: colors.textMuted,
     marginTop: 2,
   },
-  mainContent: {
-    padding: 30,
-    paddingTop: 40,
+  formHeader: {
+    width: '100%',
+    marginBottom: 32,
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: 12,
+    marginBottom: 8,
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   subtitle: {
     fontSize: 16,
     color: colors.textSecondary,
+    textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 40,
+    maxWidth: '90%',
   },
-  phoneInputContainer: {
+  inputContainer: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  phoneInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.background,
     borderRadius: 16,
     borderWidth: 2,
     borderColor: colors.border,
-    marginBottom: 30,
     overflow: 'hidden',
+    height: 60,
   },
-  countryCodeContainer: {
+  countryCodeWrapper: {
     paddingHorizontal: 20,
-    paddingVertical: 18,
+    height: '100%',
+    justifyContent: 'center',
     backgroundColor: colors.gray100,
     borderRightWidth: 2,
     borderRightColor: colors.border,
   },
-  countryCodeText: {
+  countryCode: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
@@ -604,30 +699,33 @@ const styles = StyleSheet.create({
   phoneInput: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingVertical: 18,
     fontSize: 18,
     fontWeight: '500',
     color: colors.text,
     letterSpacing: 0.5,
   },
   otpContainer: {
-    marginBottom: 40,
+    width: '100%',
+    marginBottom: 24,
+    alignItems: 'center',
   },
   otpLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.textSecondary,
-    marginBottom: 16,
+    marginBottom: 20,
     textAlign: 'center',
   },
   otpInputsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
+    width: '100%',
+    maxWidth: 320,
+    marginBottom: 20,
   },
   otpInput: {
-    flex: 1,
-    aspectRatio: 1,
+    width: 50,
+    height: 60,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: colors.border,
@@ -645,17 +743,26 @@ const styles = StyleSheet.create({
     borderColor: colors.success,
     backgroundColor: colors.successLight,
   },
+  changeNumberButton: {
+    marginTop: 16,
+  },
+  changeNumberText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
   primaryButton: {
+    width: '100%',
     backgroundColor: colors.primary,
-    borderRadius: 14,
+    borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
     marginBottom: 20,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 6,
   },
   buttonDisabled: {
     backgroundColor: colors.gray400,
@@ -664,73 +771,105 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: colors.white,
-    fontSize: 17,
+    fontSize: 18,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  resendContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  resendText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginRight: 8,
+  },
+  resendButtonText: {
+    fontSize: 14,
+    color: colors.primary,
     fontWeight: '600',
   },
-  secondaryActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 30,
-  },
-  secondaryButton: {
-    paddingVertical: 12,
-  },
-  secondaryButtonText: {
-    color: colors.primary,
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  buttonTextDisabled: {
+  resendButtonTextDisabled: {
     color: colors.gray400,
+  },
+  switchTypeContainer: {
+    width: '100%',
+    marginBottom: 32,
+    alignItems: 'center',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    paddingHorizontal: 16,
+    fontSize: 14,
+    color: colors.textMuted,
   },
   switchTypeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.background,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingVertical: 16,
-    marginBottom: 30,
-    borderWidth: 1,
+    paddingHorizontal: 32,
+    borderWidth: 1.5,
     borderColor: colors.border,
+    width: '100%',
+    maxWidth: 280,
   },
   switchTypeIcon: {
-    fontSize: 18,
-    marginRight: 10,
+    fontSize: 20,
+    marginRight: 12,
   },
   switchTypeText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
     color: colors.text,
   },
   termsText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 20,
+    maxWidth: '90%',
   },
-  linkText: {
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  footer: {
-    paddingHorizontal: 30,
-  },
-  helpContainer: {
-    backgroundColor: colors.infoLight,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.info,
+  helpSection: {
+    width: '100%',
+    paddingHorizontal: 24,
+    marginTop: 'auto',
+    paddingTop: 32,
   },
   helpButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.infoLight,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.info,
   },
   helpIcon: {
-    fontSize: 24,
-    marginRight: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.info,
+    color: colors.white,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 32,
+    marginRight: 16,
   },
   helpTextContainer: {
     flex: 1,
@@ -739,14 +878,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   helpSubtitle: {
     fontSize: 14,
     color: colors.textMuted,
-  },
-  helpArrow: {
-    fontSize: 20,
-    color: colors.info,
   },
 });

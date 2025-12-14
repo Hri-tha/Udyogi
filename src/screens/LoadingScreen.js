@@ -9,8 +9,16 @@ import {
   StatusBar,
 } from 'react-native';
 import { colors } from '../constants/colors';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function LoadingScreen() {
+  const { locale, t } = useLanguage();
+
+  // Get app name based on language
+  const getAppName = () => {
+    return locale === 'hi' ? 'उद्योगी' : 'Udyogi';
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
@@ -18,23 +26,23 @@ export default function LoadingScreen() {
       {/* Logo */}
       <View style={styles.logoContainer}>
         <Image
-          source={require('../assets/images/UdyogiLogo.png')} // Adjust path to your logo
+          source={require('../assets/images/UdyogiLogo.png')}
           style={styles.logo}
           resizeMode="contain"
         />
-        <Text style={styles.appName}>SkillConnect</Text>
-        <Text style={styles.appTagline}>Connecting Skills & Opportunities</Text>
+        <Text style={styles.appName}>{getAppName()}</Text>
+        <Text style={styles.appTagline}>{t('loading.tagline')}</Text>
       </View>
 
       {/* Loading Indicator */}
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.white} />
-        <Text style={styles.loadingText}>Loading your profile...</Text>
+        <Text style={styles.loadingText}>{t('loading.loadingProfile')}</Text>
       </View>
 
       {/* Footer */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Securely logging you in...</Text>
+        <Text style={styles.footerText}>{t('loading.secureLogin')}</Text>
       </View>
     </View>
   );

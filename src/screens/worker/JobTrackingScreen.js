@@ -1,4 +1,4 @@
-// src/screens/worker/JobTrackingScreen.js - COMPLETE FIXED VERSION
+// src/screens/worker/JobTrackingScreen.js - HINDI VERSION
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { useLanguage } from '../../context/LanguageContext';
 import { colors } from '../../constants/colors';
 import {
   updateWorkerJourneyStatus,
@@ -21,6 +22,7 @@ import { doc, getDoc } from 'firebase/firestore';
 
 const JobTrackingScreen = ({ route, navigation }) => {
   const { applicationId } = route.params;
+  const { locale, t } = useLanguage();
 
   const [application, setApplication] = useState(null);
   const [job, setJob] = useState(null);
@@ -29,6 +31,176 @@ const JobTrackingScreen = ({ route, navigation }) => {
   const [workDuration, setWorkDuration] = useState(0);
 
   const workTimerRef = useRef(null);
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      headerTitle: 'Job Tracking',
+      backButton: '← Back',
+      loadingText: 'Loading job details...',
+      error: 'Error',
+      failedToLoad: 'Failed to load job details',
+      jobNotFound: 'Job not found',
+      retry: 'Retry',
+      jobAccepted: 'Job accepted! Ready to start your journey?',
+      onTheWay: 'On the way to job location',
+      reachedLocation: 'Reached location! Ready to start work?',
+      workInProgress: 'Work in progress...',
+      workCompleted: 'Work completed! Awaiting payment',
+      jobDetails: 'Job details',
+      jobInformation: 'Job Information',
+      jobTitle: 'Job Title',
+      companyName: 'Company Name',
+      location: 'Location',
+      schedule: 'Schedule',
+      date: 'Date',
+      time: 'Time',
+      expectedDuration: 'Expected Duration',
+      hours: 'hours',
+      notSpecified: 'Not specified',
+      workTimer: 'Work Timer',
+      payment: 'Payment',
+      hourlyRate: 'Hourly Rate',
+      expectedPayment: 'Expected Payment',
+      perHour: '/hour',
+      onTheWayAction: "I'm On the Way",
+      reachedAction: 'I Have Reached',
+      startWork: 'Start Working',
+      completeWork: 'Complete Work',
+      viewLocation: '📍 View Location',
+      chatEmployer: '💬 Chat with Employer',
+      startJourney: 'Start Journey',
+      confirmOnTheWay: 'Are you heading to the job location?',
+      cancel: 'Cancel',
+      confirmOnTheWayYes: 'Yes, On My Way',
+      employerNotified: 'Employer notified that you are on the way!',
+      reachedLocationAlert: 'Reached Location',
+      confirmReached: 'Have you arrived at the job site?',
+      confirmReachedYes: 'Yes, I Reached',
+      reachedNotification: 'Employer notified that you have arrived!',
+      startWorking: 'Start Working',
+      readyToBegin: 'Ready to begin?',
+      startWorkButton: 'Start Work',
+      workTimerStarted: 'Work timer started!',
+      completeWorkAlert: 'Complete Work',
+      completeWorkConfirm: 'Are you sure you want to mark this work as completed? This will stop the timer and notify the employer for payment.',
+      completeWorkButton: 'Complete Work',
+      workCompleteSuccess: 'Work completed! Employer has been notified for payment processing.',
+      ok: 'OK',
+      cannotStartYet: 'Cannot Start Yet',
+      cannotStartMessage: 'You can start work in {minutes} minutes.',
+      reachFirst: 'Please reach the location before starting work.',
+      success: 'Success',
+      failed: 'Failed',
+      chat: 'Chat',
+      navigate: 'Navigate',
+      updateError: 'Failed to update status.',
+      processing: 'Processing...',
+      waiting: 'Waiting...',
+      estimated: 'Estimated',
+      currentStatus: 'Current Status',
+      progress: 'Progress',
+      nextStep: 'Next Step',
+      instructions: 'Instructions',
+      update: 'Update',
+      track: 'Track',
+      monitor: 'Monitor',
+      journey: 'Journey',
+      work: 'Work',
+      complete: 'Complete',
+      status: 'Status',
+      updateStatus: 'Update Status',
+      current: 'Current',
+      upcoming: 'Upcoming',
+      completed: 'Completed',
+      pending: 'Pending',
+      inProgress: 'In Progress',
+    },
+    hi: {
+      headerTitle: 'नौकरी ट्रैकिंग',
+      backButton: '← वापस',
+      loadingText: 'नौकरी विवरण लोड हो रहा है...',
+      error: 'त्रुटि',
+      failedToLoad: 'नौकरी विवरण लोड करने में विफल',
+      jobNotFound: 'नौकरी नहीं मिली',
+      retry: 'पुनः प्रयास करें',
+      jobAccepted: 'नौकरी स्वीकृत! अपनी यात्रा शुरू करने के लिए तैयार?',
+      onTheWay: 'नौकरी स्थान की ओर जा रहे हैं',
+      reachedLocation: 'स्थान पर पहुंच गए! काम शुरू करने के लिए तैयार?',
+      workInProgress: 'काम चल रहा है...',
+      workCompleted: 'काम पूरा हुआ! भुगतान की प्रतीक्षा',
+      jobDetails: 'नौकरी विवरण',
+      jobInformation: 'नौकरी जानकारी',
+      jobTitle: 'नौकरी शीर्षक',
+      companyName: 'कंपनी का नाम',
+      location: 'स्थान',
+      schedule: 'शेड्यूल',
+      date: 'तारीख',
+      time: 'समय',
+      expectedDuration: 'अनुमानित अवधि',
+      hours: 'घंटे',
+      notSpecified: 'निर्दिष्ट नहीं',
+      workTimer: 'काम का टाइमर',
+      payment: 'भुगतान',
+      hourlyRate: 'प्रति घंटा दर',
+      expectedPayment: 'अनुमानित भुगतान',
+      perHour: '/घंटा',
+      onTheWayAction: 'मैं रास्ते में हूं',
+      reachedAction: 'मैं पहुंच गया हूं',
+      startWork: 'काम शुरू करें',
+      completeWork: 'काम पूरा करें',
+      viewLocation: '📍 स्थान देखें',
+      chatEmployer: '💬 नियोक्ता से चैट करें',
+      startJourney: 'यात्रा शुरू करें',
+      confirmOnTheWay: 'क्या आप नौकरी स्थान की ओर जा रहे हैं?',
+      cancel: 'रद्द करें',
+      confirmOnTheWayYes: 'हां, मैं रास्ते में हूं',
+      employerNotified: 'नियोक्ता को सूचित किया गया कि आप रास्ते में हैं!',
+      reachedLocationAlert: 'स्थान पर पहुंचे',
+      confirmReached: 'क्या आप नौकरी स्थल पर पहुंच गए हैं?',
+      confirmReachedYes: 'हां, मैं पहुंच गया हूं',
+      reachedNotification: 'नियोक्ता को सूचित किया गया कि आप पहुंच गए हैं!',
+      startWorking: 'काम शुरू करें',
+      readyToBegin: 'शुरुआत के लिए तैयार?',
+      startWorkButton: 'काम शुरू करें',
+      workTimerStarted: 'काम का टाइमर शुरू हुआ!',
+      completeWorkAlert: 'काम पूरा करें',
+      completeWorkConfirm: 'क्या आप वाकई इस काम को पूरा के रूप में चिह्नित करना चाहते हैं? यह टाइमर बंद कर देगा और भुगतान के लिए नियोक्ता को सूचित करेगा।',
+      completeWorkButton: 'काम पूरा करें',
+      workCompleteSuccess: 'काम पूरा हुआ! भुगतान प्रसंस्करण के लिए नियोक्ता को सूचित किया गया है।',
+      ok: 'ठीक है',
+      cannotStartYet: 'अभी तक शुरू नहीं कर सकते',
+      cannotStartMessage: 'आप {minutes} मिनट में काम शुरू कर सकते हैं।',
+      reachFirst: 'कृपया काम शुरू करने से पहले स्थान पर पहुंचें।',
+      success: 'सफलता',
+      failed: 'विफल',
+      chat: 'चैट',
+      navigate: 'नेविगेट करें',
+      updateError: 'स्थिति अपडेट करने में विफल।',
+      processing: 'प्रसंस्करण...',
+      waiting: 'प्रतीक्षा...',
+      estimated: 'अनुमानित',
+      currentStatus: 'वर्तमान स्थिति',
+      progress: 'प्रगति',
+      nextStep: 'अगला कदम',
+      instructions: 'निर्देश',
+      update: 'अपडेट',
+      track: 'ट्रैक करें',
+      monitor: 'मॉनिटर करें',
+      journey: 'यात्रा',
+      work: 'काम',
+      complete: 'पूरा',
+      status: 'स्थिति',
+      updateStatus: 'स्थिति अपडेट करें',
+      current: 'वर्तमान',
+      upcoming: 'आगामी',
+      completed: 'पूरा हुआ',
+      pending: 'लंबित',
+      inProgress: 'प्रगति में',
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   // Load initial data
   useEffect(() => {
@@ -65,7 +237,7 @@ const JobTrackingScreen = ({ route, navigation }) => {
       }
     } catch (err) {
       console.error('Load error:', err);
-      Alert.alert('Error', 'Failed to load job details');
+      Alert.alert(tr.error, tr.failedToLoad);
     } finally {
       setLoading(false);
     }
@@ -96,7 +268,7 @@ const JobTrackingScreen = ({ route, navigation }) => {
   };
 
   const parseTimeString = (timeStr) => {
-    if (!timeStr) return 'Not specified';
+    if (!timeStr) return tr.notSpecified;
     return String(timeStr);
   };
 
@@ -105,33 +277,33 @@ const JobTrackingScreen = ({ route, navigation }) => {
     try {
       const result = await updateWorkerJourneyStatus(applicationId, status);
       if (!result.success) {
-        Alert.alert('Error', result.error || 'Failed to update status.');
+        Alert.alert(tr.error, result.error || tr.updateError);
         return;
       }
-      Alert.alert('Success', successMsg);
+      Alert.alert(tr.success, successMsg);
     } catch (err) {
-      Alert.alert('Error', err.message);
+      Alert.alert(tr.error, err.message);
     } finally {
       setUpdating(false);
     }
   };
 
   const handleOnTheWay = () => {
-    Alert.alert('Start Journey', 'Are you heading to the job location?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(tr.startJourney, tr.confirmOnTheWay, [
+      { text: tr.cancel, style: 'cancel' },
       {
-        text: 'Yes, On My Way',
-        onPress: () => updateStatus('onTheWay', 'Employer notified that you are on the way!'),
+        text: tr.confirmOnTheWayYes,
+        onPress: () => updateStatus('onTheWay', tr.employerNotified),
       },
     ]);
   };
 
   const handleReached = () => {
-    Alert.alert('Reached Location', 'Have you arrived at the job site?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(tr.reachedLocationAlert, tr.confirmReached, [
+      { text: tr.cancel, style: 'cancel' },
       {
-        text: 'Yes, I Reached',
-        onPress: () => updateStatus('reached', 'Employer notified that you have arrived!'),
+        text: tr.confirmReachedYes,
+        onPress: () => updateStatus('reached', tr.reachedNotification),
       },
     ]);
   };
@@ -143,7 +315,7 @@ const JobTrackingScreen = ({ route, navigation }) => {
 
       if (!check.success) {
         setUpdating(false);
-        Alert.alert('Error', check.error);
+        Alert.alert(tr.error, check.error);
         return;
       }
 
@@ -151,23 +323,23 @@ const JobTrackingScreen = ({ route, navigation }) => {
         setUpdating(false);
         const msg =
           check.minutesUntilStart > 0
-            ? `You can start work in ${check.minutesUntilStart} minutes.`
-            : 'Please reach the location before starting work.';
-        Alert.alert('Cannot Start Yet', msg);
+            ? tr.cannotStartMessage.replace('{minutes}', check.minutesUntilStart)
+            : tr.reachFirst;
+        Alert.alert(tr.cannotStartYet, msg);
         return;
       }
 
-      Alert.alert('Start Working', 'Ready to begin?', [
-        { text: 'Cancel', onPress: () => setUpdating(false) },
+      Alert.alert(tr.startWorking, tr.readyToBegin, [
+        { text: tr.cancel, onPress: () => setUpdating(false) },
         {
-          text: 'Start Work',
+          text: tr.startWorkButton,
           onPress: async () => {
-            await updateStatus('started', 'Work timer started!');
+            await updateStatus('started', tr.workTimerStarted);
           },
         },
       ]);
     } catch (err) {
-      Alert.alert('Error', err.message);
+      Alert.alert(tr.error, err.message);
     } finally {
       setUpdating(false);
     }
@@ -175,12 +347,12 @@ const JobTrackingScreen = ({ route, navigation }) => {
 
   const handleCompleteWork = () => {
     Alert.alert(
-      'Complete Work',
-      'Are you sure you want to mark this work as completed? This will stop the timer and notify the employer for payment.',
+      tr.completeWorkAlert,
+      tr.completeWorkConfirm,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: tr.cancel, style: 'cancel' },
         {
-          text: 'Complete Work',
+          text: tr.completeWorkButton,
           onPress: async () => {
             setUpdating(true);
             try {
@@ -189,21 +361,21 @@ const JobTrackingScreen = ({ route, navigation }) => {
               
               if (result.success) {
                 Alert.alert(
-                  'Success', 
-                  'Work completed! Employer has been notified for payment processing.',
+                  tr.success, 
+                  tr.workCompleteSuccess,
                   [
                     {
-                      text: 'OK',
+                      text: tr.ok,
                       onPress: () => navigation.goBack()
                     }
                   ]
                 );
               } else {
-                Alert.alert('Error', result.error || 'Failed to complete work');
+                Alert.alert(tr.error, result.error || tr.failedToLoad);
               }
             } catch (error) {
               console.error('Complete work error:', error);
-              Alert.alert('Error', error.message || 'Failed to complete work');
+              Alert.alert(tr.error, error.message || tr.failedToLoad);
             } finally {
               setUpdating(false);
             }
@@ -214,21 +386,32 @@ const JobTrackingScreen = ({ route, navigation }) => {
   };
 
   const getStatusMessage = () => {
-    if (!application?.journeyStatus) return 'Job details';
+    if (!application?.journeyStatus) return tr.jobDetails;
     
     switch (application.journeyStatus) {
       case 'accepted':
-        return 'Job accepted! Ready to start your journey?';
+        return tr.jobAccepted;
       case 'onTheWay':
-        return 'On the way to job location';
+        return tr.onTheWay;
       case 'reached':
-        return 'Reached location! Ready to start work?';
+        return tr.reachedLocation;
       case 'started':
-        return 'Work in progress...';
+        return tr.workInProgress;
       case 'completed':
-        return 'Work completed! Awaiting payment';
+        return tr.workCompleted;
       default:
-        return 'Job details';
+        return tr.jobDetails;
+    }
+  };
+
+  const getStatusColor = () => {
+    switch (application?.journeyStatus) {
+      case 'accepted': return '#3498db30';
+      case 'onTheWay': return '#f39c1230';
+      case 'reached': return '#27ae6030';
+      case 'started': return '#007AFF30';
+      case 'completed': return '#27ae6030';
+      default: return '#3498db30';
     }
   };
 
@@ -237,7 +420,7 @@ const JobTrackingScreen = ({ route, navigation }) => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading job details...</Text>
+        <Text style={styles.loadingText}>{tr.loadingText}</Text>
       </View>
     );
   }
@@ -247,15 +430,15 @@ const JobTrackingScreen = ({ route, navigation }) => {
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Back</Text>
+            <Text style={styles.backButton}>{tr.backButton}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Job Tracking</Text>
+          <Text style={styles.headerTitle}>{tr.headerTitle}</Text>
           <View style={{ width: 50 }} />
         </View>
         <View style={styles.centerContent}>
-          <Text style={styles.errorText}>Job not found</Text>
+          <Text style={styles.errorText}>{tr.jobNotFound}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={loadInitialData}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{tr.retry}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -269,37 +452,37 @@ const JobTrackingScreen = ({ route, navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+          <Text style={styles.backButton}>{tr.backButton}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Job Tracking</Text>
+        <Text style={styles.headerTitle}>{tr.headerTitle}</Text>
         <View style={{ width: 50 }} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Status Banner */}
-        <View style={[styles.statusBanner, styles[`status_${status}`] || styles.status_accepted]}>
+        <View style={[styles.statusBanner, { backgroundColor: getStatusColor() }]}>
           <Text style={styles.statusMessage}>{getStatusMessage()}</Text>
         </View>
 
         {/* Job Details */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Job Information</Text>
-          <Text style={styles.infoValue}>{String(job.title || 'Job Title')}</Text>
-          <Text style={styles.infoValue}>{String(job.companyName || 'Company Name')}</Text>
-          <Text style={styles.infoValue}>{String(job.location || 'Location')}</Text>
+          <Text style={styles.cardTitle}>{tr.jobInformation}</Text>
+          <Text style={styles.infoValue}>{String(job.title || tr.jobTitle)}</Text>
+          <Text style={styles.infoValue}>{String(job.companyName || tr.companyName)}</Text>
+          <Text style={styles.infoValue}>{String(job.location || tr.location)}</Text>
         </View>
 
         {/* Schedule */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Schedule</Text>
+          <Text style={styles.cardTitle}>{tr.schedule}</Text>
           
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Date: </Text>
-            <Text style={styles.infoValue}>{String(job.jobDate || 'Not specified')}</Text>
+            <Text style={styles.infoLabel}>{tr.date}: </Text>
+            <Text style={styles.infoValue}>{String(job.jobDate || tr.notSpecified)}</Text>
           </View>
           
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Time: </Text>
+            <Text style={styles.infoLabel}>{tr.time}: </Text>
             <Text style={styles.infoValue}>
               {parseTimeString(job.startTime)} - {parseTimeString(job.endTime)}
             </Text>
@@ -307,8 +490,8 @@ const JobTrackingScreen = ({ route, navigation }) => {
           
           {job.expectedDuration ? (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Expected Duration: </Text>
-              <Text style={styles.infoValue}>{String(job.expectedDuration)} hours</Text>
+              <Text style={styles.infoLabel}>{tr.expectedDuration}: </Text>
+              <Text style={styles.infoValue}>{String(job.expectedDuration)} {tr.hours}</Text>
             </View>
           ) : null}
         </View>
@@ -316,41 +499,91 @@ const JobTrackingScreen = ({ route, navigation }) => {
         {/* Timer */}
         {status === 'started' && (
           <View style={styles.timerCard}>
-            <Text style={styles.timerTitle}>Work Timer</Text>
+            <Text style={styles.timerTitle}>{tr.workTimer}</Text>
             <Text style={styles.timerValue}>{formatDuration(workDuration)}</Text>
           </View>
         )}
 
         {/* Payment */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Payment</Text>
+          <Text style={styles.cardTitle}>{tr.payment}</Text>
           
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Hourly Rate: </Text>
-            <Text style={styles.infoValue}>₹{String(job.rate || '0')}/hour</Text>
+            <Text style={styles.infoLabel}>{tr.hourlyRate}: </Text>
+            <Text style={styles.infoValue}>₹{String(job.rate || '0')}{tr.perHour}</Text>
           </View>
           
           {job.totalPayment ? (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Expected Payment: </Text>
+              <Text style={styles.infoLabel}>{tr.expectedPayment}: </Text>
               <Text style={styles.infoValue}>₹{String(job.totalPayment)}</Text>
             </View>
           ) : null}
         </View>
 
+        {/* Progress Steps */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{tr.progress}</Text>
+          
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { backgroundColor: status === 'accepted' ? colors.primary : colors.border }]} />
+            <Text style={styles.progressText}>{tr.jobAccepted}</Text>
+          </View>
+          
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { backgroundColor: status === 'onTheWay' ? colors.warning : colors.border }]} />
+            <Text style={styles.progressText}>{tr.onTheWay}</Text>
+          </View>
+          
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { backgroundColor: status === 'reached' ? colors.info : colors.border }]} />
+            <Text style={styles.progressText}>{tr.reachedLocation}</Text>
+          </View>
+          
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { backgroundColor: status === 'started' ? colors.primary : colors.border }]} />
+            <Text style={styles.progressText}>{tr.workInProgress}</Text>
+          </View>
+          
+          <View style={styles.progressStep}>
+            <View style={[styles.progressDot, { backgroundColor: status === 'completed' ? colors.success : colors.border }]} />
+            <Text style={styles.progressText}>{tr.workCompleted}</Text>
+          </View>
+        </View>
+
         {/* ACTIONS */}
         <View style={styles.actionsContainer}>
           {status === 'accepted' && (
-            <ActionBtn title="I'm On the Way" onPress={handleOnTheWay} loading={updating} color={colors.warning} />
+            <ActionBtn 
+              title={tr.onTheWayAction} 
+              onPress={handleOnTheWay} 
+              loading={updating} 
+              color={colors.warning} 
+            />
           )}
           {status === 'onTheWay' && (
-            <ActionBtn title="I Have Reached" onPress={handleReached} loading={updating} color={colors.info} />
+            <ActionBtn 
+              title={tr.reachedAction} 
+              onPress={handleReached} 
+              loading={updating} 
+              color={colors.info} 
+            />
           )}
           {status === 'reached' && (
-            <ActionBtn title="Start Working" onPress={handleStartWork} loading={updating} color={colors.primary} />
+            <ActionBtn 
+              title={tr.startWork} 
+              onPress={handleStartWork} 
+              loading={updating} 
+              color={colors.primary} 
+            />
           )}
           {status === 'started' && (
-            <ActionBtn title="Complete Work" onPress={handleCompleteWork} loading={updating} color={colors.success} />
+            <ActionBtn 
+              title={tr.completeWork} 
+              onPress={handleCompleteWork} 
+              loading={updating} 
+              color={colors.success} 
+            />
           )}
         </View>
 
@@ -360,7 +593,7 @@ const JobTrackingScreen = ({ route, navigation }) => {
             style={[styles.secondaryButton, { marginRight: 5 }]}
             onPress={() => navigation.navigate('JobLocation', { application })}
           >
-            <Text style={styles.secondaryText}>📍 View Location</Text>
+            <Text style={styles.secondaryText}>{tr.viewLocation}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -374,7 +607,7 @@ const JobTrackingScreen = ({ route, navigation }) => {
               })
             }
           >
-            <Text style={styles.secondaryText}>💬 Chat with Employer</Text>
+            <Text style={styles.secondaryText}>{tr.chatEmployer}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -426,7 +659,7 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     backgroundColor: colors.white || '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.border || '#e0e0e0',
   },
   backButton: { 
     color: colors.primary || '#007AFF', 
@@ -447,12 +680,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignItems: 'center',
   },
-  status_accepted: { backgroundColor: '#3498db30' },
-  status_onTheWay: { backgroundColor: '#f39c1230' },
-  status_reached: { backgroundColor: '#27ae6030' },
-  status_started: { backgroundColor: '#007AFF30' },
-  status_completed: { backgroundColor: '#27ae6030' },
-
   statusMessage: { 
     fontSize: 16, 
     fontWeight: '600', 
@@ -474,23 +701,26 @@ const styles = StyleSheet.create({
   cardTitle: { 
     fontSize: 18, 
     fontWeight: 'bold', 
-    marginBottom: 12,
+    marginBottom: 16,
     color: colors.text || '#000',
   },
   infoRow: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 10,
     flexWrap: 'wrap'
   },
   infoLabel: {
     fontSize: 15,
     color: colors.textSecondary || '#666',
+    fontWeight: '600',
+    minWidth: 120,
   },
   infoValue: { 
     fontSize: 16, 
     color: colors.text || '#000',
     fontWeight: '500',
-    flex: 1
+    flex: 1,
+    marginBottom: 8,
   },
 
   timerCard: {
@@ -517,6 +747,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     letterSpacing: 2,
+  },
+
+  progressStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  progressDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  progressText: {
+    fontSize: 14,
+    color: colors.text || '#000',
+    fontWeight: '500',
   },
 
   actionsContainer: {
@@ -564,7 +811,8 @@ const styles = StyleSheet.create({
 
   retryButton: {
     backgroundColor: colors.primary || '#007AFF',
-    padding: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 8,
     marginTop: 20,
   },

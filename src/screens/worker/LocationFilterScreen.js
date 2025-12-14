@@ -1,4 +1,4 @@
-// src/screens/worker/LocationFilterScreen.js - PROFESSIONAL VERSION
+// src/screens/worker/LocationFilterScreen.js - HINDI VERSION
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -14,18 +14,21 @@ import {
 } from 'react-native';
 import { useJob } from '../../context/JobContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { colors } from '../../constants/colors';
 
 const { width, height } = Dimensions.get('window');
 
-// Comprehensive Indian cities data with sections
+// Comprehensive Indian cities data with sections - Hindi labels
 const INDIAN_CITIES_DATA = [
   {
-    title: '📍 Current & Nearby',
+    title: '📍 वर्तमान और आस-पास',
+    titleEn: '📍 Current & Nearby',
     data: ['Use Current Location', 'Nearby Cities'],
   },
   {
-    title: '🏙️ Metropolitan Cities',
+    title: '🏙️ महानगरीय शहर',
+    titleEn: '🏙️ Metropolitan Cities',
     data: [
       'Mumbai, Maharashtra',
       'Delhi, Delhi',
@@ -36,7 +39,8 @@ const INDIAN_CITIES_DATA = [
     ],
   },
   {
-    title: '🏛️ State Capitals',
+    title: '🏛️ राज्य राजधानियाँ',
+    titleEn: '🏛️ State Capitals',
     data: [
       'Lucknow, Uttar Pradesh',
       'Patna, Bihar',
@@ -56,7 +60,8 @@ const INDIAN_CITIES_DATA = [
     ],
   },
   {
-    title: '🏢 Major Cities',
+    title: '🏢 प्रमुख शहर',
+    titleEn: '🏢 Major Cities',
     data: [
       'Pune, Maharashtra',
       'Ahmedabad, Gujarat',
@@ -81,7 +86,8 @@ const INDIAN_CITIES_DATA = [
     ],
   },
   {
-    title: '🏘️ Tier 2 & 3 Cities',
+    title: '🏘️ टियर 2 और 3 शहर',
+    titleEn: '🏘️ Tier 2 & 3 Cities',
     data: [
       'Darbhanga, Bihar',
       'Gorakhpur, Uttar Pradesh',
@@ -148,26 +154,114 @@ const INDIAN_CITIES_DATA = [
 const LocationFilterScreen = ({ navigation }) => {
   const { currentLocation, fetchJobs, fetchJobsByUserLocation } = useJob();
   const { userProfile } = useAuth();
+  const { locale, t } = useLanguage();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState(currentLocation || userProfile?.location || '');
   const [loading, setLoading] = useState(false);
 
+  // Translations for this screen
+  const translations = {
+    en: {
+      headerTitle: 'Select Location',
+      selectedLocation: 'Selected: {location}',
+      chooseCity: 'Choose your city',
+      searchPlaceholder: 'Search for your city...',
+      currentLocation: 'Current Location',
+      allIndia: 'All India',
+      currentlyViewing: 'Currently Viewing',
+      showJobsIn: 'Show Jobs in {location}',
+      showAllJobs: 'Show All Jobs',
+      clear: 'Clear',
+      back: '←',
+      loading: 'Loading...',
+      nearbyCities: 'Nearby Cities',
+      useCurrentLocation: 'Use Current Location',
+      apply: 'Apply',
+      filter: 'Filter',
+      location: 'Location',
+      cities: 'Cities',
+      states: 'States',
+      findJobs: 'Find Jobs',
+      search: 'Search',
+      select: 'Select',
+      cancel: 'Cancel',
+      done: 'Done',
+      save: 'Save',
+      update: 'Update',
+      reset: 'Reset',
+      metropolitan: 'Metropolitan',
+      capitals: 'Capitals',
+      major: 'Major',
+      tier: 'Tier',
+      current: 'Current',
+      all: 'All',
+      jobLocation: 'Job Location',
+      workLocation: 'Work Location',
+      preferredLocation: 'Preferred Location',
+    },
+    hi: {
+      headerTitle: 'स्थान चुनें',
+      selectedLocation: 'चुना गया: {location}',
+      chooseCity: 'अपना शहर चुनें',
+      searchPlaceholder: 'अपना शहर खोजें...',
+      currentLocation: 'वर्तमान स्थान',
+      allIndia: 'पूरे भारत में',
+      currentlyViewing: 'वर्तमान में देख रहे हैं',
+      showJobsIn: '{location} में नौकरियां दिखाएं',
+      showAllJobs: 'सभी नौकरियां दिखाएं',
+      clear: 'साफ करें',
+      back: '←',
+      loading: 'लोड हो रहा है...',
+      nearbyCities: 'आस-पास के शहर',
+      useCurrentLocation: 'वर्तमान स्थान का उपयोग करें',
+      apply: 'लागू करें',
+      filter: 'फ़िल्टर',
+      location: 'स्थान',
+      cities: 'शहर',
+      states: 'राज्य',
+      findJobs: 'नौकरियां खोजें',
+      search: 'खोजें',
+      select: 'चुनें',
+      cancel: 'रद्द करें',
+      done: 'हो गया',
+      save: 'सहेजें',
+      update: 'अपडेट करें',
+      reset: 'रीसेट करें',
+      metropolitan: 'महानगरीय',
+      capitals: 'राजधानियां',
+      major: 'प्रमुख',
+      tier: 'टियर',
+      current: 'वर्तमान',
+      all: 'सभी',
+      jobLocation: 'नौकरी स्थान',
+      workLocation: 'काम का स्थान',
+      preferredLocation: 'पसंदीदा स्थान',
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
+
   // Filter cities based on search query
   const filteredData = useMemo(() => {
     if (!searchQuery.trim()) {
-      return INDIAN_CITIES_DATA;
+      return INDIAN_CITIES_DATA.map(section => ({
+        ...section,
+        title: locale === 'hi' ? section.title : section.titleEn
+      }));
     }
 
     const query = searchQuery.toLowerCase().trim();
     const filteredSections = INDIAN_CITIES_DATA.map(section => ({
       ...section,
+      title: locale === 'hi' ? section.title : section.titleEn,
       data: section.data.filter(city => 
         city.toLowerCase().includes(query)
       ),
     })).filter(section => section.data.length > 0);
 
     return filteredSections;
-  }, [searchQuery]);
+  }, [searchQuery, locale]);
 
   const handleLocationSelect = async (location) => {
     if (location === 'Use Current Location') {
@@ -219,6 +313,24 @@ const LocationFilterScreen = ({ navigation }) => {
     return '🏘️';
   };
 
+  const getQuickActionLabel = (action) => {
+    if (action === 'Use Current Location') return tr.useCurrentLocation;
+    if (action === 'Nearby Cities') return tr.nearbyCities;
+    return action;
+  };
+
+  const getApplyButtonText = () => {
+    if (!selectedLocation) return tr.showAllJobs;
+    const cityName = selectedLocation.split(',')[0];
+    return tr.showJobsIn.replace('{location}', cityName);
+  };
+
+  const getSelectedLocationText = () => {
+    if (!selectedLocation) return tr.chooseCity;
+    const cityName = selectedLocation.split(',')[0];
+    return tr.selectedLocation.replace('{location}', cityName);
+  };
+
   const renderSectionHeader = ({ section }) => (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionHeaderText}>{section.title}</Text>
@@ -268,16 +380,16 @@ const LocationFilterScreen = ({ navigation }) => {
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Text style={styles.backButtonText}>{tr.back}</Text>
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Select Location</Text>
+          <Text style={styles.headerTitle}>{tr.headerTitle}</Text>
           <Text style={styles.headerSubtitle}>
-            {selectedLocation ? `Selected: ${selectedLocation.split(',')[0]}` : 'Choose your city'}
+            {getSelectedLocationText()}
           </Text>
         </View>
         <TouchableOpacity onPress={clearLocation} style={styles.clearButton}>
-          <Text style={styles.clearButtonText}>Clear</Text>
+          <Text style={styles.clearButtonText}>{tr.clear}</Text>
         </TouchableOpacity>
       </View>
 
@@ -287,7 +399,7 @@ const LocationFilterScreen = ({ navigation }) => {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search for your city..."
+            placeholder={tr.searchPlaceholder}
             placeholderTextColor={colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -309,7 +421,7 @@ const LocationFilterScreen = ({ navigation }) => {
           onPress={() => handleLocationSelect('Use Current Location')}
         >
           <Text style={styles.quickActionIcon}>📍</Text>
-          <Text style={styles.quickActionText}>Current Location</Text>
+          <Text style={styles.quickActionText}>{tr.currentLocation}</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -321,14 +433,14 @@ const LocationFilterScreen = ({ navigation }) => {
           }}
         >
           <Text style={styles.quickActionIcon}>🌍</Text>
-          <Text style={styles.quickActionText}>All India</Text>
+          <Text style={styles.quickActionText}>{tr.allIndia}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Current Location Display */}
       {currentLocation && (
         <View style={styles.currentLocationSection}>
-          <Text style={styles.currentLocationLabel}>Currently Viewing</Text>
+          <Text style={styles.currentLocationLabel}>{tr.currentlyViewing}</Text>
           <Text style={styles.currentLocationText}>{currentLocation}</Text>
         </View>
       )}
@@ -362,7 +474,7 @@ const LocationFilterScreen = ({ navigation }) => {
           ) : (
             <>
               <Text style={styles.applyButtonText}>
-                {selectedLocation ? `Show Jobs in ${selectedLocation.split(',')[0]}` : 'Show All Jobs'}
+                {getApplyButtonText()}
               </Text>
               <Text style={styles.applyButtonArrow}>→</Text>
             </>

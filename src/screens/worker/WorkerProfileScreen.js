@@ -1,4 +1,4 @@
-// src/screens/worker/WorkerProfileScreen.js
+// src/screens/worker/WorkerProfileScreen.js - HINDI VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,6 +13,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { colors } from '../../constants/colors';
 import { 
   fetchWorkerRatings, 
@@ -25,6 +26,8 @@ const { width } = Dimensions.get('window');
 
 const WorkerProfileScreen = ({ navigation }) => {
   const { user, userProfile, logout } = useAuth();
+  const { locale, changeLanguage, t } = useLanguage();
+  
   const [ratings, setRatings] = useState([]);
   const [applications, setApplications] = useState([]);
   const [earnings, setEarnings] = useState([]);
@@ -38,6 +41,122 @@ const WorkerProfileScreen = ({ navigation }) => {
     monthlyEarnings: 0,
     averageEarning: 0,
   });
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      headerTitle: 'My Profile',
+      workStatistics: 'Work Statistics',
+      totalJobs: 'Total Jobs',
+      completed: 'Completed',
+      totalEarned: 'Total Earned',
+      thisMonth: 'This Month',
+      earningsSummary: 'Earnings Summary',
+      jobsDone: 'Jobs Done',
+      avgJob: 'Avg/Job',
+      recentEarnings: 'Recent Earnings',
+      performance: 'Performance',
+      completionRate: 'Completion Rate',
+      averageRating: 'Average Rating',
+      averageEarnings: 'Average Earnings',
+      skillsExpertise: 'Skills & Expertise',
+      reviewsRatings: 'Reviews & Ratings',
+      personalInformation: 'Personal Information',
+      fullName: 'Full Name',
+      email: 'Email',
+      phone: 'Phone',
+      location: 'Location',
+      age: 'Age',
+      experience: 'Experience',
+      accountSettings: 'Account Settings',
+      editProfile: 'Edit Profile',
+      changePassword: 'Change Password',
+      notifications: 'Notifications',
+      privacySecurity: 'Privacy & Security',
+      helpSupport: 'Help & Support',
+      logout: 'Logout',
+      logoutConfirm: 'Are you sure you want to logout?',
+      cancel: 'Cancel',
+      logoutText: 'Logout',
+      errorLogout: 'Failed to logout',
+      noRatings: 'No ratings',
+      reviews: 'reviews',
+      online: 'Online',
+      cash: 'Cash',
+      notSet: 'Not set',
+      notSpecified: 'Not specified',
+      memberSince: 'Member since',
+      recently: 'Recently',
+      switchToHindi: 'Switch to Hindi',
+      switchToEnglish: 'Switch to English',
+      appVersion: 'Udyogi v1.0.0',
+      thisMonthEarnings: 'This Month',
+      perJob: 'per job',
+      completion: 'Completion',
+      rating: 'Rating',
+      earning: 'Earning',
+      viewAllEarnings: 'View All Earnings',
+      viewAllReviews: 'View All Reviews',
+      verified: 'Verified',
+    },
+    hi: {
+      headerTitle: 'मेरी प्रोफाइल',
+      workStatistics: 'काम के आंकड़े',
+      totalJobs: 'कुल नौकरियां',
+      completed: 'पूरी हुईं',
+      totalEarned: 'कुल कमाई',
+      thisMonth: 'इस महीने',
+      earningsSummary: 'कमाई का सारांश',
+      jobsDone: 'काम हुए',
+      avgJob: 'औसत/नौकरी',
+      recentEarnings: 'हालिया कमाई',
+      performance: 'प्रदर्शन',
+      completionRate: 'पूर्णता दर',
+      averageRating: 'औसत रेटिंग',
+      averageEarnings: 'औसत कमाई',
+      skillsExpertise: 'कौशल और विशेषज्ञता',
+      reviewsRatings: 'समीक्षा और रेटिंग',
+      personalInformation: 'व्यक्तिगत जानकारी',
+      fullName: 'पूरा नाम',
+      email: 'ईमेल',
+      phone: 'फोन',
+      location: 'स्थान',
+      age: 'उम्र',
+      experience: 'अनुभव',
+      accountSettings: 'खाता सेटिंग्स',
+      editProfile: 'प्रोफाइल संपादित करें',
+      changePassword: 'पासवर्ड बदलें',
+      notifications: 'सूचनाएं',
+      privacySecurity: 'गोपनीयता और सुरक्षा',
+      helpSupport: 'मदद और सहायता',
+      logout: 'लॉग आउट',
+      logoutConfirm: 'क्या आप वाकई लॉग आउट करना चाहते हैं?',
+      cancel: 'रद्द करें',
+      logoutText: 'लॉग आउट',
+      errorLogout: 'लॉग आउट करने में विफल',
+      noRatings: 'कोई रेटिंग नहीं',
+      reviews: 'समीक्षाएं',
+      online: 'ऑनलाइन',
+      cash: 'कैश',
+      notSet: 'सेट नहीं है',
+      notSpecified: 'निर्दिष्ट नहीं',
+      memberSince: 'सदस्य बने',
+      recently: 'हाल ही में',
+      switchToHindi: 'हिंदी में बदलें',
+      switchToEnglish: 'अंग्रेजी में बदलें',
+      appVersion: 'उद्योगी v1.0.0',
+      thisMonthEarnings: 'इस महीने',
+      perJob: 'प्रति नौकरी',
+      completion: 'पूर्णता',
+      rating: 'रेटिंग',
+      earning: 'कमाई',
+      viewAllEarnings: 'सभी कमाई देखें',
+      viewAllReviews: 'सभी समीक्षाएं देखें',
+      verified: 'सत्यापित',
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   useEffect(() => {
     loadProfileData();
@@ -100,19 +219,41 @@ const WorkerProfileScreen = ({ navigation }) => {
 
   const handleLogout = async () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      tr.logout,
+      tr.logoutConfirm,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: tr.cancel, style: 'cancel' },
         { 
-          text: 'Logout', 
+          text: tr.logoutText, 
           style: 'destructive',
           onPress: async () => {
             try {
               await logout();
             } catch (error) {
-              Alert.alert('Error', 'Failed to logout');
+              Alert.alert(
+                locale === 'hi' ? 'त्रुटि' : 'Error',
+                tr.errorLogout
+              );
             }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleLanguageToggle = () => {
+    Alert.alert(
+      locale === 'hi' ? 'भाषा बदलें' : 'Change Language',
+      locale === 'hi' 
+        ? 'क्या आप अंग्रेजी भाषा में बदलना चाहते हैं?'
+        : 'Do you want to switch to Hindi language?',
+      [
+        { text: tr.cancel, style: 'cancel' },
+        {
+          text: locale === 'hi' ? 'अंग्रेजी में बदलें' : 'Switch to Hindi',
+          onPress: () => {
+            const newLang = locale === 'hi' ? 'en' : 'hi';
+            changeLanguage(newLang);
           }
         }
       ]
@@ -159,7 +300,8 @@ const WorkerProfileScreen = ({ navigation }) => {
           <View style={styles.reviewerDetails}>
             <Text style={styles.reviewerName}>{review.employerName}</Text>
             <Text style={styles.reviewDate}>
-              {review.createdAt?.toDate?.()?.toLocaleDateString() || 'Recent'}
+              {review.createdAt?.toDate?.()?.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN') || 
+                (locale === 'hi' ? 'हालिया' : 'Recent')}
             </Text>
           </View>
         </View>
@@ -168,7 +310,9 @@ const WorkerProfileScreen = ({ navigation }) => {
       {review.comment && (
         <Text style={styles.reviewComment}>{review.comment}</Text>
       )}
-      <Text style={styles.reviewJobTitle}>Job: {review.jobTitle}</Text>
+      <Text style={styles.reviewJobTitle}>
+        {locale === 'hi' ? 'नौकरी: ' : 'Job: '}{review.jobTitle}
+      </Text>
     </View>
   );
 
@@ -179,7 +323,8 @@ const WorkerProfileScreen = ({ navigation }) => {
           <Text style={styles.earningJob}>{earning.jobTitle}</Text>
           <Text style={styles.earningEmployer}>{earning.employerName}</Text>
           <Text style={styles.earningDate}>
-            {earning.paidAt?.toDate?.()?.toLocaleDateString() || 'Recent'}
+            {earning.paidAt?.toDate?.()?.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN') || 
+              (locale === 'hi' ? 'हालिया' : 'Recent')}
           </Text>
         </View>
         <View style={styles.earningAmount}>
@@ -189,10 +334,20 @@ const WorkerProfileScreen = ({ navigation }) => {
             { backgroundColor: earning.paymentMethod === 'online' ? '#2196F3' : '#4CAF50' }
           ]}>
             <Text style={styles.paymentMethodText}>
-              {earning.paymentMethod === 'online' ? 'Online' : 'Cash'}
+              {earning.paymentMethod === 'online' ? tr.online : tr.cash}
             </Text>
           </View>
         </View>
+      </View>
+    </View>
+  );
+
+  const InfoRow = ({ icon, label, value }) => (
+    <View style={styles.infoRow}>
+      <Text style={styles.infoIcon}>{icon}</Text>
+      <View style={styles.infoContent}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
       </View>
     </View>
   );
@@ -206,13 +361,23 @@ const WorkerProfileScreen = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Profile</Text>
-        <TouchableOpacity 
-          onPress={() => setShowEditModal(true)}
-          style={styles.editButton}
-        >
-          <Text style={styles.editButtonText}>✏️</Text>
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{tr.headerTitle}</Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity 
+            onPress={handleLanguageToggle}
+            style={styles.languageButton}
+          >
+            <Text style={styles.languageButtonText}>
+              {locale === 'hi' ? '🌐 EN' : '🌐 हि'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => setShowEditModal(true)}
+            style={styles.editButton}
+          >
+            <Text style={styles.editButtonText}>✏️</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -222,26 +387,27 @@ const WorkerProfileScreen = ({ navigation }) => {
             <View style={styles.avatarContainer}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
-                  {userProfile?.name?.charAt(0)?.toUpperCase() || 'W'}
+                  {userProfile?.name?.charAt(0)?.toUpperCase() || (locale === 'hi' ? 'म' : 'W')}
                 </Text>
               </View>
               <View style={styles.verifiedBadge}>
                 <Text style={styles.verifiedIcon}>✓</Text>
+                <Text style={styles.verifiedText}>{tr.verified}</Text>
               </View>
             </View>
 
             <View style={styles.profileInfo}>
-              <Text style={styles.name}>{userProfile?.name || 'Worker'}</Text>
+              <Text style={styles.name}>{userProfile?.name || (locale === 'hi' ? 'मजदूर' : 'Worker')}</Text>
               <Text style={styles.email}>{user?.email}</Text>
               
               {/* Rating Display */}
               <View style={styles.ratingSection}>
                 {renderStars(Math.round(stats.averageRating))}
                 <Text style={styles.ratingText}>
-                  {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : 'No ratings'}
+                  {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : tr.noRatings}
                 </Text>
                 {ratings.length > 0 && (
-                  <Text style={styles.ratingCount}>({ratings.length} reviews)</Text>
+                  <Text style={styles.ratingCount}>({ratings.length} {tr.reviews})</Text>
                 )}
               </View>
 
@@ -279,49 +445,49 @@ const WorkerProfileScreen = ({ navigation }) => {
         </View>
 
         {/* Stats Grid */}
-        <Text style={styles.sectionTitle}>Work Statistics</Text>
+        <Text style={styles.sectionTitle}>{tr.workStatistics}</Text>
         <View style={styles.statsGrid}>
           <StatCard
             icon="💼"
             value={stats.totalJobs}
-            label="Total Jobs"
+            label={tr.totalJobs}
             color={colors.info}
           />
           <StatCard
             icon="✅"
             value={stats.completedJobs}
-            label="Completed"
+            label={tr.completed}
             color={colors.success}
           />
           <StatCard
             icon="💰"
             value={`₹${stats.totalEarnings}`}
-            label="Total Earned"
+            label={tr.totalEarned}
             color={colors.primary}
           />
           <StatCard
             icon="📈"
             value={`₹${stats.monthlyEarnings}`}
-            label="This Month"
+            label={tr.thisMonth}
             color={colors.warning}
           />
         </View>
 
         {/* Earnings Summary */}
-        <Text style={styles.sectionTitle}>Earnings Summary</Text>
+        <Text style={styles.sectionTitle}>{tr.earningsSummary}</Text>
         <View style={styles.earningsSummaryCard}>
           <View style={styles.earningsStats}>
             <View style={styles.earningsStat}>
               <Text style={styles.earningsStatValue}>₹{stats.monthlyEarnings}</Text>
-              <Text style={styles.earningsStatLabel}>This Month</Text>
+              <Text style={styles.earningsStatLabel}>{tr.thisMonthEarnings}</Text>
             </View>
             <View style={styles.earningsStat}>
               <Text style={styles.earningsStatValue}>{stats.completedJobs}</Text>
-              <Text style={styles.earningsStatLabel}>Jobs Done</Text>
+              <Text style={styles.earningsStatLabel}>{tr.jobsDone}</Text>
             </View>
             <View style={styles.earningsStat}>
               <Text style={styles.earningsStatValue}>₹{Math.round(stats.averageEarning)}</Text>
-              <Text style={styles.earningsStatLabel}>Avg/Job</Text>
+              <Text style={styles.earningsStatLabel}>{tr.perJob}</Text>
             </View>
           </View>
         </View>
@@ -329,7 +495,7 @@ const WorkerProfileScreen = ({ navigation }) => {
         {/* Recent Earnings */}
         {earnings.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Recent Earnings</Text>
+            <Text style={styles.sectionTitle}>{tr.recentEarnings}</Text>
             <View style={styles.earningsContainer}>
               {earnings.slice(0, 5).map((earning, index) => (
                 <EarningCard key={earning.id || index} earning={earning} />
@@ -337,7 +503,7 @@ const WorkerProfileScreen = ({ navigation }) => {
               
               {earnings.length > 5 && (
                 <TouchableOpacity style={styles.viewAllButton}>
-                  <Text style={styles.viewAllText}>View All Earnings →</Text>
+                  <Text style={styles.viewAllText}>{tr.viewAllEarnings} →</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -345,11 +511,11 @@ const WorkerProfileScreen = ({ navigation }) => {
         )}
 
         {/* Performance Metrics */}
-        <Text style={styles.sectionTitle}>Performance</Text>
+        <Text style={styles.sectionTitle}>{tr.performance}</Text>
         <View style={styles.performanceCard}>
           <View style={styles.performanceItem}>
             <View style={styles.performanceHeader}>
-              <Text style={styles.performanceLabel}>Completion Rate</Text>
+              <Text style={styles.performanceLabel}>{tr.completion}</Text>
               <Text style={styles.performanceValue}>
                 {stats.totalJobs > 0 
                   ? `${Math.round((stats.completedJobs / stats.totalJobs) * 100)}%`
@@ -373,7 +539,7 @@ const WorkerProfileScreen = ({ navigation }) => {
 
           <View style={styles.performanceItem}>
             <View style={styles.performanceHeader}>
-              <Text style={styles.performanceLabel}>Average Rating</Text>
+              <Text style={styles.performanceLabel}>{tr.rating}</Text>
               <Text style={styles.performanceValue}>
                 {stats.averageRating > 0 ? `${stats.averageRating}/5` : 'N/A'}
               </Text>
@@ -393,7 +559,7 @@ const WorkerProfileScreen = ({ navigation }) => {
 
           <View style={styles.performanceItem}>
             <View style={styles.performanceHeader}>
-              <Text style={styles.performanceLabel}>Average Earnings</Text>
+              <Text style={styles.performanceLabel}>{tr.earning}</Text>
               <Text style={styles.performanceValue}>₹{Math.round(stats.averageEarning)}</Text>
             </View>
             <View style={styles.progressBar}>
@@ -413,7 +579,7 @@ const WorkerProfileScreen = ({ navigation }) => {
         {/* All Skills */}
         {userProfile?.skills && userProfile.skills.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Skills & Expertise</Text>
+            <Text style={styles.sectionTitle}>{tr.skillsExpertise}</Text>
             <View style={styles.allSkillsContainer}>
               {userProfile.skills.map((skill, index) => (
                 <SkillBadge key={index} skill={skill} />
@@ -426,7 +592,7 @@ const WorkerProfileScreen = ({ navigation }) => {
         {ratings.length > 0 && (
           <>
             <View style={styles.reviewsHeader}>
-              <Text style={styles.sectionTitle}>Reviews & Ratings</Text>
+              <Text style={styles.sectionTitle}>{tr.reviewsRatings}</Text>
               <View style={styles.reviewsBadge}>
                 <Text style={styles.reviewsBadgeText}>{ratings.length}</Text>
               </View>
@@ -439,7 +605,7 @@ const WorkerProfileScreen = ({ navigation }) => {
               
               {ratings.length > 5 && (
                 <TouchableOpacity style={styles.viewAllButton}>
-                  <Text style={styles.viewAllText}>View All Reviews →</Text>
+                  <Text style={styles.viewAllText}>{tr.viewAllReviews} →</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -447,25 +613,49 @@ const WorkerProfileScreen = ({ navigation }) => {
         )}
 
         {/* Personal Information */}
-        <Text style={styles.sectionTitle}>Personal Information</Text>
+        <Text style={styles.sectionTitle}>{tr.personalInformation}</Text>
         <View style={styles.infoCard}>
-          <InfoRow icon="👤" label="Full Name" value={userProfile?.name || 'Not set'} />
-          <InfoRow icon="📧" label="Email" value={user?.email} />
-          <InfoRow icon="📱" label="Phone" value={userProfile?.phoneNumber || 'Not set'} />
-          <InfoRow icon="📍" label="Location" value={userProfile?.location || 'Not set'} />
-          <InfoRow icon="🎂" label="Age" value={userProfile?.age || 'Not set'} />
-          <InfoRow icon="🆔" label="Experience" value={userProfile?.experience || 'Not specified'} />
+          <InfoRow 
+            icon="👤" 
+            label={tr.fullName} 
+            value={userProfile?.name || tr.notSet} 
+          />
+          <InfoRow 
+            icon="📧" 
+            label={tr.email} 
+            value={user?.email} 
+          />
+          <InfoRow 
+            icon="📱" 
+            label={tr.phone} 
+            value={userProfile?.phoneNumber || tr.notSet} 
+          />
+          <InfoRow 
+            icon="📍" 
+            label={tr.location} 
+            value={userProfile?.location || tr.notSet} 
+          />
+          <InfoRow 
+            icon="🎂" 
+            label={tr.age} 
+            value={userProfile?.age || tr.notSet} 
+          />
+          <InfoRow 
+            icon="🆔" 
+            label={tr.experience} 
+            value={userProfile?.experience || tr.notSpecified} 
+          />
         </View>
 
         {/* Account Actions */}
-        <Text style={styles.sectionTitle}>Account Settings</Text>
+        <Text style={styles.sectionTitle}>{tr.accountSettings}</Text>
         <View style={styles.actionsCard}>
           <TouchableOpacity 
             style={styles.actionItem}
             onPress={() => navigation.navigate('EditProfile')}
           >
             <Text style={styles.actionIcon}>✏️</Text>
-            <Text style={styles.actionText}>Edit Profile</Text>
+            <Text style={styles.actionText}>{tr.editProfile}</Text>
             <Text style={styles.actionArrow}>›</Text>
           </TouchableOpacity>
           
@@ -473,7 +663,7 @@ const WorkerProfileScreen = ({ navigation }) => {
           
           <TouchableOpacity style={styles.actionItem}>
             <Text style={styles.actionIcon}>🔐</Text>
-            <Text style={styles.actionText}>Change Password</Text>
+            <Text style={styles.actionText}>{tr.changePassword}</Text>
             <Text style={styles.actionArrow}>›</Text>
           </TouchableOpacity>
           
@@ -481,7 +671,7 @@ const WorkerProfileScreen = ({ navigation }) => {
           
           <TouchableOpacity style={styles.actionItem}>
             <Text style={styles.actionIcon}>🔔</Text>
-            <Text style={styles.actionText}>Notifications</Text>
+            <Text style={styles.actionText}>{tr.notifications}</Text>
             <Text style={styles.actionArrow}>›</Text>
           </TouchableOpacity>
           
@@ -489,7 +679,7 @@ const WorkerProfileScreen = ({ navigation }) => {
           
           <TouchableOpacity style={styles.actionItem}>
             <Text style={styles.actionIcon}>🛡️</Text>
-            <Text style={styles.actionText}>Privacy & Security</Text>
+            <Text style={styles.actionText}>{tr.privacySecurity}</Text>
             <Text style={styles.actionArrow}>›</Text>
           </TouchableOpacity>
           
@@ -497,40 +687,43 @@ const WorkerProfileScreen = ({ navigation }) => {
           
           <TouchableOpacity style={styles.actionItem}>
             <Text style={styles.actionIcon}>❓</Text>
-            <Text style={styles.actionText}>Help & Support</Text>
+            <Text style={styles.actionText}>{tr.helpSupport}</Text>
             <Text style={styles.actionArrow}>›</Text>
           </TouchableOpacity>
         </View>
 
+        {/* Language Toggle Button */}
+        <TouchableOpacity 
+          style={styles.languageToggleButton}
+          onPress={handleLanguageToggle}
+        >
+          <Text style={styles.languageToggleIcon}>
+            {locale === 'hi' ? '🇮🇳' : '🇺🇸'}
+          </Text>
+          <Text style={styles.languageToggleText}>
+            {locale === 'hi' ? tr.switchToEnglish : tr.switchToHindi}
+          </Text>
+          <Text style={styles.languageToggleArrow}>→</Text>
+        </TouchableOpacity>
+
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutIcon}>🚪</Text>
-          <Text style={styles.logoutButtonText}>Logout</Text>
+          <Text style={styles.logoutButtonText}>{tr.logout}</Text>
         </TouchableOpacity>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Member since {user?.metadata?.creationTime 
-              ? new Date(user.metadata.creationTime).toLocaleDateString() 
-              : 'Recently'}
+            {tr.memberSince} {user?.metadata?.creationTime 
+              ? new Date(user.metadata.creationTime).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN') 
+              : tr.recently}
           </Text>
-          <Text style={styles.footerVersion}>Labor Connect v1.0.0</Text>
+          <Text style={styles.footerVersion}>{tr.appVersion}</Text>
         </View>
       </ScrollView>
     </View>
   );
 };
-
-// Helper Component
-const InfoRow = ({ icon, label, value }) => (
-  <View style={styles.infoRow}>
-    <Text style={styles.infoIcon}>{icon}</Text>
-    <View style={styles.infoContent}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  </View>
-);
 
 const styles = StyleSheet.create({
   container: {
@@ -559,11 +752,27 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.white,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  languageButton: {
+    padding: 8,
+    marginRight: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 20,
+  },
+  languageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.white,
+  },
   editButton: {
     padding: 5,
   },
   editButtonText: {
     fontSize: 22,
+    color: colors.white,
   },
   content: {
     flex: 1,
@@ -608,18 +817,24 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     backgroundColor: colors.success,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: colors.white,
   },
   verifiedIcon: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: 'bold',
+    marginRight: 4,
+  },
+  verifiedText: {
+    color: colors.white,
+    fontSize: 10,
+    fontWeight: '600',
   },
   profileInfo: {
     alignItems: 'center',
@@ -744,7 +959,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: '500',
   },
-  // Earnings Styles
   earningsSummaryCard: {
     backgroundColor: colors.white,
     padding: 20,
@@ -1041,6 +1255,36 @@ const styles = StyleSheet.create({
   separator: {
     height: 1,
     backgroundColor: colors.border + '50',
+  },
+  languageToggleButton: {
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  languageToggleIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  languageToggleText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  languageToggleArrow: {
+    fontSize: 20,
+    color: colors.primary,
+    fontWeight: 'bold',
   },
   logoutButton: {
     flexDirection: 'row',
