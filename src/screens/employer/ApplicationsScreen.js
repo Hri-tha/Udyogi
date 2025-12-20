@@ -1,4 +1,4 @@
-// src/screens/employer/ApplicationsScreen.js - UPDATED
+// src/screens/employer/ApplicationsScreen.js - HINDI VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { 
   updateApplicationStatus, 
   fetchJobApplications,
@@ -22,12 +23,175 @@ import { colors } from '../../constants/colors';
 const ApplicationsScreen = ({ route, navigation }) => {
   const { jobId } = route.params || {};
   const { user, userProfile } = useAuth();
+  const { locale, t } = useLanguage();
   const [applications, setApplications] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [selectedJobId, setSelectedJobId] = useState(jobId);
   const [loading, setLoading] = useState(true);
   const [showJobSelector, setShowJobSelector] = useState(!jobId);
   const [processingApplication, setProcessingApplication] = useState(null);
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      back: "Back",
+      applications: "Applications",
+      selectJob: "Select Job",
+      loadingApplications: "Loading applications...",
+      selectJobToView: "Select a job to view applications",
+      noJobsWithApplications: "No jobs with applications",
+      noJobsDesc: "Applications will appear here when workers apply to your jobs",
+      applicationsCount: "application",
+      applicationsCountPlural: "applications",
+      noApplicationsYet: "No applications yet",
+      noApplicationsDesc: "Applications will appear here when workers apply",
+      applied: "Applied",
+      applicationAccepted: "Application accepted! Location shared and chat enabled with the worker.",
+      locationPermissionRequired: "Location Permission Required",
+      locationPermissionDesc: "We need your location to share the work location with the worker.",
+      success: "Success",
+      error: "Error",
+      failedToLoad: "Failed to load",
+      applicationRejected: "Application rejected",
+      failedToAccept: "Failed to accept application",
+      failedToReject: "Failed to reject application",
+      pleaseTryAgain: "Please try again.",
+      pending: "Pending",
+      accepted: "Accepted",
+      rejected: "Rejected",
+      completed: "Completed",
+      paymentRequired: "Payment Required",
+      rateWorker: "Rate Worker",
+      accept: "Accept",
+      reject: "Reject",
+      trackJobProgress: "Track Job Progress",
+      processPayment: "Process Payment",
+      viewSharedLocation: "View Shared Location",
+      openChat: "Open Chat",
+      workerContactInfo: "Worker Contact Information",
+      name: "Name",
+      phone: "Phone",
+      contactNote: "Please contact the worker to coordinate the job details.",
+      jobCompleted: "Job Completed Successfully",
+      viewJobDetails: "View Job Details",
+      rateWorkerNow: "Rate Worker Now",
+      rateWorkerPerformance: "Rate Worker Performance",
+      payment: "Payment",
+      amount: "Amount",
+      paid: "Paid",
+      paymentPending: "Payment Pending",
+      youRated: "You rated",
+      stars: "stars",
+      onTheWay: "On The Way",
+      arrived: "Arrived",
+      working: "Working",
+      jobCompletedStatus: "Completed",
+      workingText: "Working",
+      locationShared: "Location Shared",
+      chatEnabled: "Chat Enabled",
+      status: "Status",
+      journeyStatus: "Progress",
+      worker: "Worker",
+      job: "Job",
+      date: "Date",
+      loading: "Loading...",
+      noLocationPermission: "Location permission not granted",
+      select: "Select",
+      cancel: "Cancel",
+      confirm: "Confirm",
+      areYouSure: "Are you sure?",
+      delete: "Delete",
+      update: "Update",
+      save: "Save",
+      share: "Share",
+      view: "View",
+      edit: "Edit",
+      deleteApplication: "Delete Application",
+      deleteApplicationConfirm: "Are you sure you want to delete this application?",
+      applicationDeleted: "Application deleted",
+      failedToDelete: "Failed to delete application",
+    },
+    hi: {
+      back: "पीछे",
+      applications: "आवेदन",
+      selectJob: "नौकरी चुनें",
+      loadingApplications: "आवेदन लोड हो रहे हैं...",
+      selectJobToView: "आवेदन देखने के लिए एक नौकरी चुनें",
+      noJobsWithApplications: "आवेदन वाली कोई नौकरियां नहीं",
+      noJobsDesc: "जब कर्मचारी आपकी नौकरियों के लिए आवेदन करेंगे तो आवेदन यहां दिखाई देंगे",
+      applicationsCount: "आवेदन",
+      applicationsCountPlural: "आवेदन",
+      noApplicationsYet: "अभी तक कोई आवेदन नहीं",
+      noApplicationsDesc: "जब कर्मचारी आवेदन करेंगे तो आवेदन यहां दिखाई देंगे",
+      applied: "आवेदन किया",
+      applicationAccepted: "आवेदन स्वीकृत! स्थान साझा किया गया और कर्मचारी के साथ चैट सक्षम हुई।",
+      locationPermissionRequired: "स्थान अनुमति आवश्यक",
+      locationPermissionDesc: "हमें कर्मचारी के साथ कार्य स्थान साझा करने के लिए आपके स्थान की आवश्यकता है।",
+      success: "सफल",
+      error: "त्रुटि",
+      failedToLoad: "लोड करने में विफल",
+      applicationRejected: "आवेदन अस्वीकृत",
+      failedToAccept: "आवेदन स्वीकार करने में विफल",
+      failedToReject: "आवेदन अस्वीकार करने में विफल",
+      pleaseTryAgain: "कृपया पुनः प्रयास करें।",
+      pending: "लंबित",
+      accepted: "स्वीकृत",
+      rejected: "अस्वीकृत",
+      completed: "पूर्ण",
+      paymentRequired: "भुगतान आवश्यक",
+      rateWorker: "कर्मचारी को रेट करें",
+      accept: "स्वीकार करें",
+      reject: "अस्वीकार करें",
+      trackJobProgress: "नौकरी प्रगति ट्रैक करें",
+      processPayment: "भुगतान प्रक्रिया करें",
+      viewSharedLocation: "साझा स्थान देखें",
+      openChat: "चैट खोलें",
+      workerContactInfo: "कर्मचारी संपर्क जानकारी",
+      name: "नाम",
+      phone: "फोन",
+      contactNote: "कृपया नौकरी के विवरणों का समन्वय करने के लिए कर्मचारी से संपर्क करें।",
+      jobCompleted: "नौकरी सफलतापूर्वक पूर्ण हुई",
+      viewJobDetails: "नौकरी विवरण देखें",
+      rateWorkerNow: "अभी कर्मचारी को रेट करें",
+      rateWorkerPerformance: "कर्मचारी प्रदर्शन रेट करें",
+      payment: "भुगतान",
+      amount: "राशि",
+      paid: "भुगतान हुआ",
+      paymentPending: "भुगतान लंबित",
+      youRated: "आपने रेट किया",
+      stars: "स्टार",
+      onTheWay: "रास्ते में",
+      arrived: "पहुंच गया",
+      working: "काम कर रहा",
+      jobCompletedStatus: "पूर्ण",
+      workingText: "कार्यरत",
+      locationShared: "स्थान साझा",
+      chatEnabled: "चैट सक्षम",
+      status: "स्थिति",
+      journeyStatus: "प्रगति",
+      worker: "कर्मचारी",
+      job: "नौकरी",
+      date: "तारीख",
+      loading: "लोड हो रहा है...",
+      noLocationPermission: "स्थान अनुमति प्रदान नहीं की गई",
+      select: "चुनें",
+      cancel: "रद्द करें",
+      confirm: "पुष्टि करें",
+      areYouSure: "क्या आप सुनिश्चित हैं?",
+      delete: "हटाएं",
+      update: "अपडेट करें",
+      save: "सहेजें",
+      share: "साझा करें",
+      view: "देखें",
+      edit: "संपादित करें",
+      deleteApplication: "आवेदन हटाएं",
+      deleteApplicationConfirm: "क्या आप निश्चित रूप से इस आवेदन को हटाना चाहते हैं?",
+      applicationDeleted: "आवेदन हटाया गया",
+      failedToDelete: "आवेदन हटाने में विफल",
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   useEffect(() => {
     console.log('ApplicationsScreen mounted with jobId:', jobId);
@@ -68,11 +232,11 @@ const ApplicationsScreen = ({ route, navigation }) => {
         setJobs(jobsWithApps);
       } else {
         console.error('Failed to fetch jobs:', result.error);
-        Alert.alert('Error', 'Failed to load jobs: ' + result.error);
+        Alert.alert(tr.error, `${tr.failedToLoad} jobs: ${result.error}`);
       }
     } catch (error) {
       console.error('Error loading jobs:', error);
-      Alert.alert('Error', 'Failed to load jobs');
+      Alert.alert(tr.error, `${tr.failedToLoad} jobs`);
     } finally {
       setLoading(false);
     }
@@ -93,11 +257,11 @@ const ApplicationsScreen = ({ route, navigation }) => {
         setShowJobSelector(false);
       } else {
         console.error('Failed to fetch applications:', result.error);
-        Alert.alert('Error', result.error || 'Failed to load applications');
+        Alert.alert(tr.error, result.error || `${tr.failedToLoad} applications`);
       }
     } catch (error) {
       console.error('Error in loadApplications:', error);
-      Alert.alert('Error', 'Failed to load applications');
+      Alert.alert(tr.error, `${tr.failedToLoad} applications`);
     } finally {
       setLoading(false);
     }
@@ -111,8 +275,8 @@ const ApplicationsScreen = ({ route, navigation }) => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
-          'Location Permission Required',
-          'We need your location to share the work location with the worker.'
+          tr.locationPermissionRequired,
+          tr.locationPermissionDesc
         );
         setProcessingApplication(null);
         return;
@@ -147,17 +311,17 @@ const ApplicationsScreen = ({ route, navigation }) => {
 
       if (result.success) {
         Alert.alert(
-          'Success', 
-          'Application accepted! Location shared and chat enabled with the worker.'
+          tr.success, 
+          tr.applicationAccepted
         );
         await loadApplications(selectedJobId);
       } else {
         console.error('Failed to accept application:', result.error);
-        Alert.alert('Error', result.error || 'Failed to accept application');
+        Alert.alert(tr.error, result.error || tr.failedToAccept);
       }
     } catch (error) {
       console.error('Error accepting application:', error);
-      Alert.alert('Error', 'Failed to accept application. Please try again.');
+      Alert.alert(tr.error, `${tr.failedToAccept} ${tr.pleaseTryAgain}`);
     } finally {
       setProcessingApplication(null);
     }
@@ -170,14 +334,14 @@ const ApplicationsScreen = ({ route, navigation }) => {
       const result = await updateApplicationStatus(applicationId, 'rejected');
       
       if (result.success) {
-        Alert.alert('Success', 'Application rejected');
+        Alert.alert(tr.success, tr.applicationRejected);
         await loadApplications(selectedJobId);
       } else {
-        Alert.alert('Error', result.error || 'Failed to reject application');
+        Alert.alert(tr.error, result.error || tr.failedToReject);
       }
     } catch (error) {
       console.error('Error rejecting application:', error);
-      Alert.alert('Error', 'Failed to reject application');
+      Alert.alert(tr.error, tr.failedToReject);
     }
   };
 
@@ -189,6 +353,37 @@ const ApplicationsScreen = ({ route, navigation }) => {
       case 'awaiting_payment': return colors.warning;
       case 'awaiting_rating': return colors.info;
       default: return colors.warning;
+    }
+  };
+
+  const getStatusText = (application) => {
+    if (application.status === 'completed') {
+      return locale === 'hi' ? '✅ पूर्ण' : '✅ Completed';
+    } else if (application.status === 'awaiting_payment') {
+      return locale === 'hi' ? '💰 भुगतान आवश्यक' : '💰 Payment Required';
+    } else if (application.status === 'awaiting_rating') {
+      return locale === 'hi' ? '⭐ कर्मचारी रेट करें' : '⭐ Rate Worker';
+    } else if (application.status === 'accepted') {
+      return locale === 'hi' ? '✅ स्वीकृत' : '✅ Accepted';
+    } else if (application.status === 'rejected') {
+      return locale === 'hi' ? '❌ अस्वीकृत' : '❌ Rejected';
+    } else {
+      return locale === 'hi' ? '⏳ लंबित' : '⏳ Pending';
+    }
+  };
+
+  const getJourneyStatusText = (journeyStatus) => {
+    switch (journeyStatus) {
+      case 'onTheWay':
+        return locale === 'hi' ? '🚗 रास्ते में' : '🚗 On The Way';
+      case 'reached':
+        return locale === 'hi' ? '📍 पहुंच गया' : '📍 Arrived';
+      case 'started':
+        return locale === 'hi' ? '⚡ काम कर रहा' : '⚡ Working';
+      case 'completed':
+        return locale === 'hi' ? '✅ पूर्ण' : '✅ Completed';
+      default:
+        return '';
     }
   };
 
@@ -236,20 +431,11 @@ const ApplicationsScreen = ({ route, navigation }) => {
     });
   };
 
-  const getStatusText = (application) => {
-    if (application.status === 'completed') {
-      return '✅ Completed';
-    } else if (application.status === 'awaiting_payment') {
-      return '💰 Payment Required';
-    } else if (application.status === 'awaiting_rating') {
-      return '⭐ Rate Worker';
-    } else if (application.status === 'accepted') {
-      return '✅ Accepted';
-    } else if (application.status === 'rejected') {
-      return '❌ Rejected';
-    } else {
-      return '⏳ Pending';
-    }
+  // Format date based on locale
+  const formatDate = (date) => {
+    if (!date) return '';
+    const d = date.toDate();
+    return d.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN');
   };
 
   if (loading) {
@@ -258,14 +444,14 @@ const ApplicationsScreen = ({ route, navigation }) => {
         <StatusBar barStyle="dark-content" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Back</Text>
+            <Text style={styles.backButton}>← {tr.back}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Applications</Text>
+          <Text style={styles.headerTitle}>{tr.applications}</Text>
           <View style={{ width: 60 }} />
         </View>
         <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading applications...</Text>
+          <Text style={styles.loadingText}>{tr.loadingApplications}</Text>
         </View>
       </View>
     );
@@ -285,11 +471,11 @@ const ApplicationsScreen = ({ route, navigation }) => {
           }
         }}>
           <Text style={styles.backButton}>
-            {showJobSelector ? '← Back' : '← All Jobs'}
+            {showJobSelector ? `← ${tr.back}` : `← ${tr.selectJob}`}
           </Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {showJobSelector ? 'Select Job' : 'Applications'}
+          {showJobSelector ? tr.selectJob : tr.applications}
         </Text>
         <View style={{ width: 60 }} />
       </View>
@@ -298,13 +484,13 @@ const ApplicationsScreen = ({ route, navigation }) => {
         {showJobSelector ? (
           // Job Selection View
           <View>
-            <Text style={styles.sectionTitle}>Select a job to view applications</Text>
+            <Text style={styles.sectionTitle}>{tr.selectJobToView}</Text>
             {jobs.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyIcon}>📋</Text>
-                <Text style={styles.emptyText}>No jobs with applications</Text>
+                <Text style={styles.emptyText}>{tr.noJobsWithApplications}</Text>
                 <Text style={styles.emptySubtext}>
-                  Applications will appear here when workers apply to your jobs
+                  {tr.noJobsDesc}
                 </Text>
               </View>
             ) : (
@@ -320,7 +506,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
                   <Text style={styles.jobTitle}>{job.title}</Text>
                   <Text style={styles.jobLocation}>📍 {job.location}</Text>
                   <Text style={styles.applicationCount}>
-                    {job.applications?.length || 0} application{job.applications?.length !== 1 ? 's' : ''}
+                    {job.applications?.length || 0} {locale === 'hi' ? 'आवेदन' : job.applications?.length !== 1 ? 'applications' : 'application'}
                   </Text>
                 </TouchableOpacity>
               ))
@@ -331,11 +517,11 @@ const ApplicationsScreen = ({ route, navigation }) => {
           <>
             <View style={styles.statsCard}>
               <Text style={styles.statsText}>
-                {applications.length} application{applications.length !== 1 ? 's' : ''}
+                {applications.length} {locale === 'hi' ? 'आवेदन' : applications.length !== 1 ? tr.applicationsCountPlural : tr.applicationsCount}
               </Text>
               {selectedJobId && applications.length > 0 && (
                 <Text style={styles.jobName}>
-                  {applications[0]?.jobTitle || 'Job Applications'}
+                  {applications[0]?.jobTitle || tr.applications}
                 </Text>
               )}
             </View>
@@ -343,9 +529,9 @@ const ApplicationsScreen = ({ route, navigation }) => {
             {applications.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyIcon}>👥</Text>
-                <Text style={styles.emptyText}>No applications yet</Text>
+                <Text style={styles.emptyText}>{tr.noApplicationsYet}</Text>
                 <Text style={styles.emptySubtext}>
-                  Applications will appear here when workers apply
+                  {tr.noApplicationsDesc}
                 </Text>
               </View>
             ) : (
@@ -363,17 +549,14 @@ const ApplicationsScreen = ({ route, navigation }) => {
                   
                   <Text style={styles.jobTitle}>💼 {application.jobTitle}</Text>
                   <Text style={styles.appliedDate}>
-                    📅 Applied: {application.appliedAt?.toDate().toLocaleDateString()}
+                    📅 {tr.applied}: {formatDate(application.appliedAt)}
                   </Text>
 
                   {/* Journey Status Badge */}
                   {application.journeyStatus && application.journeyStatus !== 'accepted' && (
                     <View style={styles.journeyStatusBadge}>
                       <Text style={styles.journeyStatusText}>
-                        {application.journeyStatus === 'onTheWay' ? '🚗 On The Way' :
-                         application.journeyStatus === 'reached' ? '📍 Arrived' :
-                         application.journeyStatus === 'started' ? '⚡ Working' :
-                         application.journeyStatus === 'completed' ? '✅ Completed' : ''}
+                        {getJourneyStatusText(application.journeyStatus)}
                       </Text>
                     </View>
                   )}
@@ -386,7 +569,9 @@ const ApplicationsScreen = ({ route, navigation }) => {
                       application.paymentStatus === 'pending' && styles.paymentStatusPending
                     ]}>
                       <Text style={styles.paymentStatusText}>
-                        {application.paymentStatus === 'paid' ? '💰 Paid' : '⏳ Payment Pending'}
+                        {application.paymentStatus === 'paid' 
+                          ? (locale === 'hi' ? '💰 भुगतान हुआ' : '💰 Paid')
+                          : (locale === 'hi' ? '⏳ भुगतान लंबित' : '⏳ Payment Pending')}
                       </Text>
                     </View>
                   )}
@@ -402,7 +587,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
                         {processingApplication === application.id ? (
                           <ActivityIndicator size="small" color={colors.white} />
                         ) : (
-                          <Text style={styles.actionButtonText}>✅ Accept</Text>
+                          <Text style={styles.actionButtonText}>✅ {tr.accept}</Text>
                         )}
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -411,7 +596,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
                           handleRejectApplication(application.id, application.workerId, application.workerName)
                         }
                       >
-                        <Text style={styles.actionButtonText}>❌ Reject</Text>
+                        <Text style={styles.actionButtonText}>❌ {tr.reject}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -420,7 +605,9 @@ const ApplicationsScreen = ({ route, navigation }) => {
                   {(application.status === 'accepted' || application.status === 'awaiting_payment') && (
                     <View style={styles.acceptedActions}>
                       <Text style={styles.acceptedTitle}>
-                        {application.status === 'accepted' ? '✅ Application Accepted' : '💰 Payment Required'}
+                        {application.status === 'accepted' 
+                          ? (locale === 'hi' ? '✅ आवेदन स्वीकृत' : '✅ Application Accepted')
+                          : (locale === 'hi' ? '💰 भुगतान आवश्यक' : '💰 Payment Required')}
                       </Text>
                       
                       {/* TRACK JOB PROGRESS BUTTON - Always show for accepted and awaiting_payment */}
@@ -428,7 +615,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
                         style={[styles.actionButton, styles.trackButton]}
                         onPress={() => handleTrackJob(application)}
                       >
-                        <Text style={styles.actionButtonText}>📊 Track Job Progress</Text>
+                        <Text style={styles.actionButtonText}>📊 {tr.trackJobProgress}</Text>
                       </TouchableOpacity>
 
                       {/* PAYMENT BUTTON - Show when payment is required */}
@@ -437,7 +624,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
                           style={[styles.actionButton, styles.paymentButton]}
                           onPress={() => handleProcessPayment(application)}
                         >
-                          <Text style={styles.actionButtonText}>💳 Process Payment</Text>
+                          <Text style={styles.actionButtonText}>💳 {tr.processPayment}</Text>
                         </TouchableOpacity>
                       )}
 
@@ -446,7 +633,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
                           style={[styles.actionButton, styles.locationButton]}
                           onPress={() => handleViewLocation(application)}
                         >
-                          <Text style={styles.actionButtonText}>📍 View Shared Location</Text>
+                          <Text style={styles.actionButtonText}>📍 {tr.viewSharedLocation}</Text>
                         </TouchableOpacity>
                       )}
 
@@ -455,16 +642,16 @@ const ApplicationsScreen = ({ route, navigation }) => {
                           style={[styles.actionButton, styles.chatButton]}
                           onPress={() => handleOpenChat(application)}
                         >
-                          <Text style={styles.actionButtonText}>💬 Open Chat</Text>
+                          <Text style={styles.actionButtonText}>💬 {tr.openChat}</Text>
                         </TouchableOpacity>
                       )}
 
                       <View style={styles.contactInfo}>
-                        <Text style={styles.contactTitle}>Worker Contact Information:</Text>
-                        <Text style={styles.contactDetail}>👤 Name: {application.workerName}</Text>
-                        <Text style={styles.contactDetail}>📞 Phone: {application.workerPhone}</Text>
+                        <Text style={styles.contactTitle}>{tr.workerContactInfo}:</Text>
+                        <Text style={styles.contactDetail}>👤 {tr.name}: {application.workerName}</Text>
+                        <Text style={styles.contactDetail}>📞 {tr.phone}: {application.workerPhone}</Text>
                         <Text style={styles.contactNote}>
-                          Please contact the worker to coordinate the job details.
+                          {tr.contactNote}
                         </Text>
                       </View>
                     </View>
@@ -473,14 +660,16 @@ const ApplicationsScreen = ({ route, navigation }) => {
                   {/* COMPLETED JOB ACTIONS */}
                   {application.status === 'completed' && (
                     <View style={styles.completedActions}>
-                      <Text style={styles.completedTitle}>✅ Job Completed Successfully</Text>
+                      <Text style={styles.completedTitle}>
+                        ✅ {tr.jobCompleted}
+                      </Text>
                       
                       {/* TRACK JOB PROGRESS BUTTON - Still show for completed jobs */}
                       <TouchableOpacity
                         style={[styles.actionButton, styles.trackButton]}
                         onPress={() => handleTrackJob(application)}
                       >
-                        <Text style={styles.actionButtonText}>📊 View Job Details</Text>
+                        <Text style={styles.actionButtonText}>📊 {tr.viewJobDetails}</Text>
                       </TouchableOpacity>
 
                       {/* RATE WORKER BUTTON - Show if not rated yet */}
@@ -489,7 +678,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
                           style={[styles.actionButton, styles.rateButton]}
                           onPress={() => handleRateWorker(application)}
                         >
-                          <Text style={styles.actionButtonText}>⭐ Rate Worker</Text>
+                          <Text style={styles.actionButtonText}>⭐ {tr.rateWorker}</Text>
                         </TouchableOpacity>
                       )}
 
@@ -497,11 +686,13 @@ const ApplicationsScreen = ({ route, navigation }) => {
                       {application.paymentStatus && (
                         <View style={styles.paymentInfo}>
                           <Text style={styles.paymentInfoText}>
-                            Payment: {application.paymentStatus === 'paid' ? '✅ Completed' : '⏳ Pending'}
+                            {tr.payment}: {application.paymentStatus === 'paid' 
+                              ? (locale === 'hi' ? '✅ पूर्ण' : '✅ Completed')
+                              : (locale === 'hi' ? '⏳ लंबित' : '⏳ Pending')}
                           </Text>
                           {application.paymentAmount && (
                             <Text style={styles.paymentAmount}>
-                              Amount: ₹{application.paymentAmount}
+                              {tr.amount}: ₹{application.paymentAmount}
                             </Text>
                           )}
                         </View>
@@ -511,7 +702,7 @@ const ApplicationsScreen = ({ route, navigation }) => {
                       {application.hasRating && (
                         <View style={styles.ratingInfo}>
                           <Text style={styles.ratingInfoText}>
-                            ⭐ You rated: {application.employerRating}/5 stars
+                            ⭐ {tr.youRated}: {application.employerRating}/5 {tr.stars}
                           </Text>
                         </View>
                       )}
@@ -521,27 +712,29 @@ const ApplicationsScreen = ({ route, navigation }) => {
                   {/* AWAITING RATING ACTIONS */}
                   {application.status === 'awaiting_rating' && (
                     <View style={styles.awaitingRatingActions}>
-                      <Text style={styles.awaitingRatingTitle}>⭐ Rate Worker Performance</Text>
+                      <Text style={styles.awaitingRatingTitle}>⭐ {tr.rateWorkerPerformance}</Text>
                       
                       <TouchableOpacity
                         style={[styles.actionButton, styles.rateButton]}
                         onPress={() => handleRateWorker(application)}
                       >
-                        <Text style={styles.actionButtonText}>⭐ Rate Worker Now</Text>
+                        <Text style={styles.actionButtonText}>⭐ {tr.rateWorkerNow}</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
                         style={[styles.actionButton, styles.trackButton]}
                         onPress={() => handleTrackJob(application)}
                       >
-                        <Text style={styles.actionButtonText}>📊 View Job Details</Text>
+                        <Text style={styles.actionButtonText}>📊 {tr.viewJobDetails}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
 
                   {application.status === 'rejected' && (
                     <View style={styles.rejectedInfo}>
-                      <Text style={styles.rejectedText}>❌ Application Rejected</Text>
+                      <Text style={styles.rejectedText}>
+                        ❌ {locale === 'hi' ? 'आवेदन अस्वीकृत' : 'Application Rejected'}
+                      </Text>
                     </View>
                   )}
                 </View>

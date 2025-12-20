@@ -1,4 +1,4 @@
-// src/screens/employer/CompleteJobScreen.js
+// src/screens/employer/CompleteJobScreen.js - HINDI VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { colors } from '../../constants/colors';
+import { useLanguage } from '../../context/LanguageContext';
 import { 
   completeJob, 
   fetchJobById,
@@ -19,10 +20,95 @@ import RatingModal from '../../components/RatingModal';
 
 const CompleteJobScreen = ({ route, navigation }) => {
   const { applicationId, jobId, workerId, workerName } = route.params;
+  const { locale, t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [jobDetails, setJobDetails] = useState(null);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [completing, setCompleting] = useState(false);
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      back: "Back",
+      completeJob: "Complete Job",
+      loading: "Loading...",
+      jobDetails: "Job Details",
+      jobTitle: "Job Title",
+      worker: "Worker",
+      location: "Location",
+      rate: "Rate",
+      perHour: "/hour",
+      beforeCompleting: "Before Completing",
+      checklistIntro: "Please ensure the following before marking this job as complete:",
+      checklist1: "Worker has finished all assigned tasks",
+      checklist2: "Quality of work meets your expectations",
+      checklist3: "All payments have been settled",
+      checklist4: "No pending issues or concerns",
+      whatHappensNext: "What Happens Next?",
+      step1Title: "Job Closes",
+      step1Desc: "The job listing will be marked as completed and closed",
+      step2Title: "Stats Update",
+      step2Desc: "Both your and worker's completion statistics will be updated",
+      step3Title: "Rate & Review",
+      step3Desc: "You'll be prompted to rate the worker's performance",
+      markJobComplete: "Mark Job as Complete",
+      completeJobAlert: "Complete Job",
+      completeJobConfirm: "Are you sure you want to mark this job as completed?",
+      completeJobPoints: "This will:\n• Close the job\n• Update completion statistics\n• Allow you to rate",
+      cancel: "Cancel",
+      complete: "Complete",
+      success: "Success",
+      jobCompletedSuccess: "Job marked as completed!",
+      rateWorkerNow: "Rate Worker Now",
+      rateLater: "Rate Later",
+      error: "Error",
+      failedToComplete: "Failed to complete job",
+      thankYou: "Thank You!",
+      ratingSubmitted: "Your rating has been submitted successfully.",
+      ok: "OK",
+    },
+    hi: {
+      back: "पीछे",
+      completeJob: "नौकरी पूर्ण करें",
+      loading: "लोड हो रहा है...",
+      jobDetails: "नौकरी विवरण",
+      jobTitle: "नौकरी शीर्षक",
+      worker: "कर्मचारी",
+      location: "स्थान",
+      rate: "दर",
+      perHour: "/घंटा",
+      beforeCompleting: "पूर्ण करने से पहले",
+      checklistIntro: "कृपया इस नौकरी को पूर्ण चिह्नित करने से पहले निम्नलिखित सुनिश्चित करें:",
+      checklist1: "कर्मचारी ने सभी सौंपे गए कार्य पूरे कर लिए हैं",
+      checklist2: "कार्य की गुणवत्ता आपकी अपेक्षाओं को पूरा करती है",
+      checklist3: "सभी भुगतान निपटा दिए गए हैं",
+      checklist4: "कोई लंबित मुद्दे या चिंताएं नहीं हैं",
+      whatHappensNext: "आगे क्या होगा?",
+      step1Title: "नौकरी बंद होगी",
+      step1Desc: "नौकरी लिस्टिंग पूर्ण और बंद के रूप में चिह्नित की जाएगी",
+      step2Title: "आंकड़े अपडेट होंगे",
+      step2Desc: "आपके और कर्मचारी दोनों के पूर्णता आंकड़े अपडेट होंगे",
+      step3Title: "रेटिंग और समीक्षा",
+      step3Desc: "आपको कर्मचारी के प्रदर्शन को रेट करने के लिए प्रेरित किया जाएगा",
+      markJobComplete: "नौकरी को पूर्ण चिह्नित करें",
+      completeJobAlert: "नौकरी पूर्ण करें",
+      completeJobConfirm: "क्या आप निश्चित रूप से इस नौकरी को पूर्ण चिह्नित करना चाहते हैं?",
+      completeJobPoints: "यह करेगा:\n• नौकरी बंद करेगा\n• पूर्णता आंकड़े अपडेट करेगा\n• आपको रेट करने की अनुमति देगा",
+      cancel: "रद्द करें",
+      complete: "पूर्ण करें",
+      success: "सफल",
+      jobCompletedSuccess: "नौकरी पूर्ण चिह्नित की गई!",
+      rateWorkerNow: "अभी कर्मचारी रेट करें",
+      rateLater: "बाद में रेट करें",
+      error: "त्रुटि",
+      failedToComplete: "नौकरी पूर्ण करने में विफल",
+      thankYou: "धन्यवाद!",
+      ratingSubmitted: "आपकी रेटिंग सफलतापूर्वक सबमिट हो गई है।",
+      ok: "ठीक है",
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   useEffect(() => {
     loadJobDetails();
@@ -38,12 +124,12 @@ const CompleteJobScreen = ({ route, navigation }) => {
 
   const handleCompleteJob = async () => {
     Alert.alert(
-      'Complete Job',
-      `Are you sure you want to mark this job as completed?\n\nThis will:\n• Close the job\n• Update completion statistics\n• Allow you to rate ${workerName}`,
+      tr.completeJobAlert,
+      `${tr.completeJobConfirm}\n\n${tr.completeJobPoints} ${workerName}`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: tr.cancel, style: 'cancel' },
         {
-          text: 'Complete',
+          text: tr.complete,
           style: 'default',
           onPress: async () => {
             setCompleting(true);
@@ -52,21 +138,21 @@ const CompleteJobScreen = ({ route, navigation }) => {
 
             if (result.success) {
               Alert.alert(
-                'Success',
-                'Job marked as completed!',
+                tr.success,
+                tr.jobCompletedSuccess,
                 [
                   {
-                    text: 'Rate Worker Now',
+                    text: tr.rateWorkerNow,
                     onPress: () => setShowRatingModal(true)
                   },
                   {
-                    text: 'Rate Later',
+                    text: tr.rateLater,
                     onPress: () => navigation.goBack()
                   }
                 ]
               );
             } else {
-              Alert.alert('Error', result.error || 'Failed to complete job');
+              Alert.alert(tr.error, result.error || tr.failedToComplete);
             }
           }
         }
@@ -76,9 +162,9 @@ const CompleteJobScreen = ({ route, navigation }) => {
 
   const handleRatingSubmitted = () => {
     Alert.alert(
-      'Thank You!',
-      'Your rating has been submitted successfully.',
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
+      tr.thankYou,
+      tr.ratingSubmitted,
+      [{ text: tr.ok, onPress: () => navigation.goBack() }]
     );
   };
 
@@ -86,6 +172,7 @@ const CompleteJobScreen = ({ route, navigation }) => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>{tr.loading}</Text>
       </View>
     );
   }
@@ -95,70 +182,70 @@ const CompleteJobScreen = ({ route, navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+          <Text style={styles.backButton}>← {tr.back}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Complete Job</Text>
+        <Text style={styles.headerTitle}>{tr.completeJob}</Text>
         <View style={{ width: 50 }} />
       </View>
 
       <ScrollView style={styles.content}>
         {/* Job Information */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Job Details</Text>
+          <Text style={styles.cardTitle}>{tr.jobDetails}</Text>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Job Title:</Text>
+            <Text style={styles.infoLabel}>{tr.jobTitle}:</Text>
             <Text style={styles.infoValue}>{jobDetails?.title}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Worker:</Text>
+            <Text style={styles.infoLabel}>{tr.worker}:</Text>
             <Text style={styles.infoValue}>{workerName}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Location:</Text>
+            <Text style={styles.infoLabel}>{tr.location}:</Text>
             <Text style={styles.infoValue}>{jobDetails?.location}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Rate:</Text>
-            <Text style={styles.infoValue}>₹{jobDetails?.rate}/hour</Text>
+            <Text style={styles.infoLabel}>{tr.rate}:</Text>
+            <Text style={styles.infoValue}>₹{jobDetails?.rate}{tr.perHour}</Text>
           </View>
         </View>
 
         {/* Completion Checklist */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Before Completing</Text>
+          <Text style={styles.cardTitle}>{tr.beforeCompleting}</Text>
           <Text style={styles.checklistIntro}>
-            Please ensure the following before marking this job as complete:
+            {tr.checklistIntro}
           </Text>
           
           <View style={styles.checklistItem}>
             <Text style={styles.checkIcon}>✓</Text>
-            <Text style={styles.checkText}>Worker has finished all assigned tasks</Text>
+            <Text style={styles.checkText}>{tr.checklist1}</Text>
           </View>
           <View style={styles.checklistItem}>
             <Text style={styles.checkIcon}>✓</Text>
-            <Text style={styles.checkText}>Quality of work meets your expectations</Text>
+            <Text style={styles.checkText}>{tr.checklist2}</Text>
           </View>
           <View style={styles.checklistItem}>
             <Text style={styles.checkIcon}>✓</Text>
-            <Text style={styles.checkText}>All payments have been settled</Text>
+            <Text style={styles.checkText}>{tr.checklist3}</Text>
           </View>
           <View style={styles.checklistItem}>
             <Text style={styles.checkIcon}>✓</Text>
-            <Text style={styles.checkText}>No pending issues or concerns</Text>
+            <Text style={styles.checkText}>{tr.checklist4}</Text>
           </View>
         </View>
 
         {/* What Happens Next */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>What Happens Next?</Text>
+          <Text style={styles.cardTitle}>{tr.whatHappensNext}</Text>
           <View style={styles.stepItem}>
             <View style={styles.stepNumber}>
               <Text style={styles.stepNumberText}>1</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Job Closes</Text>
+              <Text style={styles.stepTitle}>{tr.step1Title}</Text>
               <Text style={styles.stepDescription}>
-                The job listing will be marked as completed and closed
+                {tr.step1Desc}
               </Text>
             </View>
           </View>
@@ -167,9 +254,9 @@ const CompleteJobScreen = ({ route, navigation }) => {
               <Text style={styles.stepNumberText}>2</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Stats Update</Text>
+              <Text style={styles.stepTitle}>{tr.step2Title}</Text>
               <Text style={styles.stepDescription}>
-                Both your and worker's completion statistics will be updated
+                {tr.step2Desc}
               </Text>
             </View>
           </View>
@@ -178,9 +265,9 @@ const CompleteJobScreen = ({ route, navigation }) => {
               <Text style={styles.stepNumberText}>3</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Rate & Review</Text>
+              <Text style={styles.stepTitle}>{tr.step3Title}</Text>
               <Text style={styles.stepDescription}>
-                You'll be prompted to rate the worker's performance
+                {tr.step3Desc}
               </Text>
             </View>
           </View>
@@ -197,7 +284,7 @@ const CompleteJobScreen = ({ route, navigation }) => {
           ) : (
             <>
               <Text style={styles.completeIcon}>✓</Text>
-              <Text style={styles.completeButtonText}>Mark Job as Complete</Text>
+              <Text style={styles.completeButtonText}>{tr.markJobComplete}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -234,6 +321,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   header: {
     flexDirection: 'row',

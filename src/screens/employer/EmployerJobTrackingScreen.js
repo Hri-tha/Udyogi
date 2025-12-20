@@ -1,4 +1,4 @@
-// src/screens/employer/EmployerJobTrackingScreen.js - COMPLETE UPDATED VERSION
+// src/screens/employer/EmployerJobTrackingScreen.js - HINDI VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { colors } from '../../constants/colors';
+import { useLanguage } from '../../context/LanguageContext';
 import { onApplicationUpdate } from '../../services/database';
 import { db } from '../../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -17,13 +18,169 @@ import RatingModal from '../../components/RatingModal';
 
 const EmployerJobTrackingScreen = ({ route, navigation }) => {
   const { applicationId } = route.params;
-
+  const { locale, t } = useLanguage();
   const [application, setApplication] = useState(null);
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [workDuration, setWorkDuration] = useState(0);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [actualPayment, setActualPayment] = useState(0);
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      back: "Back",
+      jobTracking: "Job Tracking",
+      loadingTracking: "Loading tracking details...",
+      jobTrackingNotAvailable: "Job tracking not available",
+      jobCompleted: "Job Completed",
+      jobCompletedDesc: "The job has been successfully completed.",
+      rateWorkerPerformance: "Rate Worker Performance",
+      rateWorkerDesc: "Please rate the worker to complete the job process.",
+      paymentRequired: "Payment Required",
+      applicationAccepted: "Application Accepted",
+      applicationAcceptedDesc: "Worker has accepted the job. Waiting for them to start journey.",
+      workerOnTheWay: "Worker On The Way",
+      workerOnTheWayDesc: "Worker is traveling to your location.",
+      workerHasArrived: "Worker Has Arrived",
+      workerHasArrivedDesc: "Worker has reached the location and will start work soon.",
+      workInProgress: "Work In Progress",
+      workInProgressDesc: "Worker is currently working on the job.",
+      workCompleted: "Work Completed",
+      workCompletedDesc: "Worker has completed the job. Payment due:",
+      jobStatus: "Job Status",
+      jobStatusDesc: "Tracking worker progress...",
+      jobDetails: "Job Details",
+      workerInformation: "Worker Information",
+      name: "Name",
+      phone: "Phone",
+      schedule: "Schedule",
+      date: "Date",
+      time: "Time",
+      notSpecified: "Not specified",
+      workDuration: "Work Duration",
+      timeSpentWorking: "Time spent working",
+      actualWorkDuration: "Actual Work Duration",
+      workStarted: "Work started",
+      workCompleted: "Work completed",
+      paymentDetails: "Payment Details",
+      hourlyRate: "Hourly Rate",
+      actualDuration: "Actual Duration",
+      calculatedPayment: "Calculated Payment",
+      originalEstimate: "Original Estimate",
+      calculation: "Calculation",
+      hours: "hours",
+      status: "Status",
+      paid: "Paid",
+      pending: "Pending",
+      amountPaid: "Amount Paid",
+      yourRating: "Your Rating",
+      stars: "stars",
+      processPayment: "Process Payment",
+      completeRateJob: "Complete & Rate Job",
+      viewJobHistory: "View Job History",
+      viewLocation: "View Location",
+      chatWithWorker: "Chat with Worker",
+      cannotProcessPayment: "Cannot Process Payment",
+      waitForCompletion: "Please wait for the worker to complete the job first.",
+      paymentRequiredAlert: "Payment Required",
+      processPaymentBefore: "Please process the payment before completing the job.",
+      thankYou: "Thank You! 🙏",
+      ratingSubmitted: "Your rating has been submitted successfully.",
+      ok: "OK",
+      error: "Error",
+      applicationNotFound: "Application not found",
+      failedToLoad: "Failed to load job tracking details",
+      paymentCalculation: "Payment Calculation",
+      jobTitle: "Job Title",
+      location: "Location",
+      rate: "Rate",
+      perHour: "/hour",
+      minutes: "minutes",
+      hour: "hour",
+      hours: "hours",
+      na: "N/A",
+      expectedPayment: "Expected Payment",
+      expected: "Expected",
+    },
+    hi: {
+      back: "पीछे",
+      jobTracking: "नौकरी ट्रैकिंग",
+      loadingTracking: "ट्रैकिंग विवरण लोड हो रहे हैं...",
+      jobTrackingNotAvailable: "नौकरी ट्रैकिंग उपलब्ध नहीं",
+      jobCompleted: "नौकरी पूर्ण",
+      jobCompletedDesc: "नौकरी सफलतापूर्वक पूर्ण हुई है।",
+      rateWorkerPerformance: "कर्मचारी प्रदर्शन रेट करें",
+      rateWorkerDesc: "कृपया नौकरी प्रक्रिया को पूर्ण करने के लिए कर्मचारी को रेट करें।",
+      paymentRequired: "भुगतान आवश्यक",
+      applicationAccepted: "आवेदन स्वीकृत",
+      applicationAcceptedDesc: "कर्मचारी ने नौकरी स्वीकार कर ली है। उनके यात्रा शुरू करने की प्रतीक्षा है।",
+      workerOnTheWay: "कर्मचारी रास्ते में",
+      workerOnTheWayDesc: "कर्मचारी आपके स्थान की ओर यात्रा कर रहा है।",
+      workerHasArrived: "कर्मचारी पहुंच गया",
+      workerHasArrivedDesc: "कर्मचारी स्थान पर पहुंच गया है और जल्द ही काम शुरू करेगा।",
+      workInProgress: "कार्य प्रगति पर",
+      workInProgressDesc: "कर्मचारी वर्तमान में नौकरी पर काम कर रहा है।",
+      workCompleted: "कार्य पूर्ण",
+      workCompletedDesc: "कर्मचारी ने नौकरी पूरी कर ली है। भुगतान देय:",
+      jobStatus: "नौकरी स्थिति",
+      jobStatusDesc: "कर्मचारी प्रगति ट्रैक की जा रही है...",
+      jobDetails: "नौकरी विवरण",
+      workerInformation: "कर्मचारी जानकारी",
+      name: "नाम",
+      phone: "फोन",
+      schedule: "समयसारणी",
+      date: "तारीख",
+      time: "समय",
+      notSpecified: "निर्दिष्ट नहीं",
+      workDuration: "कार्य अवधि",
+      timeSpentWorking: "कार्य में बिताया समय",
+      actualWorkDuration: "वास्तविक कार्य अवधि",
+      workStarted: "कार्य शुरू",
+      workCompleted: "कार्य पूर्ण",
+      paymentDetails: "भुगतान विवरण",
+      hourlyRate: "प्रति घंटा दर",
+      actualDuration: "वास्तविक अवधि",
+      calculatedPayment: "गणना किया गया भुगतान",
+      originalEstimate: "मूल अनुमान",
+      calculation: "गणना",
+      hours: "घंटे",
+      status: "स्थिति",
+      paid: "भुगतान हुआ",
+      pending: "लंबित",
+      amountPaid: "भुगतान राशि",
+      yourRating: "आपकी रेटिंग",
+      stars: "स्टार",
+      processPayment: "भुगतान प्रक्रिया करें",
+      completeRateJob: "पूर्ण और रेट करें",
+      viewJobHistory: "नौकरी इतिहास देखें",
+      viewLocation: "स्थान देखें",
+      chatWithWorker: "कर्मचारी से चैट करें",
+      cannotProcessPayment: "भुगतान प्रक्रिया नहीं कर सकते",
+      waitForCompletion: "कृपया पहले कर्मचारी के काम पूरा करने की प्रतीक्षा करें।",
+      paymentRequiredAlert: "भुगतान आवश्यक",
+      processPaymentBefore: "कृपया नौकरी पूर्ण करने से पहले भुगतान प्रक्रिया करें।",
+      thankYou: "धन्यवाद! 🙏",
+      ratingSubmitted: "आपकी रेटिंग सफलतापूर्वक सबमिट हो गई है।",
+      ok: "ठीक है",
+      error: "त्रुटि",
+      applicationNotFound: "आवेदन नहीं मिला",
+      failedToLoad: "नौकरी ट्रैकिंग विवरण लोड करने में विफल",
+      paymentCalculation: "भुगतान गणना",
+      jobTitle: "नौकरी शीर्षक",
+      location: "स्थान",
+      rate: "दर",
+      perHour: "/घंटा",
+      minutes: "मिनट",
+      hour: "घंटा",
+      hours: "घंटे",
+      na: "उपलब्ध नहीं",
+      expectedPayment: "अनुमानित भुगतान",
+      expected: "अनुमानित",
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   // Load initial data
   useEffect(() => {
@@ -93,7 +250,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
       const appSnap = await getDoc(appRef);
 
       if (!appSnap.exists()) {
-        Alert.alert('Error', 'Application not found');
+        Alert.alert(tr.error, tr.applicationNotFound);
         setLoading(false);
         return;
       }
@@ -111,7 +268,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
       }
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('Error', 'Failed to load job tracking details');
+      Alert.alert(tr.error, tr.failedToLoad);
     } finally {
       setLoading(false);
     }
@@ -125,16 +282,26 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
   };
 
   const formatWorkDuration = (hours) => {
-    if (!hours) return '0 hours';
+    if (!hours) return locale === 'hi' ? '0 घंटे' : '0 hours';
     const wholeHours = Math.floor(hours);
     const minutes = Math.round((hours - wholeHours) * 60);
     
-    if (wholeHours === 0) {
-      return `${minutes} minutes`;
-    } else if (minutes === 0) {
-      return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''}`;
+    if (locale === 'hi') {
+      if (wholeHours === 0) {
+        return `${minutes} मिनट`;
+      } else if (minutes === 0) {
+        return `${wholeHours} घंटे`;
+      } else {
+        return `${wholeHours} घंटे ${minutes} मिनट`;
+      }
     } else {
-      return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''} ${minutes} minutes`;
+      if (wholeHours === 0) {
+        return `${minutes} minutes`;
+      } else if (minutes === 0) {
+        return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''}`;
+      } else {
+        return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''} ${minutes} minutes`;
+      }
     }
   };
 
@@ -147,8 +314,8 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
       return {
         icon: '✅',
         color: colors.success,
-        title: 'Job Completed',
-        message: 'The job has been successfully completed.',
+        title: tr.jobCompleted,
+        message: tr.jobCompletedDesc,
       };
     }
 
@@ -157,8 +324,8 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
       return {
         icon: '⭐',
         color: colors.warning,
-        title: 'Rate Worker Performance',
-        message: 'Please rate the worker to complete the job process.',
+        title: tr.rateWorkerPerformance,
+        message: tr.rateWorkerDesc,
       };
     }
 
@@ -167,8 +334,8 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
       return {
         icon: '💰',
         color: colors.warning,
-        title: 'Payment Required',
-        message: `Please process payment of ₹${actualPayment} to complete the job.`,
+        title: tr.paymentRequired,
+        message: `${tr.workCompletedDesc} ₹${actualPayment}`,
       };
     }
 
@@ -178,50 +345,50 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
         return {
           icon: '✓',
           color: colors.info,
-          title: 'Application Accepted',
-          message: 'Worker has accepted the job. Waiting for them to start journey.',
+          title: tr.applicationAccepted,
+          message: tr.applicationAcceptedDesc,
         };
       case 'onTheWay':
         return {
           icon: '🚗',
           color: colors.warning,
-          title: 'Worker On The Way',
-          message: 'Worker is traveling to your location.',
+          title: tr.workerOnTheWay,
+          message: tr.workerOnTheWayDesc,
         };
       case 'reached':
         return {
           icon: '📍',
           color: colors.success,
-          title: 'Worker Has Arrived',
-          message: 'Worker has reached the location and will start work soon.',
+          title: tr.workerHasArrived,
+          message: tr.workerHasArrivedDesc,
         };
       case 'started':
         return {
           icon: '⚡',
           color: colors.primary,
-          title: 'Work In Progress',
-          message: 'Worker is currently working on the job.',
+          title: tr.workInProgress,
+          message: tr.workInProgressDesc,
         };
       case 'completed':
         return {
           icon: '✅',
           color: colors.success,
-          title: 'Work Completed',
-          message: `Worker has completed the job. Payment due: ₹${actualPayment}`,
+          title: tr.workCompleted,
+          message: `${tr.workCompletedDesc} ₹${actualPayment}`,
         };
       default:
         return {
           icon: 'ℹ️',
           color: colors.textSecondary,
-          title: 'Job Status',
-          message: 'Tracking worker progress...',
+          title: tr.jobStatus,
+          message: tr.jobStatusDesc,
         };
     }
   };
 
   const handleProcessPayment = () => {
     if (application?.journeyStatus !== 'completed' && application?.status !== 'awaiting_payment') {
-      Alert.alert('Cannot Process Payment', 'Please wait for the worker to complete the job first.');
+      Alert.alert(tr.cannotProcessPayment, tr.waitForCompletion);
       return;
     }
 
@@ -232,7 +399,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
 
   const handleCompleteJob = () => {
     if (application?.paymentStatus !== 'paid') {
-      Alert.alert('Payment Required', 'Please process the payment before completing the job.');
+      Alert.alert(tr.paymentRequiredAlert, tr.processPaymentBefore);
       return;
     }
 
@@ -250,10 +417,10 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
 
   const handleRatingSubmitted = () => {
     Alert.alert(
-      'Thank You! 🙏',
-      'Your rating has been submitted successfully.',
+      tr.thankYou,
+      tr.ratingSubmitted,
       [{ 
-        text: 'OK', 
+        text: tr.ok, 
         onPress: () => {
           setShowRatingModal(false);
           navigation.navigate('EmployerHome');
@@ -270,7 +437,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading tracking details...</Text>
+        <Text style={styles.loadingText}>{tr.loadingTracking}</Text>
       </View>
     );
   }
@@ -280,13 +447,13 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Back</Text>
+            <Text style={styles.backButton}>← {tr.back}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Job Tracking</Text>
+          <Text style={styles.headerTitle}>{tr.jobTracking}</Text>
           <View style={{ width: 50 }} />
         </View>
         <View style={styles.centerContent}>
-          <Text style={styles.errorText}>Job tracking not available</Text>
+          <Text style={styles.errorText}>{tr.jobTrackingNotAvailable}</Text>
         </View>
       </View>
     );
@@ -304,9 +471,9 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+          <Text style={styles.backButton}>← {tr.back}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Job Tracking</Text>
+        <Text style={styles.headerTitle}>{tr.jobTracking}</Text>
         <View style={{ width: 50 }} />
       </View>
 
@@ -322,46 +489,46 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
 
         {/* Job Information */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Job Details</Text>
+          <Text style={styles.cardTitle}>{tr.jobDetails}</Text>
           <Text style={styles.infoValue}>{job.title}</Text>
           <Text style={styles.infoValue}>{job.location}</Text>
-          <Text style={styles.infoValue}>Rate: ₹{hourlyRate}/hour</Text>
+          <Text style={styles.infoValue}>{tr.rate}: ₹{hourlyRate}{tr.perHour}</Text>
         </View>
 
         {/* Worker Information */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Worker Information</Text>
-          <Text style={styles.infoLabel}>Name: <Text style={styles.infoValue}>{application.workerName}</Text></Text>
-          <Text style={styles.infoLabel}>Phone: <Text style={styles.infoValue}>{application.workerPhone}</Text></Text>
+          <Text style={styles.cardTitle}>{tr.workerInformation}</Text>
+          <Text style={styles.infoLabel}>{tr.name}: <Text style={styles.infoValue}>{application.workerName}</Text></Text>
+          <Text style={styles.infoLabel}>{tr.phone}: <Text style={styles.infoValue}>{application.workerPhone}</Text></Text>
         </View>
 
         {/* Schedule */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Schedule</Text>
-          <Text style={styles.infoLabel}>Date: <Text style={styles.infoValue}>{job.jobDate || 'Not specified'}</Text></Text>
-          <Text style={styles.infoLabel}>Time: <Text style={styles.infoValue}>{job.startTime || 'N/A'} - {job.endTime || 'N/A'}</Text></Text>
+          <Text style={styles.cardTitle}>{tr.schedule}</Text>
+          <Text style={styles.infoLabel}>{tr.date}: <Text style={styles.infoValue}>{job.jobDate || tr.notSpecified}</Text></Text>
+          <Text style={styles.infoLabel}>{tr.time}: <Text style={styles.infoValue}>{job.startTime || tr.na} - {job.endTime || tr.na}</Text></Text>
         </View>
 
         {/* Work Timer (if started) */}
         {application.journeyStatus === 'started' && (
           <View style={styles.timerCard}>
-            <Text style={styles.timerTitle}>Work Duration</Text>
+            <Text style={styles.timerTitle}>{tr.workDuration}</Text>
             <Text style={styles.timerValue}>{formatDuration(workDuration)}</Text>
-            <Text style={styles.timerSubtitle}>Time spent working</Text>
+            <Text style={styles.timerSubtitle}>{tr.timeSpentWorking}</Text>
           </View>
         )}
 
         {/* Actual Work Duration (if completed) */}
         {hasActualWorkData && (
           <View style={[styles.card, styles.workDurationCard]}>
-            <Text style={styles.cardTitle}>Actual Work Duration</Text>
+            <Text style={styles.cardTitle}>{tr.actualWorkDuration}</Text>
             <Text style={styles.workDurationValue}>
               {formatWorkDuration((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60))}
             </Text>
             <Text style={styles.workDurationNote}>
-              Work started: {new Date(application.workStartedTimestamp).toLocaleTimeString()}
+              {tr.workStarted}: {new Date(application.workStartedTimestamp).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN')}
               {'\n'}
-              Work completed: {new Date(application.workCompletedTimestamp).toLocaleTimeString()}
+              {tr.workCompleted}: {new Date(application.workCompletedTimestamp).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN')}
             </Text>
           </View>
         )}
@@ -369,15 +536,15 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
         {/* Payment Information - UPDATED WITH ACTUAL CALCULATION */}
         {(application.paymentStatus || isAwaitingPayment || isJobCompleted) && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Payment Details</Text>
+            <Text style={styles.cardTitle}>{tr.paymentDetails}</Text>
             
             {/* Hourly Rate */}
-            <Text style={styles.infoLabel}>Hourly Rate: <Text style={styles.infoValue}>₹{hourlyRate}/hour</Text></Text>
+            <Text style={styles.infoLabel}>{tr.hourlyRate}: <Text style={styles.infoValue}>₹{hourlyRate}{tr.perHour}</Text></Text>
             
             {/* Actual Work Duration */}
             {hasActualWorkData && (
               <Text style={styles.infoLabel}>
-                Actual Duration: <Text style={styles.infoValue}>
+                {tr.actualDuration}: <Text style={styles.infoValue}>
                   {formatWorkDuration((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60))}
                 </Text>
               </Text>
@@ -385,14 +552,14 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
             
             {/* Payment Amount */}
             <Text style={styles.infoLabel}>
-              {hasActualWorkData ? 'Calculated Payment:' : 'Expected Payment:'} 
+              {hasActualWorkData ? tr.calculatedPayment : tr.expectedPayment}: 
               <Text style={[styles.infoValue, styles.highlight]}> ₹{actualPayment}</Text>
             </Text>
             
             {/* Show original estimate for comparison */}
             {hasActualWorkData && application.expectedPayment && application.expectedPayment !== actualPayment && (
               <Text style={styles.infoLabel}>
-                Original Estimate: <Text style={[styles.infoValue, styles.originalEstimate]}>
+                {tr.originalEstimate}: <Text style={[styles.infoValue, styles.originalEstimate]}>
                   ₹{application.expectedPayment}
                 </Text>
               </Text>
@@ -402,7 +569,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
             {hasActualWorkData && (
               <View style={styles.calculationBox}>
                 <Text style={styles.calculationText}>
-                  Calculation: {((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60)).toFixed(2)} hours × ₹{hourlyRate}/hour
+                  {tr.calculation}: {((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60)).toFixed(2)} {tr.hours} × ₹{hourlyRate}{tr.perHour}
                 </Text>
               </View>
             )}
@@ -414,14 +581,14 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
                 application.paymentStatus === 'paid' ? styles.paymentStatusPaid : styles.paymentStatusPending
               ]}>
                 <Text style={styles.paymentStatusText}>
-                  Status: {application.paymentStatus === 'paid' ? '✅ Paid' : '⏳ Pending'}
+                  {tr.status}: {application.paymentStatus === 'paid' ? '✅ ' + tr.paid : '⏳ ' + tr.pending}
                 </Text>
               </View>
             )}
             
             {/* Amount Paid */}
             {application.paymentAmount && (
-              <Text style={styles.infoLabel}>Amount Paid: <Text style={[styles.infoValue, styles.highlight]}>₹{application.paymentAmount}</Text></Text>
+              <Text style={styles.infoLabel}>{tr.amountPaid}: <Text style={[styles.infoValue, styles.highlight]}>₹{application.paymentAmount}</Text></Text>
             )}
           </View>
         )}
@@ -429,12 +596,12 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
         {/* Rating Information (for completed jobs) */}
         {isJobCompleted && application.hasRating && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Your Rating</Text>
+            <Text style={styles.cardTitle}>{tr.yourRating}</Text>
             <View style={styles.ratingDisplay}>
               <Text style={styles.ratingStars}>
                 {'⭐'.repeat(application.employerRating)}{'☆'.repeat(5 - application.employerRating)}
               </Text>
-              <Text style={styles.ratingValue}>{application.employerRating}/5 stars</Text>
+              <Text style={styles.ratingValue}>{application.employerRating}/5 {tr.stars}</Text>
               {application.employerComment && (
                 <Text style={styles.ratingComment}>"{application.employerComment}"</Text>
               )}
@@ -451,7 +618,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
               onPress={handleProcessPayment}
             >
               <Text style={styles.actionButtonIcon}>💰</Text>
-              <Text style={styles.actionButtonText}>Process Payment - ₹{actualPayment}</Text>
+              <Text style={styles.actionButtonText}>{tr.processPayment} - ₹{actualPayment}</Text>
             </TouchableOpacity>
           )}
 
@@ -462,7 +629,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
               onPress={handleCompleteJob}
             >
               <Text style={styles.actionButtonIcon}>✓</Text>
-              <Text style={styles.actionButtonText}>Complete & Rate Job</Text>
+              <Text style={styles.actionButtonText}>{tr.completeRateJob}</Text>
             </TouchableOpacity>
           )}
 
@@ -473,7 +640,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
               onPress={handleRateWorker}
             >
               <Text style={styles.actionButtonIcon}>⭐</Text>
-              <Text style={styles.actionButtonText}>Rate Worker Performance</Text>
+              <Text style={styles.actionButtonText}>{tr.rateWorkerPerformance}</Text>
             </TouchableOpacity>
           )}
 
@@ -484,7 +651,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
               onPress={handleViewJobHistory}
             >
               <Text style={styles.actionButtonIcon}>📋</Text>
-              <Text style={styles.actionButtonText}>View Job History</Text>
+              <Text style={styles.actionButtonText}>{tr.viewJobHistory}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -495,7 +662,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
             style={styles.secondaryButton}
             onPress={() => navigation.navigate('JobLocation', { application, isEmployer: true })}
           >
-            <Text style={styles.secondaryButtonText}>📍 View Location</Text>
+            <Text style={styles.secondaryButtonText}>📍 {tr.viewLocation}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -509,7 +676,7 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
               })
             }
           >
-            <Text style={styles.secondaryButtonText}>💬 Chat with Worker</Text>
+            <Text style={styles.secondaryButtonText}>💬 {tr.chatWithWorker}</Text>
           </TouchableOpacity>
         </View>
 

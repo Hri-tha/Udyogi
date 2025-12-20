@@ -1,4 +1,4 @@
-// src/screens/employer/EmployerProfileScreen.js
+// src/screens/employer/EmployerProfileScreen.js - HINDI VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -14,6 +14,7 @@ import {
   Switch,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { signOut } from '../../services/auth';
 import { updateEmployerProfile } from '../../services/database';
 import { colors } from '../../constants/colors';
@@ -21,12 +22,14 @@ import { fetchEmployerJobs } from '../../services/database';
 
 export default function EmployerProfileScreen({ navigation }) {
   const { user, userProfile, refreshUserProfile } = useAuth();
+  const { locale, changeLanguage, t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [jobs, setJobs] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
   const [notifications, setNotifications] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [languageModal, setLanguageModal] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -39,6 +42,148 @@ export default function EmployerProfileScreen({ navigation }) {
     companySize: '',
     description: '',
   });
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      profile: "Profile",
+      back: "Back",
+      edit: "Edit",
+      cancel: "Cancel",
+      verified: "Verified",
+      activeJobs: "Active Jobs",
+      applications: "Applications",
+      totalHires: "Total Hires",
+      performanceOverview: "Performance Overview",
+      completionRate: "Completion Rate",
+      applicationsToHire: "Applications to Hire",
+      currentlyOpen: "Currently Open",
+      allTime: "All Time",
+      avgResponse: "Avg. Response",
+      companyInfo: "Company Information",
+      industry: "Industry",
+      companySize: "Company Size",
+      email: "Email",
+      phone: "Phone",
+      location: "Location",
+      aboutCompany: "About Company",
+      notSpecified: "Not specified",
+      notProvided: "Not provided",
+      preferences: "Preferences",
+      pushNotifications: "Push Notifications",
+      receiveAlerts: "Receive job application alerts",
+      emailNotifications: "Email Notifications",
+      getUpdates: "Get updates via email",
+      autoCloseJobs: "Auto-close Jobs",
+      autoCloseDesc: "Automatically close filled positions",
+      postNewJob: "Post New Job",
+      dashboard: "Dashboard",
+      saveChanges: "Save Changes",
+      account: "Account",
+      viewAnalytics: "View Analytics",
+      subscription: "Subscription",
+      helpSupport: "Help & Support",
+      logout: "Logout",
+      memberSince: "Member since",
+      recent: "Recent",
+      fullName: "Full Name",
+      companyName: "Company Name",
+      companyDescription: "Company Description",
+      tellWorkers: "Tell workers about your company...",
+      selectIndustry: "Select Industry",
+      manufacturing: "Manufacturing",
+      construction: "Construction",
+      retail: "Retail",
+      selectLanguage: "Select Language",
+      english: "English",
+      hindi: "हिन्दी (Hindi)",
+      language: "Language",
+      changeLanguage: "Change Language",
+      currentLanguage: "Current",
+      appLanguage: "App Language",
+      save: "Save",
+      areYouSure: "Are you sure?",
+      logoutConfirm: "Are you sure you want to logout?",
+      yesLogout: "Logout",
+      error: "Error",
+      success: "Success",
+      profileUpdated: "Profile updated successfully!",
+      enterName: "Please enter your name",
+      enterCompany: "Please enter company name",
+      failedUpdate: "Failed to update profile",
+      failedLogout: "Failed to logout. Please try again.",
+    },
+    hi: {
+      profile: "प्रोफाइल",
+      back: "पीछे",
+      edit: "संपादित करें",
+      cancel: "रद्द करें",
+      verified: "सत्यापित",
+      activeJobs: "सक्रिय नौकरियां",
+      applications: "आवेदन",
+      totalHires: "कुल भर्ती",
+      performanceOverview: "प्रदर्शन अवलोकन",
+      completionRate: "पूर्णता दर",
+      applicationsToHire: "आवेदन से भर्ती",
+      currentlyOpen: "वर्तमान में खुली",
+      allTime: "कुल",
+      avgResponse: "औसत प्रतिक्रिया",
+      companyInfo: "कंपनी की जानकारी",
+      industry: "उद्योग",
+      companySize: "कंपनी का आकार",
+      email: "ईमेल",
+      phone: "फोन",
+      location: "स्थान",
+      aboutCompany: "कंपनी के बारे में",
+      notSpecified: "निर्दिष्ट नहीं",
+      notProvided: "प्रदान नहीं किया गया",
+      preferences: "प्राथमिकताएं",
+      pushNotifications: "पुश सूचनाएं",
+      receiveAlerts: "नौकरी आवेदन अलर्ट प्राप्त करें",
+      emailNotifications: "ईमेल सूचनाएं",
+      getUpdates: "ईमेल के माध्यम से अपडेट प्राप्त करें",
+      autoCloseJobs: "स्वचालित बंद नौकरियां",
+      autoCloseDesc: "भरे हुए पदों को स्वचालित रूप से बंद करें",
+      postNewJob: "नई नौकरी पोस्ट करें",
+      dashboard: "डैशबोर्ड",
+      saveChanges: "परिवर्तन सहेजें",
+      account: "खाता",
+      viewAnalytics: "विश्लेषण देखें",
+      subscription: "सदस्यता",
+      helpSupport: "सहायता और समर्थन",
+      logout: "लॉगआउट",
+      memberSince: "सदस्यता शुरू",
+      recent: "हाल ही में",
+      fullName: "पूरा नाम",
+      companyName: "कंपनी का नाम",
+      companyDescription: "कंपनी विवरण",
+      tellWorkers: "कर्मचारियों को अपनी कंपनी के बारे में बताएं...",
+      selectIndustry: "उद्योग चुनें",
+      manufacturing: "विनिर्माण",
+      construction: "निर्माण",
+      retail: "खुदरा",
+      selectLanguage: "भाषा चुनें",
+      english: "अंग्रेजी (English)",
+      hindi: "हिन्दी",
+      language: "भाषा",
+      changeLanguage: "भाषा बदलें",
+      currentLanguage: "वर्तमान",
+      appLanguage: "ऐप भाषा",
+      save: "सहेजें",
+      areYouSure: "क्या आप सुनिश्चित हैं?",
+      logoutConfirm: "क्या आप निश्चित रूप से लॉगआउट करना चाहते हैं?",
+      yesLogout: "लॉगआउट करें",
+      error: "त्रुटि",
+      success: "सफल",
+      profileUpdated: "प्रोफाइल सफलतापूर्वक अपडेट हुआ!",
+      enterName: "कृपया अपना नाम दर्ज करें",
+      enterCompany: "कृपया कंपनी का नाम दर्ज करें",
+      failedUpdate: "प्रोफाइल अपडेट करने में विफल",
+      failedLogout: "लॉगआउट करने में विफल। कृपया पुनः प्रयास करें।",
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   // Load profile data and stats
   useEffect(() => {
@@ -54,8 +199,8 @@ export default function EmployerProfileScreen({ navigation }) {
         email: userProfile.email || user?.email || '',
         phoneNumber: userProfile.phoneNumber || '',
         location: userProfile.location || '',
-        industry: userProfile.industry || 'Manufacturing',
-        companySize: userProfile.companySize || 'Small (1-50)',
+        industry: userProfile.industry || (locale === 'hi' ? 'विनिर्माण' : 'Manufacturing'),
+        companySize: userProfile.companySize || (locale === 'hi' ? 'छोटा (1-50)' : 'Small (1-50)'),
         description: userProfile.description || '',
       });
     }
@@ -71,12 +216,12 @@ export default function EmployerProfileScreen({ navigation }) {
 
   const handleSaveProfile = async () => {
     if (!formData.name.trim()) {
-      Alert.alert('Error', 'Please enter your name');
+      Alert.alert(tr.error, tr.enterName);
       return;
     }
 
     if (!formData.companyName.trim()) {
-      Alert.alert('Error', 'Please enter company name');
+      Alert.alert(tr.error, tr.enterCompany);
       return;
     }
 
@@ -93,9 +238,9 @@ export default function EmployerProfileScreen({ navigation }) {
     if (result.success) {
       await refreshUserProfile();
       setEditMode(false);
-      Alert.alert('Success', 'Profile updated successfully!');
+      Alert.alert(tr.success, tr.profileUpdated);
     } else {
-      Alert.alert('Error', result.error || 'Failed to update profile');
+      Alert.alert(tr.error, result.error || tr.failedUpdate);
     }
   };
 
@@ -106,20 +251,20 @@ export default function EmployerProfileScreen({ navigation }) {
 
   const handleLogout = async () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      tr.logout,
+      tr.logoutConfirm,
       [
         {
-          text: 'Cancel',
+          text: tr.cancel,
           style: 'cancel',
         },
         {
-          text: 'Logout',
+          text: tr.yesLogout,
           style: 'destructive',
           onPress: async () => {
             const result = await signOut();
             if (!result.success) {
-              Alert.alert('Error', 'Failed to logout. Please try again.');
+              Alert.alert(tr.error, tr.failedLogout);
             }
           },
         },
@@ -161,6 +306,10 @@ export default function EmployerProfileScreen({ navigation }) {
     </View>
   );
 
+  const getCurrentLanguageText = () => {
+    return locale === 'hi' ? 'हिन्दी' : 'English';
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -168,15 +317,15 @@ export default function EmployerProfileScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+          <Text style={styles.backButton}>← {tr.back}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={styles.headerTitle}>{tr.profile}</Text>
         <TouchableOpacity 
           onPress={() => setEditMode(!editMode)}
           style={styles.editButton}
         >
           <Text style={styles.editButtonText}>
-            {editMode ? 'Cancel' : 'Edit'}
+            {editMode ? tr.cancel : tr.edit}
           </Text>
         </TouchableOpacity>
       </View>
@@ -187,7 +336,7 @@ export default function EmployerProfileScreen({ navigation }) {
           <View style={styles.avatarSection}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
-                {userProfile?.name?.charAt(0) || 'E'}
+                {userProfile?.name?.charAt(0) || (locale === 'hi' ? 'नि' : 'E')}
               </Text>
             </View>
             <View style={styles.avatarBadge}>
@@ -197,32 +346,32 @@ export default function EmployerProfileScreen({ navigation }) {
 
           {!editMode ? (
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{userProfile?.name || 'Employer'}</Text>
-              <Text style={styles.companyName}>{userProfile?.companyName || 'Company Name'}</Text>
-              <Text style={styles.profileLocation}>📍 {userProfile?.location || 'Add location'}</Text>
+              <Text style={styles.profileName}>{userProfile?.name || (locale === 'hi' ? 'नियोक्ता' : 'Employer')}</Text>
+              <Text style={styles.companyName}>{userProfile?.companyName || tr.companyName}</Text>
+              <Text style={styles.profileLocation}>📍 {userProfile?.location || tr.location}</Text>
               
               <View style={styles.industryTags}>
-                <IndustryTag title={userProfile?.industry || 'Industry'} />
-                <IndustryTag title={userProfile?.companySize || 'Size'} />
+                <IndustryTag title={userProfile?.industry || tr.industry} />
+                <IndustryTag title={userProfile?.companySize || tr.companySize} />
               </View>
             </View>
           ) : (
             <View style={styles.editForm}>
               <TextInput
                 style={styles.input}
-                placeholder="Full Name"
+                placeholder={tr.fullName}
                 value={formData.name}
                 onChangeText={(text) => setFormData({...formData, name: text})}
               />
               <TextInput
                 style={styles.input}
-                placeholder="Company Name"
+                placeholder={tr.companyName}
                 value={formData.companyName}
                 onChangeText={(text) => setFormData({...formData, companyName: text})}
               />
               <TextInput
                 style={styles.input}
-                placeholder="Location"
+                placeholder={tr.location}
                 value={formData.location}
                 onChangeText={(text) => setFormData({...formData, location: text})}
               />
@@ -232,63 +381,63 @@ export default function EmployerProfileScreen({ navigation }) {
           <View style={styles.profileStats}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{stats.activeJobs}</Text>
-              <Text style={styles.statLabel}>Active Jobs</Text>
+              <Text style={styles.statLabel}>{tr.activeJobs}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{stats.totalApplications}</Text>
-              <Text style={styles.statLabel}>Applications</Text>
+              <Text style={styles.statLabel}>{tr.applications}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{userProfile?.totalHires || 0}</Text>
-              <Text style={styles.statLabel}>Total Hires</Text>
+              <Text style={styles.statLabel}>{tr.totalHires}</Text>
             </View>
           </View>
         </View>
 
         {/* Quick Stats */}
-        <Text style={styles.sectionTitle}>Performance Overview</Text>
+        <Text style={styles.sectionTitle}>{tr.performanceOverview}</Text>
         <View style={styles.statsGrid}>
           <StatCard 
-            title="Completion Rate" 
+            title={tr.completionRate} 
             value={`${stats.completionRate}%`} 
-            subtitle="Applications to Hire"
+            subtitle={tr.applicationsToHire}
             color={colors.success}
           />
           <StatCard 
-            title="Active Jobs" 
+            title={tr.activeJobs} 
             value={stats.activeJobs} 
-            subtitle="Currently Open"
+            subtitle={tr.currentlyOpen}
           />
           <StatCard 
-            title="Total Hires" 
+            title={tr.totalHires} 
             value={userProfile?.totalHires || 0} 
-            subtitle="All Time"
+            subtitle={tr.allTime}
             color={colors.warning}
           />
           <StatCard 
-            title="Response Time" 
+            title={locale === 'hi' ? 'प्रतिक्रिया समय' : 'Response Time'} 
             value="<24h" 
-            subtitle="Avg. Response"
+            subtitle={tr.avgResponse}
             color={colors.info}
           />
         </View>
 
         {/* Company Information */}
-        <Text style={styles.sectionTitle}>Company Information</Text>
+        <Text style={styles.sectionTitle}>{tr.companyInfo}</Text>
         <View style={styles.infoCard}>
           {!editMode ? (
             <>
-              <InfoRow icon="🏢" label="Industry" value={userProfile?.industry || 'Not specified'} />
-              <InfoRow icon="👥" label="Company Size" value={userProfile?.companySize || 'Not specified'} />
-              <InfoRow icon="📧" label="Email" value={userProfile?.email || user?.email} />
-              <InfoRow icon="📱" label="Phone" value={userProfile?.phoneNumber || 'Not provided'} />
-              <InfoRow icon="📍" label="Location" value={userProfile?.location || 'Not specified'} />
+              <InfoRow icon="🏢" label={tr.industry} value={userProfile?.industry || tr.notSpecified} />
+              <InfoRow icon="👥" label={tr.companySize} value={userProfile?.companySize || tr.notSpecified} />
+              <InfoRow icon="📧" label={tr.email} value={userProfile?.email || user?.email} />
+              <InfoRow icon="📱" label={tr.phone} value={userProfile?.phoneNumber || tr.notProvided} />
+              <InfoRow icon="📍" label={tr.location} value={userProfile?.location || tr.notSpecified} />
               
               {userProfile?.description && (
                 <View style={styles.descriptionSection}>
-                  <Text style={styles.descriptionLabel}>About Company</Text>
+                  <Text style={styles.descriptionLabel}>{tr.aboutCompany}</Text>
                   <Text style={styles.descriptionText}>{userProfile.description}</Text>
                 </View>
               )}
@@ -297,7 +446,7 @@ export default function EmployerProfileScreen({ navigation }) {
             <View style={styles.editForm}>
               <View style={styles.inputRow}>
                 <View style={styles.halfInput}>
-                  <Text style={styles.inputLabel}>Industry</Text>
+                  <Text style={styles.inputLabel}>{tr.industry}</Text>
                   <TouchableOpacity 
                     style={styles.pickerInput}
                     onPress={() => setShowEditModal(true)}
@@ -307,7 +456,7 @@ export default function EmployerProfileScreen({ navigation }) {
                   </TouchableOpacity>
                 </View>
                 <View style={styles.halfInput}>
-                  <Text style={styles.inputLabel}>Company Size</Text>
+                  <Text style={styles.inputLabel}>{tr.companySize}</Text>
                   <TouchableOpacity 
                     style={styles.pickerInput}
                     onPress={() => setShowEditModal(true)}
@@ -318,28 +467,28 @@ export default function EmployerProfileScreen({ navigation }) {
                 </View>
               </View>
               
-              <Text style={styles.inputLabel}>Email</Text>
+              <Text style={styles.inputLabel}>{tr.email}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Email address"
+                placeholder={tr.email}
                 value={formData.email}
                 onChangeText={(text) => setFormData({...formData, email: text})}
                 keyboardType="email-address"
               />
               
-              <Text style={styles.inputLabel}>Phone Number</Text>
+              <Text style={styles.inputLabel}>{tr.phone}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Phone number"
+                placeholder={tr.phone}
                 value={formData.phoneNumber}
                 onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
                 keyboardType="phone-pad"
               />
               
-              <Text style={styles.inputLabel}>Company Description</Text>
+              <Text style={styles.inputLabel}>{tr.companyDescription}</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="Tell workers about your company..."
+                placeholder={tr.tellWorkers}
                 value={formData.description}
                 onChangeText={(text) => setFormData({...formData, description: text})}
                 multiline
@@ -349,27 +498,42 @@ export default function EmployerProfileScreen({ navigation }) {
           )}
         </View>
 
-        {/* Settings */}
-        <Text style={styles.sectionTitle}>Preferences</Text>
+        {/* Preferences Section - ADDED LANGUAGE TOGGLE */}
+        <Text style={styles.sectionTitle}>{tr.preferences}</Text>
         <View style={styles.settingsCard}>
           <SettingRow 
-            title="Push Notifications"
-            subtitle="Receive job application alerts"
+            title={tr.pushNotifications}
+            subtitle={tr.receiveAlerts}
             value={notifications}
             onValueChange={setNotifications}
           />
           <SettingRow 
-            title="Email Notifications"
-            subtitle="Get updates via email"
+            title={tr.emailNotifications}
+            subtitle={tr.getUpdates}
             value={true}
             onValueChange={() => {}}
           />
           <SettingRow 
-            title="Auto-close Jobs"
-            subtitle="Automatically close filled positions"
+            title={tr.autoCloseJobs}
+            subtitle={tr.autoCloseDesc}
             value={true}
             onValueChange={() => {}}
           />
+          
+          {/* Language Toggle Row */}
+          <TouchableOpacity 
+            style={styles.settingRow}
+            onPress={() => setLanguageModal(true)}
+          >
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingTitle}>{tr.appLanguage}</Text>
+              <Text style={styles.settingSubtitle}>{tr.changeLanguage}</Text>
+            </View>
+            <View style={styles.languageDisplay}>
+              <Text style={styles.currentLanguageText}>{getCurrentLanguageText()}</Text>
+              <Text style={styles.languageArrow}>›</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Action Buttons */}
@@ -379,7 +543,7 @@ export default function EmployerProfileScreen({ navigation }) {
               style={[styles.actionButton, styles.cancelButton]}
               onPress={handleCancelEdit}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>{tr.cancel}</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.actionButton, styles.saveButton]}
@@ -389,7 +553,7 @@ export default function EmployerProfileScreen({ navigation }) {
               {loading ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+                <Text style={styles.saveButtonText}>{tr.saveChanges}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -399,43 +563,43 @@ export default function EmployerProfileScreen({ navigation }) {
               style={[styles.actionButton, styles.secondaryButton]}
               onPress={() => navigation.navigate('PostJob')}
             >
-              <Text style={styles.secondaryButtonText}>📝 Post New Job</Text>
+              <Text style={styles.secondaryButtonText}>📝 {tr.postNewJob}</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.actionButton, styles.primaryButton]}
               onPress={() => navigation.navigate('EmployerHome')}
             >
-              <Text style={styles.primaryButtonText}>🏠 Dashboard</Text>
+              <Text style={styles.primaryButtonText}>🏠 {tr.dashboard}</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Account Section */}
-        <Text style={styles.sectionTitle}>Account</Text>
+        <Text style={styles.sectionTitle}>{tr.account}</Text>
         <View style={styles.accountCard}>
           <TouchableOpacity style={styles.menuItem}>
-            <Text style={styles.menuText}>📊 View Analytics</Text>
+            <Text style={styles.menuText}>📊 {tr.viewAnalytics}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem}>
-            <Text style={styles.menuText}>🔄 Subscription</Text>
+            <Text style={styles.menuText}>🔄 {tr.subscription}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem}>
-            <Text style={styles.menuText}>❓ Help & Support</Text>
+            <Text style={styles.menuText}>❓ {tr.helpSupport}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.menuItem, styles.logoutItem]}
             onPress={handleLogout}
           >
-            <Text style={styles.logoutText}>🚪 Logout</Text>
+            <Text style={styles.logoutText}>🚪 {tr.logout}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Member since {user?.metadata?.creationTime ? new Date(user.metadata.creationTime).toLocaleDateString() : 'Recent'}
+            {tr.memberSince} {user?.metadata?.creationTime ? new Date(user.metadata.creationTime).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN') : tr.recent}
           </Text>
         </View>
       </ScrollView>
@@ -445,42 +609,140 @@ export default function EmployerProfileScreen({ navigation }) {
         visible={showEditModal}
         animationType="slide"
         transparent={true}
+        onRequestClose={() => setShowEditModal(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Industry</Text>
-            <TouchableOpacity 
-              style={styles.modalOption}
-              onPress={() => {
-                setFormData({...formData, industry: 'Manufacturing'});
-                setShowEditModal(false);
-              }}
-            >
-              <Text>Manufacturing</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.modalOption}
-              onPress={() => {
-                setFormData({...formData, industry: 'Construction'});
-                setShowEditModal(false);
-              }}
-            >
-              <Text>Construction</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.modalOption}
-              onPress={() => {
-                setFormData({...formData, industry: 'Retail'});
-                setShowEditModal(false);
-              }}
-            >
-              <Text>Retail</Text>
-            </TouchableOpacity>
+            <Text style={styles.modalTitle}>{tr.selectIndustry}</Text>
+            {locale === 'hi' ? (
+              <>
+                <TouchableOpacity 
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setFormData({...formData, industry: 'विनिर्माण'});
+                    setShowEditModal(false);
+                  }}
+                >
+                  <Text>विनिर्माण</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setFormData({...formData, industry: 'निर्माण'});
+                    setShowEditModal(false);
+                  }}
+                >
+                  <Text>निर्माण</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setFormData({...formData, industry: 'खुदरा'});
+                    setShowEditModal(false);
+                  }}
+                >
+                  <Text>खुदरा</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity 
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setFormData({...formData, industry: 'Manufacturing'});
+                    setShowEditModal(false);
+                  }}
+                >
+                  <Text>Manufacturing</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setFormData({...formData, industry: 'Construction'});
+                    setShowEditModal(false);
+                  }}
+                >
+                  <Text>Construction</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setFormData({...formData, industry: 'Retail'});
+                    setShowEditModal(false);
+                  }}
+                >
+                  <Text>Retail</Text>
+                </TouchableOpacity>
+              </>
+            )}
             <TouchableOpacity 
               style={styles.modalClose}
               onPress={() => setShowEditModal(false)}
             >
-              <Text style={styles.modalCloseText}>Cancel</Text>
+              <Text style={styles.modalCloseText}>{tr.cancel}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Language Selection Modal */}
+      <Modal
+        visible={languageModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setLanguageModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{tr.selectLanguage}</Text>
+            
+            {/* English Option */}
+            <TouchableOpacity 
+              style={[styles.modalOption, locale === 'en' && styles.selectedOption]}
+              onPress={() => {
+                changeLanguage('en');
+                setLanguageModal(false);
+              }}
+            >
+              <View style={styles.languageOptionContent}>
+                <Text style={styles.languageFlag}>🇺🇸</Text>
+                <View style={styles.languageOptionTexts}>
+                  <Text style={[styles.languageName, locale === 'en' && styles.selectedText]}>
+                    {tr.english}
+                  </Text>
+                  {locale === 'en' && (
+                    <Text style={styles.currentLabel}>{tr.currentLanguage}</Text>
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+            
+            {/* Hindi Option */}
+            <TouchableOpacity 
+              style={[styles.modalOption, locale === 'hi' && styles.selectedOption]}
+              onPress={() => {
+                changeLanguage('hi');
+                setLanguageModal(false);
+              }}
+            >
+              <View style={styles.languageOptionContent}>
+                <Text style={styles.languageFlag}>🇮🇳</Text>
+                <View style={styles.languageOptionTexts}>
+                  <Text style={[styles.languageName, locale === 'hi' && styles.selectedText]}>
+                    {tr.hindi}
+                  </Text>
+                  {locale === 'hi' && (
+                    <Text style={styles.currentLabel}>{tr.currentLanguage}</Text>
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.modalClose}
+              onPress={() => setLanguageModal(false)}
+            >
+              <Text style={styles.modalCloseText}>{tr.cancel}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -779,6 +1041,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
   },
+  // Language Display
+  languageDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  currentLanguageText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  languageArrow: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
   actionButtons: {
     flexDirection: 'row',
     gap: 12,
@@ -925,6 +1202,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
+    maxHeight: '60%',
   },
   modalTitle: {
     fontSize: 18,
@@ -937,15 +1215,45 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  selectedOption: {
+    backgroundColor: colors.primary + '10',
+  },
+  selectedText: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
   modalClose: {
     padding: 15,
     marginTop: 10,
     alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   modalCloseText: {
     color: colors.error,
     fontSize: 16,
     fontWeight: '600',
   },
+  // Language Modal Styles
+  languageOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  languageFlag: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  languageOptionTexts: {
+    flex: 1,
+  },
+  languageName: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  currentLabel: {
+    fontSize: 12,
+    color: colors.success,
+    marginTop: 2,
+    fontWeight: '600',
+  },
 });
-

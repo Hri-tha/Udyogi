@@ -1,4 +1,4 @@
-// src/screens/employer/EmployerHomeScreen.js - UPDATED WITH FUTURE/PAST JOBS
+// src/screens/employer/EmployerHomeScreen.js - HINDI VERSION
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -14,6 +14,7 @@ import {
   Modal,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { 
   fetchAllEmployerJobs,
   fetchJobApplications,
@@ -26,11 +27,130 @@ const { width } = Dimensions.get('window');
 
 export default function EmployerHomeScreen({ navigation }) {
   const { user, userProfile, refreshUserProfile } = useAuth();
+  const { locale, t } = useLanguage();
   const [futureJobs, setFutureJobs] = useState([]);
   const [pastJobs, setPastJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showPastJobs, setShowPastJobs] = useState(false);
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      welcome: "Welcome back",
+      subtitle: "Here's your hiring dashboard",
+      overview: "Overview",
+      upcomingJobs: "Upcoming Jobs",
+      pastJobs: "Past Jobs",
+      applications: "Applications",
+      totalHires: "Total Hires",
+      futureDates: "Future dates",
+      completedExpired: "Completed/Expired",
+      totalReceived: "Total received",
+      completedWork: "Completed work",
+      postNewJob: "Post New Job",
+      findWorkers: "Find qualified workers",
+      viewApplications: "View Applications",
+      settings: "Settings",
+      noUpcomingJobs: "No upcoming jobs",
+      noJobsDesc: "Post a new job to find workers for future dates",
+      active: "Active",
+      closed: "Closed",
+      cancelled: "Cancelled",
+      location: "Location",
+      rate: "Rate",
+      duration: "Duration",
+      date: "Date",
+      time: "Time",
+      status: "Status",
+      completed: "Completed",
+      worker: "worker",
+      workers: "workers",
+      applicationsCount: "applications",
+      jobDetails: "Job Details",
+      viewDetails: "View Details",
+      deleteJob: "Delete Job",
+      expired: "Expired",
+      of: "of",
+      areYouSure: "Are you sure?",
+      deleteConfirmation: "Are you sure you want to delete",
+      cannotUndone: "This action cannot be undone",
+      success: "Success",
+      deletedSuccessfully: "Job deleted successfully",
+      error: "Error",
+      failedDelete: "Failed to delete job",
+      loading: "Loading your dashboard...",
+      refresh: "Pull to refresh",
+      modalTitle: "Past Jobs",
+      noPastJobs: "No past jobs",
+      pastJobsDesc: "Completed and expired jobs will appear here",
+      chooseAction: "Choose an action",
+      today: "Today",
+      tomorrow: "Tomorrow",
+      dateNotSet: "Date not set",
+      showAll: "Show All",
+      filter: "Filter",
+      sort: "Sort",
+    },
+    hi: {
+      welcome: "वापसी पर स्वागत है",
+      subtitle: "यहां है आपका भर्ती डैशबोर्ड",
+      overview: "अवलोकन",
+      upcomingJobs: "आगामी नौकरियां",
+      pastJobs: "पिछली नौकरियां",
+      applications: "आवेदन",
+      totalHires: "कुल भर्ती",
+      futureDates: "भविष्य की तारीखें",
+      completedExpired: "पूर्ण/समाप्त",
+      totalReceived: "कुल प्राप्त",
+      completedWork: "पूर्ण कार्य",
+      postNewJob: "नई नौकरी पोस्ट करें",
+      findWorkers: "योग्य कर्मचारी ढूंढें",
+      viewApplications: "आवेदन देखें",
+      settings: "सेटिंग्स",
+      noUpcomingJobs: "कोई आगामी नौकरी नहीं",
+      noJobsDesc: "भविष्य की तारीखों के लिए कर्मचारी ढूंढने के लिए नई नौकरी पोस्ट करें",
+      active: "सक्रिय",
+      closed: "बंद",
+      cancelled: "रद्द",
+      location: "स्थान",
+      rate: "दर",
+      duration: "अवधि",
+      date: "तारीख",
+      time: "समय",
+      status: "स्थिति",
+      completed: "पूर्ण",
+      worker: "कर्मचारी",
+      workers: "कर्मचारी",
+      applicationsCount: "आवेदन",
+      jobDetails: "नौकरी विवरण",
+      viewDetails: "विवरण देखें",
+      deleteJob: "नौकरी हटाएं",
+      expired: "समाप्त",
+      of: "में से",
+      areYouSure: "क्या आप सुनिश्चित हैं?",
+      deleteConfirmation: "क्या आप निश्चित रूप से हटाना चाहते हैं",
+      cannotUndone: "इस क्रिया को पूर्ववत नहीं किया जा सकता",
+      success: "सफल",
+      deletedSuccessfully: "नौकरी सफलतापूर्वक हटाई गई",
+      error: "त्रुटि",
+      failedDelete: "नौकरी हटाने में विफल",
+      loading: "आपका डैशबोर्ड लोड हो रहा है...",
+      refresh: "रिफ्रेश करने के लिए खींचें",
+      modalTitle: "पिछली नौकरियां",
+      noPastJobs: "कोई पिछली नौकरी नहीं",
+      pastJobsDesc: "पूर्ण और समाप्त नौकरियां यहां दिखाई देंगी",
+      chooseAction: "एक क्रिया चुनें",
+      today: "आज",
+      tomorrow: "कल",
+      dateNotSet: "तारीख सेट नहीं है",
+      showAll: "सभी दिखाएं",
+      filter: "फ़िल्टर",
+      sort: "क्रमबद्ध करें",
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   // Use useFocusEffect to refresh data when screen comes into focus
   useFocusEffect(
@@ -94,11 +214,17 @@ export default function EmployerHomeScreen({ navigation }) {
         setPastJobs(pastJobsWithApps);
       } else {
         console.error('Failed to load jobs:', result.error);
-        Alert.alert('Error', 'Failed to load jobs: ' + result.error);
+        Alert.alert(
+          locale === 'hi' ? 'त्रुटि' : 'Error',
+          locale === 'hi' ? 'नौकरियां लोड करने में विफल' : 'Failed to load jobs'
+        );
       }
     } catch (error) {
       console.error('Exception loading jobs:', error);
-      Alert.alert('Error', 'An error occurred while loading jobs');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        locale === 'hi' ? 'नौकरियां लोड करते समय एक त्रुटि हुई' : 'An error occurred while loading jobs'
+      );
     }
   };
 
@@ -110,29 +236,35 @@ export default function EmployerHomeScreen({ navigation }) {
 
   const handleDeletePastJob = (job) => {
     Alert.alert(
-      '🗑️ Delete Past Job',
-      `Are you sure you want to delete "${job.title}"?\n\nDate: ${job.jobDate}\nLocation: ${job.location}\n\nThis action cannot be undone.`,
+      `🗑️ ${locale === 'hi' ? 'पिछली नौकरी हटाएं' : 'Delete Past Job'}`,
+      `${locale === 'hi' ? 'क्या आप निश्चित रूप से हटाना चाहते हैं' : 'Are you sure you want to delete'} "${job.title}"?\n\n${locale === 'hi' ? 'तारीख' : 'Date'}: ${job.jobDate}\n${locale === 'hi' ? 'स्थान' : 'Location'}: ${job.location}\n\n${locale === 'hi' ? 'इस क्रिया को पूर्ववत नहीं किया जा सकता' : 'This action cannot be undone.'}`,
       [
         {
-          text: 'Cancel',
+          text: locale === 'hi' ? 'रद्द करें' : 'Cancel',
           style: 'cancel'
         },
         {
-          text: 'Delete',
+          text: locale === 'hi' ? 'हटाएं' : 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
               const result = await deletePastJob(job.id, user.uid);
               
               if (result.success) {
-                Alert.alert('✅ Success', result.message || 'Past job deleted successfully');
+                Alert.alert(
+                  '✅ ' + (locale === 'hi' ? 'सफल' : 'Success'),
+                  locale === 'hi' ? 'पिछली नौकरी सफलतापूर्वक हटाई गई' : 'Past job deleted successfully'
+                );
                 loadData(); // Refresh data
               } else {
-                Alert.alert('❌ Error', result.error);
+                Alert.alert('❌ ' + (locale === 'hi' ? 'त्रुटि' : 'Error'), result.error);
               }
             } catch (error) {
               console.error('Error deleting past job:', error);
-              Alert.alert('Error', 'Failed to delete past job');
+              Alert.alert(
+                locale === 'hi' ? 'त्रुटि' : 'Error',
+                locale === 'hi' ? 'पिछली नौकरी हटाने में विफल' : 'Failed to delete past job'
+              );
             }
           }
         }
@@ -141,23 +273,28 @@ export default function EmployerHomeScreen({ navigation }) {
   };
 
   const handleJobOptions = (job, isPastJob = false) => {
+    const completedApps = job.applications?.filter(app => app.status === 'completed').length || 0;
+    const totalApps = job.applications?.length || 0;
+    
+    const jobDetails = locale === 'hi' 
+      ? `📍 ${tr.location}: ${job.location}\n💰 ${tr.rate}: ₹${job.rate}/hour\n⏱️ ${tr.duration}: ${job.hours || job.expectedDuration} hours\n📅 ${tr.date}: ${job.jobDate || (locale === 'hi' ? 'निर्दिष्ट नहीं' : 'Not specified')}\n🕐 ${tr.time}: ${job.startTime} - ${job.endTime}\n📝 ${tr.status}: ${job.status}\n📊 ${tr.applications}: ${totalApps}\n✅ ${tr.completed}: ${completedApps}\n\n${job.description}`
+      : `📍 Location: ${job.location}\n💰 Rate: ₹${job.rate}/hour\n⏱️ Duration: ${job.hours || job.expectedDuration} hours\n📅 Date: ${job.jobDate || 'Not specified'}\n🕐 Time: ${job.startTime} - ${job.endTime}\n📝 Status: ${job.status}\n📊 Applications: ${totalApps}\n✅ Completed: ${completedApps}\n\n${job.description}`;
+
     const options = [
       {
-        text: '👁 View Applications',
-        onPress: () => navigation.navigate('Applications', { 
-          jobId: job.id,
-          jobTitle: job.title 
-        })
+        text: '👁 ' + (locale === 'hi' ? 'आवेदन देखें' : 'View Applications'),
+        onPress: () => {
+          setShowPastJobs(false);
+          navigation.navigate('Applications', { 
+            jobId: job.id,
+            jobTitle: job.title 
+          });
+        }
       },
       {
-        text: '📋 Job Details',
+        text: '📋 ' + (locale === 'hi' ? 'नौकरी विवरण' : 'Job Details'),
         onPress: () => {
-          const completedApps = job.applications?.filter(app => app.status === 'completed').length || 0;
-          Alert.alert(
-            job.title, 
-            `📍 Location: ${job.location}\n💰 Rate: ₹${job.rate}/hour\n⏱️ Duration: ${job.hours || job.expectedDuration} hours\n📅 Date: ${job.jobDate || 'Not specified'}\n🕐 Time: ${job.startTime} - ${job.endTime}\n📝 Status: ${job.status}\n📊 Applications: ${job.applications?.length || 0}\n✅ Completed: ${completedApps}\n\n${job.description}`,
-            [{ text: 'OK' }]
-          );
+          Alert.alert(job.title, jobDetails, [{ text: 'OK' }]);
         }
       }
     ];
@@ -165,18 +302,22 @@ export default function EmployerHomeScreen({ navigation }) {
     // Add Delete option for past jobs
     if (isPastJob) {
       options.push({
-        text: '🗑 Delete Job',
+        text: '🗑 ' + (locale === 'hi' ? 'नौकरी हटाएं' : 'Delete Job'),
         onPress: () => handleDeletePastJob(job),
         style: 'destructive'
       });
     }
 
     options.push({
-      text: 'Cancel',
+      text: locale === 'hi' ? 'रद्द करें' : 'Cancel',
       style: 'cancel',
     });
 
-    Alert.alert(`${job.title}`, 'Choose an action:', options);
+    Alert.alert(
+      `${job.title}`,
+      (locale === 'hi' ? 'एक क्रिया चुनें:' : 'Choose an action:'),
+      options
+    );
   };
 
   const StatCard = ({ value, label, subtitle, color = colors.primary, icon }) => (
@@ -192,7 +333,7 @@ export default function EmployerHomeScreen({ navigation }) {
 
   // Format job date for display
   const formatJobDate = (jobDate, startTime) => {
-    if (!jobDate) return 'Date not set';
+    if (!jobDate) return locale === 'hi' ? 'तारीख सेट नहीं' : 'Date not set';
     
     const date = new Date(jobDate);
     const today = new Date();
@@ -200,19 +341,48 @@ export default function EmployerHomeScreen({ navigation }) {
     tomorrow.setDate(tomorrow.getDate() + 1);
     
     if (date.toDateString() === today.toDateString()) {
-      return `Today${startTime ? `, ${startTime}` : ''}`;
+      return `${locale === 'hi' ? 'आज' : 'Today'}${startTime ? `, ${startTime}` : ''}`;
     } else if (date.toDateString() === tomorrow.toDateString()) {
-      return `Tomorrow${startTime ? `, ${startTime}` : ''}`;
+      return `${locale === 'hi' ? 'कल' : 'Tomorrow'}${startTime ? `, ${startTime}` : ''}`;
     } else {
-      return `${date.toLocaleDateString()}${startTime ? `, ${startTime}` : ''}`;
+      return `${date.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')}${startTime ? `, ${startTime}` : ''}`;
     }
+  };
+
+  // Get status text based on locale
+  const getStatusText = (status, completedCount = 0) => {
+    if (locale === 'hi') {
+      switch(status) {
+        case 'open': return '🟢 सक्रिय';
+        case 'closed': return '🔴 बंद';
+        case 'cancelled': return '🔴 रद्द';
+        default: return completedCount > 0 ? '✅ पूर्ण' : '📅 समाप्त';
+      }
+    } else {
+      switch(status) {
+        case 'open': return '🟢 Active';
+        case 'closed': return '🔴 Closed';
+        case 'cancelled': return '🔴 Cancelled';
+        default: return completedCount > 0 ? '✅ Completed' : '📅 Expired';
+      }
+    }
+  };
+
+  // Get greeting name
+  const getGreetingName = () => {
+    if (userProfile?.name) {
+      return locale === 'hi' 
+        ? `${userProfile.name.split(' ')[0]} जी`
+        : userProfile.name.split(' ')[0];
+    }
+    return locale === 'hi' ? 'नियोक्ता' : 'Employer';
   };
 
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading your dashboard...</Text>
+        <Text style={styles.loadingText}>{tr.loading}</Text>
       </View>
     );
   }
@@ -226,9 +396,9 @@ export default function EmployerHomeScreen({ navigation }) {
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.greeting}>
-              Welcome back, {userProfile?.name?.split(' ')[0] || 'Employer'}! 👋
+              {tr.welcome}, {getGreetingName()}! 👋
             </Text>
-            <Text style={styles.subGreeting}>Here's your hiring dashboard</Text>
+            <Text style={styles.subGreeting}>{tr.subtitle}</Text>
           </View>
           <TouchableOpacity 
             style={styles.profileButton}
@@ -236,7 +406,7 @@ export default function EmployerHomeScreen({ navigation }) {
           >
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
-                {userProfile?.name?.charAt(0) || 'E'}
+                {userProfile?.name?.charAt(0) || (locale === 'hi' ? 'नि' : 'E')}
               </Text>
             </View>
           </TouchableOpacity>
@@ -255,33 +425,33 @@ export default function EmployerHomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* Quick Stats Grid */}
-        <Text style={styles.sectionTitle}>Overview</Text>
+        <Text style={styles.sectionTitle}>{tr.overview}</Text>
         <View style={styles.statsGrid}>
           <StatCard 
             value={futureJobs.length}
-            label="Upcoming Jobs"
-            subtitle="Future dates"
+            label={tr.upcomingJobs}
+            subtitle={tr.futureDates}
             color={colors.primary}
             icon="📅"
           />
           <StatCard 
             value={pastJobs.length}
-            label="Past Jobs"
-            subtitle="Completed/Expired"
+            label={tr.pastJobs}
+            subtitle={tr.completedExpired}
             color={colors.info}
             icon="📝"
           />
           <StatCard 
             value={futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0)}
-            label="Applications"
-            subtitle="Total received"
+            label={tr.applications}
+            subtitle={tr.totalReceived}
             color={colors.success}
             icon="📨"
           />
           <StatCard 
             value={pastJobs.reduce((sum, job) => sum + (job.applications?.filter(app => app.status === 'completed').length || 0), 0)}
-            label="Total Hires"
-            subtitle="Completed work"
+            label={tr.totalHires}
+            subtitle={tr.completedWork}
             color={colors.warning}
             icon="🎯"
           />
@@ -296,8 +466,8 @@ export default function EmployerHomeScreen({ navigation }) {
             <View style={styles.actionContent}>
               <Text style={styles.actionIcon}>+</Text>
               <View style={styles.actionTexts}>
-                <Text style={styles.actionTitle}>Post New Job</Text>
-                <Text style={styles.actionSubtitle}>Find qualified workers</Text>
+                <Text style={styles.actionTitle}>{tr.postNewJob}</Text>
+                <Text style={styles.actionSubtitle}>{tr.findWorkers}</Text>
               </View>
             </View>
             <Text style={styles.actionArrow}>›</Text>
@@ -309,14 +479,14 @@ export default function EmployerHomeScreen({ navigation }) {
               onPress={() => navigation.navigate('Applications')}
             >
               <Text style={styles.secondaryActionIcon}>👥</Text>
-              <Text style={styles.secondaryActionText}>Applications</Text>
+              <Text style={styles.secondaryActionText}>{tr.viewApplications}</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.secondaryAction}
               onPress={() => setShowPastJobs(true)}
             >
               <Text style={styles.secondaryActionIcon}>📚</Text>
-              <Text style={styles.secondaryActionText}>Past Jobs</Text>
+              <Text style={styles.secondaryActionText}>{tr.pastJobs}</Text>
               {pastJobs.length > 0 && (
                 <View style={styles.pastJobsBadge}>
                   <Text style={styles.pastJobsBadgeText}>{pastJobs.length}</Text>
@@ -328,7 +498,7 @@ export default function EmployerHomeScreen({ navigation }) {
               onPress={() => navigation.navigate('EmployerProfile')}
             >
               <Text style={styles.secondaryActionIcon}>⚙️</Text>
-              <Text style={styles.secondaryActionText}>Settings</Text>
+              <Text style={styles.secondaryActionText}>{tr.settings}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -336,7 +506,7 @@ export default function EmployerHomeScreen({ navigation }) {
         {/* Upcoming Job Posts Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Upcoming Jobs</Text>
+            <Text style={styles.sectionTitle}>{tr.upcomingJobs}</Text>
             <View style={styles.jobCountBadge}>
               <Text style={styles.jobCountText}>{futureJobs.length}</Text>
             </View>
@@ -345,21 +515,22 @@ export default function EmployerHomeScreen({ navigation }) {
           {futureJobs.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateIcon}>📅</Text>
-              <Text style={styles.emptyStateTitle}>No upcoming jobs</Text>
+              <Text style={styles.emptyStateTitle}>{tr.noUpcomingJobs}</Text>
               <Text style={styles.emptyStateSubtitle}>
-                Post a new job to find workers for future dates
+                {tr.noJobsDesc}
               </Text>
               <TouchableOpacity 
                 style={styles.emptyStateButton}
                 onPress={() => navigation.navigate('PostJob')}
               >
-                <Text style={styles.emptyStateButtonText}>Post New Job</Text>
+                <Text style={styles.emptyStateButtonText}>{tr.postNewJob}</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.jobsList}>
               {futureJobs.map((job) => {
                 const completedCount = job.applications?.filter(app => app.status === 'completed').length || 0;
+                const totalApps = job.applications?.length || 0;
                 
                 return (
                   <View key={job.id} style={styles.jobCard}>
@@ -377,9 +548,7 @@ export default function EmployerHomeScreen({ navigation }) {
                             job.status === 'cancelled' && styles.statusCancelled
                           ]}>
                             <Text style={styles.statusText}>
-                              {job.status === 'open' ? '🟢 Active' : 
-                               job.status === 'closed' ? '🔴 Closed' : 
-                               '🔴 Cancelled'}
+                              {getStatusText(job.status)}
                             </Text>
                           </View>
                         </View>
@@ -402,7 +571,7 @@ export default function EmployerHomeScreen({ navigation }) {
                         <View style={styles.jobDetail}>
                           <Text style={styles.jobDetailIcon}>⏱️</Text>
                           <Text style={styles.jobDetailText}>
-                            {job.hours || job.expectedDuration} hours
+                            {job.hours || job.expectedDuration} {locale === 'hi' ? 'घंटे' : 'hours'}
                           </Text>
                         </View>
                       </View>
@@ -411,7 +580,7 @@ export default function EmployerHomeScreen({ navigation }) {
                       {completedCount > 0 && (
                         <View style={styles.completedBadge}>
                           <Text style={styles.completedBadgeText}>
-                            ✅ {completedCount} worker{completedCount > 1 ? 's' : ''} completed
+                            ✅ {completedCount} {completedCount === 1 ? tr.worker : tr.workers} {locale === 'hi' ? 'पूर्ण' : 'completed'}
                           </Text>
                         </View>
                       )}
@@ -425,9 +594,9 @@ export default function EmployerHomeScreen({ navigation }) {
                           <Text style={styles.applicationsIcon}>📨</Text>
                           <Text style={[
                             styles.applicationsCount,
-                            (job.applications?.length || 0) > 0 && styles.hasApplications
+                            totalApps > 0 && styles.hasApplications
                           ]}>
-                            {job.applications?.length || 0} applications
+                            {totalApps} {locale === 'hi' ? 'आवेदन' : 'applications'}
                           </Text>
                         </View>
                       </View>
@@ -435,7 +604,7 @@ export default function EmployerHomeScreen({ navigation }) {
 
                     {/* Quick Actions for Job */}
                     <View style={styles.jobActions}>
-                      {(job.applications?.length || 0) > 0 && (
+                      {totalApps > 0 && (
                         <TouchableOpacity
                           style={[styles.jobActionButton, styles.viewAppsButton]}
                           onPress={() => navigation.navigate('Applications', { 
@@ -444,7 +613,7 @@ export default function EmployerHomeScreen({ navigation }) {
                           })}
                         >
                           <Text style={styles.jobActionText}>
-                            👀 View ({job.applications.length})
+                            👀 {locale === 'hi' ? 'देखें' : 'View'} ({totalApps})
                           </Text>
                         </TouchableOpacity>
                       )}
@@ -469,7 +638,7 @@ export default function EmployerHomeScreen({ navigation }) {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Past Jobs</Text>
+            <Text style={styles.modalTitle}>{tr.modalTitle}</Text>
             <TouchableOpacity 
               style={styles.closeButton}
               onPress={() => setShowPastJobs(false)}
@@ -482,9 +651,9 @@ export default function EmployerHomeScreen({ navigation }) {
             {pastJobs.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateIcon}>📝</Text>
-                <Text style={styles.emptyStateTitle}>No past jobs</Text>
+                <Text style={styles.emptyStateTitle}>{tr.noPastJobs}</Text>
                 <Text style={styles.emptyStateSubtitle}>
-                  Completed and expired jobs will appear here
+                  {tr.pastJobsDesc}
                 </Text>
               </View>
             ) : (
@@ -507,7 +676,7 @@ export default function EmployerHomeScreen({ navigation }) {
                               completedCount > 0 ? styles.statusCompleted : styles.statusExpired
                             ]}>
                               <Text style={styles.statusText}>
-                                {completedCount > 0 ? '✅ Completed' : '📅 Expired'}
+                                {getStatusText(job.status, completedCount)}
                               </Text>
                             </View>
                           </View>
@@ -518,7 +687,7 @@ export default function EmployerHomeScreen({ navigation }) {
                         <View style={styles.jobDateSection}>
                           <Text style={styles.jobDateIcon}>📅</Text>
                           <Text style={styles.jobDateText}>
-                            {job.jobDate ? new Date(job.jobDate).toLocaleDateString() : 'Date not set'}
+                            {job.jobDate ? new Date(job.jobDate).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN') : (locale === 'hi' ? 'तारीख सेट नहीं' : 'Date not set')}
                             {job.startTime ? `, ${job.startTime}` : ''}
                           </Text>
                         </View>
@@ -531,7 +700,7 @@ export default function EmployerHomeScreen({ navigation }) {
                           <View style={styles.jobDetail}>
                             <Text style={styles.jobDetailIcon}>👥</Text>
                             <Text style={styles.jobDetailText}>
-                              {totalApps} application{totalApps !== 1 ? 's' : ''}
+                              {totalApps} {locale === 'hi' ? 'आवेदन' : 'application'}{totalApps !== 1 ? (locale === 'hi' ? ' ' : 's') : ''}
                             </Text>
                           </View>
                         </View>
@@ -539,7 +708,7 @@ export default function EmployerHomeScreen({ navigation }) {
                         {/* Completion Stats */}
                         <View style={styles.completionStats}>
                           <Text style={styles.completionText}>
-                            {completedCount} of {totalApps} completed
+                            {completedCount} {locale === 'hi' ? 'पूर्ण' : tr.of} {totalApps} {locale === 'hi' ? 'में से' : 'completed'}
                           </Text>
                         </View>
 
@@ -554,7 +723,9 @@ export default function EmployerHomeScreen({ navigation }) {
                           style={[styles.jobActionButton, styles.deleteButton]}
                           onPress={() => handleDeletePastJob(job)}
                         >
-                          <Text style={styles.deleteButtonText}>🗑 Delete</Text>
+                          <Text style={styles.deleteButtonText}>
+                            🗑 {locale === 'hi' ? 'हटाएं' : 'Delete'}
+                          </Text>
                         </TouchableOpacity>
                         
                         {totalApps > 0 && (
@@ -569,7 +740,7 @@ export default function EmployerHomeScreen({ navigation }) {
                             }}
                           >
                             <Text style={styles.jobActionText}>
-                              View Apps ({totalApps})
+                              {locale === 'hi' ? 'आवेदन देखें' : 'View Apps'} ({totalApps})
                             </Text>
                           </TouchableOpacity>
                         )}

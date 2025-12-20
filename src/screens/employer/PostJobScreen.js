@@ -1,4 +1,4 @@
-// src/screens/employer/PostJobScreen.js - COMPLETE FIXED VERSION
+// src/screens/employer/PostJobScreen.js - HINDI VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -15,6 +15,7 @@ import {
   Modal,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { createJobWithTiming } from '../../services/database';
 import { colors } from '../../constants/colors';
 import CustomDateTimePicker from '../../components/CustomDateTimePicker';
@@ -29,6 +30,7 @@ import {
 
 export default function PostJobScreen({ navigation, route }) {
   const { user, userProfile } = useAuth();
+  const { locale, t } = useLanguage();
   
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -53,6 +55,137 @@ export default function PostJobScreen({ navigation, route }) {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
+  // Translations for this screen
+  const translations = {
+    en: {
+      postNewJob: "Post New Job",
+      back: "Back",
+      clear: "Clear",
+      checkingEligibility: "Checking eligibility...",
+      pleaseClearFees: "Please clear pending fees to post new jobs",
+      jobDetails: "Job Details",
+      jobTitle: "Job Title",
+      jobTitlePlaceholder: "e.g., Factory Helper Needed",
+      description: "Description",
+      descriptionPlaceholder: "Describe the work requirements, responsibilities, and any specific skills needed...",
+      location: "Location",
+      locationPlaceholder: "e.g., Industrial Area, Phase 1, Bangalore",
+      schedule: "Schedule",
+      jobDate: "Job Date",
+      startTime: "Start Time",
+      endTime: "End Time",
+      hoursTotal: "hours total",
+      payment: "Payment",
+      hourlyRate: "Hourly Rate",
+      ratePlaceholder: "Rate per hour",
+      perHour: "/ hour",
+      minimumRate: "Minimum rate: ₹50/hour",
+      hourlyRateLabel: "Hourly Rate:",
+      durationLabel: "Duration:",
+      totalPayment: "Total Payment",
+      postJob: "Post Job",
+      cancel: "Cancel",
+      tip: "💡 Tip: Provide clear job details and competitive rates to attract more qualified workers.",
+      platformFee: "Platform Fee",
+      choosePaymentOption: "Choose Payment Option:",
+      payNow: "Pay Now",
+      instantOnline: "Instant online payment via UPI/Card",
+      currentlyUnavailable: "Currently unavailable",
+      payAfterJob: "Pay After Job Completion",
+      postNowPayLater: "Post now, pay when job is completed",
+      notePayLater: "ℹ️ If you choose \"Pay Later\", payment will be required before posting your next job.",
+      cancelButton: "Cancel",
+      freeJobBanner: "Free job posting!",
+      freeJobsRemaining: "free post(s) remaining",
+      paymentRequired: "Payment Required",
+      youHavePendingFees: "You have pending platform fees totaling ₹",
+      fromCompletedJobs: "from completed jobs.",
+      clearFeesBeforePosting: "Please clear these fees before posting new jobs.",
+      payNowButton: "Pay Now",
+      cancelButtonAlert: "Cancel",
+      error: "Error",
+      enterJobTitle: "Please enter job title",
+      enterDescription: "Please enter job description",
+      enterLocation: "Please enter location",
+      rateMinimum: "Rate must be at least ₹50/hour",
+      dateNotPast: "Job date cannot be in the past",
+      endTimeAfterStart: "End time must be after start time",
+      durationMinimum: "Job duration must be at least 1 hour",
+      failedToPost: "Failed to post job",
+      tryAgain: "Please try again.",
+      platformFeeDesc: "5% platform fee on total payment of ₹",
+      loading: "Loading...",
+      filter: "Filter",
+      sort: "Sort",
+      search: "Search",
+    },
+    hi: {
+      postNewJob: "नई नौकरी पोस्ट करें",
+      back: "वापस",
+      clear: "साफ करें",
+      checkingEligibility: "पात्रता की जाँच की जा रही है...",
+      pleaseClearFees: "नई नौकरियाँ पोस्ट करने के लिए लंबित शुल्क साफ़ करें",
+      jobDetails: "नौकरी विवरण",
+      jobTitle: "नौकरी शीर्षक",
+      jobTitlePlaceholder: "उदाहरण: फैक्टरी हेल्पर चाहिए",
+      description: "विवरण",
+      descriptionPlaceholder: "काम की आवश्यकताएं, जिम्मेदारियाँ और आवश्यक कौशल का विवरण दें...",
+      location: "स्थान",
+      locationPlaceholder: "उदाहरण: औद्योगिक क्षेत्र, चरण 1, बेंगलुरु",
+      schedule: "अनुसूची",
+      jobDate: "नौकरी की तारीख",
+      startTime: "प्रारंभ समय",
+      endTime: "समाप्ति समय",
+      hoursTotal: "कुल घंटे",
+      payment: "भुगतान",
+      hourlyRate: "प्रति घंटा दर",
+      ratePlaceholder: "प्रति घंटा दर",
+      perHour: "/ घंटा",
+      minimumRate: "न्यूनतम दर: ₹50/घंटा",
+      hourlyRateLabel: "प्रति घंटा दर:",
+      durationLabel: "अवधि:",
+      totalPayment: "कुल भुगतान",
+      postJob: "नौकरी पोस्ट करें",
+      cancel: "रद्द करें",
+      tip: "💡 सुझाव: अधिक योग्य कर्मचारियों को आकर्षित करने के लिए स्पष्ट नौकरी विवरण और प्रतिस्पर्धी दरें प्रदान करें।",
+      platformFee: "प्लेटफॉर्म शुल्क",
+      choosePaymentOption: "भुगतान विकल्प चुनें:",
+      payNow: "अभी भुगतान करें",
+      instantOnline: "यूपीआई/कार्ड के माध्यम से तत्काल ऑनलाइन भुगतान",
+      currentlyUnavailable: "वर्तमान में अनुपलब्ध",
+      payAfterJob: "नौकरी पूरा होने के बाद भुगतान करें",
+      postNowPayLater: "अभी पोस्ट करें, नौकरी पूरी होने पर भुगतान करें",
+      notePayLater: "ℹ️ यदि आप \"बाद में भुगतान\" चुनते हैं, तो आपकी अगली नौकरी पोस्ट करने से पहले भुगतान आवश्यक होगा।",
+      cancelButton: "रद्द करें",
+      freeJobBanner: "मुफ्त नौकरी पोस्टिंग!",
+      freeJobsRemaining: "मुफ्त पोस्ट शेष",
+      paymentRequired: "भुगतान आवश्यक",
+      youHavePendingFees: "आपके ₹",
+      fromCompletedJobs: "की पूर्ण नौकरियों से लंबित प्लेटफॉर्म शुल्क हैं।",
+      clearFeesBeforePosting: "कृपया नई नौकरियाँ पोस्ट करने से पहले इन शुल्कों को साफ़ करें।",
+      payNowButton: "अभी भुगतान करें",
+      cancelButtonAlert: "रद्द करें",
+      error: "त्रुटि",
+      enterJobTitle: "कृपया नौकरी शीर्षक दर्ज करें",
+      enterDescription: "कृपया विवरण दर्ज करें",
+      enterLocation: "कृपया स्थान दर्ज करें",
+      rateMinimum: "दर कम से कम ₹50/घंटा होनी चाहिए",
+      dateNotPast: "नौकरी की तारीख अतीत में नहीं हो सकती",
+      endTimeAfterStart: "समाप्ति समय प्रारंभ समय के बाद होना चाहिए",
+      durationMinimum: "नौकरी की अवधि कम से कम 1 घंटा होनी चाहिए",
+      failedToPost: "नौकरी पोस्ट करने में विफल",
+      tryAgain: "कृपया पुनः प्रयास करें।",
+      platformFeeDesc: "₹",
+      platformFeeOnTotal: "के कुल भुगतान पर 5% प्लेटफॉर्म शुल्क",
+      loading: "लोड हो रहा है...",
+      filter: "फ़िल्टर",
+      sort: "क्रमबद्ध करें",
+      search: "खोजें",
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
+
   useEffect(() => {
     checkPostingEligibility();
     checkRazorpayAvailability();
@@ -74,7 +207,10 @@ export default function PostJobScreen({ navigation, route }) {
       const result = await canPostJob(user.uid);
       
       if (!result.success) {
-        Alert.alert('Error', result.error);
+        Alert.alert(
+          locale === 'hi' ? 'त्रुटि' : 'Error',
+          result.error
+        );
         navigation.goBack();
         return;
       }
@@ -82,11 +218,11 @@ export default function PostJobScreen({ navigation, route }) {
       if (!result.canPost && result.requiresPayment) {
         // Has blocking pending fees
         Alert.alert(
-          '💰 Payment Required',
-          `You have pending platform fees totaling ₹${result.totalDue} from completed jobs.\n\nPlease clear these fees before posting new jobs.`,
+          locale === 'hi' ? '💰 भुगतान आवश्यक' : '💰 Payment Required',
+          `${locale === 'hi' ? 'आपके ₹' : 'You have pending platform fees totaling ₹'}${result.totalDue} ${locale === 'hi' ? 'की पूर्ण नौकरियों से लंबित प्लेटफॉर्म शुल्क हैं।\n\nकृपया नई नौकरियाँ पोस्ट करने से पहले इन शुल्कों को साफ़ करें।' : 'from completed jobs.\n\nPlease clear these fees before posting new jobs.'}`,
           [
             {
-              text: 'Pay Now',
+              text: locale === 'hi' ? 'अभी भुगतान करें' : 'Pay Now',
               onPress: () => {
                 navigation.navigate('PlatformFeePayment', {
                   totalAmount: result.totalDue,
@@ -96,7 +232,7 @@ export default function PostJobScreen({ navigation, route }) {
               }
             },
             {
-              text: 'Cancel',
+              text: locale === 'hi' ? 'रद्द करें' : 'Cancel',
               style: 'cancel',
               onPress: () => navigation.goBack()
             }
@@ -122,7 +258,7 @@ export default function PostJobScreen({ navigation, route }) {
   };
 
   const formatDateForDisplay = (date) => {
-    return date.toLocaleDateString('en-IN', { 
+    return date.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', { 
       year: 'numeric', 
       month: 'short', 
       day: 'numeric' 
@@ -130,7 +266,7 @@ export default function PostJobScreen({ navigation, route }) {
   };
 
   const formatTime = (date) => {
-    return date.toLocaleTimeString('en-IN', { 
+    return date.toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', { 
       hour: '2-digit', 
       minute: '2-digit',
       hour12: true 
@@ -164,19 +300,31 @@ export default function PostJobScreen({ navigation, route }) {
   const handlePostJob = async () => {
     // Validation
     if (!title.trim()) {
-      Alert.alert('Error', 'Please enter job title');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        locale === 'hi' ? 'कृपया नौकरी शीर्षक दर्ज करें' : 'Please enter job title'
+      );
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Error', 'Please enter job description');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        locale === 'hi' ? 'कृपया विवरण दर्ज करें' : 'Please enter job description'
+      );
       return;
     }
     if (!location.trim()) {
-      Alert.alert('Error', 'Please enter location');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        locale === 'hi' ? 'कृपया स्थान दर्ज करें' : 'Please enter location'
+      );
       return;
     }
     if (!rate || rate < 50) {
-      Alert.alert('Error', 'Rate must be at least ₹50/hour');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        locale === 'hi' ? 'दर कम से कम ₹50/घंटा होनी चाहिए' : 'Rate must be at least ₹50/hour'
+      );
       return;
     }
 
@@ -186,18 +334,27 @@ export default function PostJobScreen({ navigation, route }) {
     selectedDate.setHours(0, 0, 0, 0);
     
     if (selectedDate < today) {
-      Alert.alert('Error', 'Job date cannot be in the past');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        locale === 'hi' ? 'नौकरी की तारीख अतीत में नहीं हो सकती' : 'Job date cannot be in the past'
+      );
       return;
     }
 
     if (!isEndTimeAfterStartTime(startTime, endTime)) {
-      Alert.alert('Error', 'End time must be after start time');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        locale === 'hi' ? 'समाप्ति समय प्रारंभ समय के बाद होना चाहिए' : 'End time must be after start time'
+      );
       return;
     }
 
     const duration = calculateDuration();
     if (duration < 1) {
-      Alert.alert('Error', 'Job duration must be at least 1 hour');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        locale === 'hi' ? 'नौकरी की अवधि कम से कम 1 घंटा होनी चाहिए' : 'Job duration must be at least 1 hour'
+      );
       return;
     }
 
@@ -206,7 +363,10 @@ export default function PostJobScreen({ navigation, route }) {
     const feeResult = await calculateJobPostingFee(totalPayment, user.uid);
     
     if (!feeResult.success) {
-      Alert.alert('Error', feeResult.error);
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        feeResult.error
+      );
       return;
     }
 
@@ -247,7 +407,7 @@ export default function PostJobScreen({ navigation, route }) {
         location: location.trim(),
         rate: parseInt(rate),
         employerId: user.uid,
-        companyName: userProfile?.companyName || userProfile?.name || 'Company',
+        companyName: userProfile?.companyName || userProfile?.name || (locale === 'hi' ? 'कंपनी' : 'Company'),
         employerPhone: userProfile?.phoneNumber || '',
         jobDate: formatDateForStorage(jobDate),
         startTime: formatTimeForStorage(startTime),
@@ -260,7 +420,7 @@ export default function PostJobScreen({ navigation, route }) {
       const result = await createJobWithTiming(jobData);
       
       if (!result.success) {
-        throw new Error('Failed to create job');
+        throw new Error(locale === 'hi' ? 'नौकरी बनाने में विफल' : 'Failed to create job');
       }
 
       const jobId = result.jobId;
@@ -268,7 +428,7 @@ export default function PostJobScreen({ navigation, route }) {
       // Create platform fee record
       const feeData = {
         employerId: user.uid,
-        employerName: userProfile?.name || 'Employer',
+        employerName: userProfile?.name || (locale === 'hi' ? 'नियोक्ता' : 'Employer'),
         jobId: jobId,
         jobTitle: title.trim(),
         amount: feeInfo.platformFee,
@@ -282,7 +442,7 @@ export default function PostJobScreen({ navigation, route }) {
       const feeResult = await createPlatformFee(feeData);
       
       if (!feeResult.success) {
-        throw new Error('Failed to create fee record');
+        throw new Error(locale === 'hi' ? 'शुल्क रिकॉर्ड बनाने में विफल' : 'Failed to create fee record');
       }
 
       // Navigate to payment screen with job data
@@ -313,7 +473,10 @@ export default function PostJobScreen({ navigation, route }) {
 
     } catch (error) {
       console.error('❌ Error in pay now flow:', error);
-      Alert.alert('Error', error.message || 'Failed to process payment');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        error.message || (locale === 'hi' ? 'भुगतान प्रोसेस करने में विफल' : 'Failed to process payment')
+      );
       setShowFeeModal(true);
     } finally {
       setProcessingFee(false);
@@ -334,7 +497,7 @@ export default function PostJobScreen({ navigation, route }) {
         location: location.trim(),
         rate: parseInt(rate),
         employerId: user.uid,
-        companyName: userProfile?.companyName || userProfile?.name || 'Company',
+        companyName: userProfile?.companyName || userProfile?.name || (locale === 'hi' ? 'कंपनी' : 'Company'),
         employerPhone: userProfile?.phoneNumber || '',
         jobDate: formatDateForStorage(jobDate),
         startTime: formatTimeForStorage(startTime),
@@ -347,7 +510,7 @@ export default function PostJobScreen({ navigation, route }) {
       const result = await createJobWithTiming(jobData);
       
       if (!result.success) {
-        throw new Error('Failed to create job');
+        throw new Error(locale === 'hi' ? 'नौकरी बनाने में विफल' : 'Failed to create job');
       }
 
       const jobId = result.jobId;
@@ -356,7 +519,7 @@ export default function PostJobScreen({ navigation, route }) {
       if (feeInfo && !feeInfo.isFree && feeInfo.platformFee > 0) {
         const feeData = {
           employerId: user.uid,
-          employerName: userProfile?.name || 'Employer',
+          employerName: userProfile?.name || (locale === 'hi' ? 'नियोक्ता' : 'Employer'),
           jobId: jobId,
           jobTitle: title.trim(),
           amount: feeInfo.platformFee,
@@ -390,7 +553,10 @@ export default function PostJobScreen({ navigation, route }) {
 
     } catch (error) {
       console.error('❌ Error in pay later flow:', error);
-      Alert.alert('Error', error.message || 'Failed to post job');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        error.message || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल' : 'Failed to post job')
+      );
     } finally {
       setProcessingFee(false);
     }
@@ -409,7 +575,7 @@ export default function PostJobScreen({ navigation, route }) {
         location: location.trim(),
         rate: parseInt(rate),
         employerId: user.uid,
-        companyName: userProfile?.companyName || userProfile?.name || 'Company',
+        companyName: userProfile?.companyName || userProfile?.name || (locale === 'hi' ? 'कंपनी' : 'Company'),
         employerPhone: userProfile?.phoneNumber || '',
         jobDate: formatDateForStorage(jobDate),
         startTime: formatTimeForStorage(startTime),
@@ -420,7 +586,7 @@ export default function PostJobScreen({ navigation, route }) {
       const result = await createJobWithTiming(jobData);
       
       if (!result.success) {
-        throw new Error(result.error || 'Failed to post job');
+        throw new Error(result.error || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल' : 'Failed to post job'));
       }
 
       const jobId = result.jobId;
@@ -461,7 +627,10 @@ export default function PostJobScreen({ navigation, route }) {
 
     } catch (error) {
       console.error('❌ Error in job posting:', error);
-      Alert.alert('Error', error.message || 'Failed to post job. Please try again.');
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        error.message || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल। कृपया पुनः प्रयास करें।' : 'Failed to post job. Please try again.')
+      );
     } finally {
       setLoading(false);
       setProcessingFee(false);
@@ -493,7 +662,9 @@ export default function PostJobScreen({ navigation, route }) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Checking eligibility...</Text>
+        <Text style={styles.loadingText}>
+          {locale === 'hi' ? 'पात्रता की जाँच की जा रही है...' : 'Checking eligibility...'}
+        </Text>
       </View>
     );
   }
@@ -507,14 +678,20 @@ export default function PostJobScreen({ navigation, route }) {
             style={styles.backButton}
           >
             <Text style={styles.backButtonIcon}>←</Text>
-            <Text style={styles.backButtonText}>Back</Text>
+            <Text style={styles.backButtonText}>
+              {locale === 'hi' ? 'वापस' : 'Back'}
+            </Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Post New Job</Text>
+          <Text style={styles.headerTitle}>
+            {locale === 'hi' ? 'नई नौकरी पोस्ट करें' : 'Post New Job'}
+          </Text>
           <View style={{ width: 60 }} />
         </View>
         <View style={styles.centerContent}>
           <Text style={styles.errorIcon}>💰</Text>
-          <Text style={styles.errorText}>Please clear pending fees to post new jobs</Text>
+          <Text style={styles.errorText}>
+            {locale === 'hi' ? 'नई नौकरियाँ पोस्ट करने के लिए लंबित शुल्क साफ़ करें' : 'Please clear pending fees to post new jobs'}
+          </Text>
         </View>
       </View>
     );
@@ -536,14 +713,20 @@ export default function PostJobScreen({ navigation, route }) {
             style={styles.backButton}
           >
             <Text style={styles.backButtonIcon}>←</Text>
-            <Text style={styles.backButtonText}>Back</Text>
+            <Text style={styles.backButtonText}>
+              {locale === 'hi' ? 'वापस' : 'Back'}
+            </Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Post New Job</Text>
+          <Text style={styles.headerTitle}>
+            {locale === 'hi' ? 'नई नौकरी पोस्ट करें' : 'Post New Job'}
+          </Text>
           <TouchableOpacity 
             onPress={clearForm}
             style={styles.clearButton}
           >
-            <Text style={styles.clearButtonText}>Clear</Text>
+            <Text style={styles.clearButtonText}>
+              {locale === 'hi' ? 'साफ करें' : 'Clear'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -559,7 +742,7 @@ export default function PostJobScreen({ navigation, route }) {
           <View style={styles.freeBanner}>
             <Text style={styles.freeBannerIcon}>🎉</Text>
             <Text style={styles.freeBannerText}>
-              Free job posting! {feeInfo.freeJobsRemaining} free post{feeInfo.freeJobsRemaining !== 1 ? 's' : ''} remaining
+              {locale === 'hi' ? 'मुफ्त नौकरी पोस्टिंग!' : 'Free job posting!'} {feeInfo.freeJobsRemaining} {locale === 'hi' ? 'मुफ्त पोस्ट शेष' : `free post${feeInfo.freeJobsRemaining !== 1 ? 's' : ''} remaining`}
             </Text>
           </View>
         )}
@@ -568,16 +751,18 @@ export default function PostJobScreen({ navigation, route }) {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardIcon}>📋</Text>
-            <Text style={styles.cardTitle}>Job Details</Text>
+            <Text style={styles.cardTitle}>
+              {locale === 'hi' ? 'नौकरी विवरण' : 'Job Details'}
+            </Text>
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              Job Title <Text style={styles.required}>*</Text>
+              {locale === 'hi' ? 'नौकरी शीर्षक' : 'Job Title'} <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g., Factory Helper Needed"
+              placeholder={locale === 'hi' ? 'उदाहरण: फैक्टरी हेल्पर चाहिए' : 'e.g., Factory Helper Needed'}
               placeholderTextColor={colors.textSecondary}
               value={title}
               onChangeText={setTitle}
@@ -587,11 +772,11 @@ export default function PostJobScreen({ navigation, route }) {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              Description <Text style={styles.required}>*</Text>
+              {locale === 'hi' ? 'विवरण' : 'Description'} <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={[styles.input, styles.textArea]}
-              placeholder="Describe the work requirements, responsibilities, and any specific skills needed..."
+              placeholder={locale === 'hi' ? 'काम की आवश्यकताएं, जिम्मेदारियाँ और आवश्यक कौशल का विवरण दें...' : 'Describe the work requirements, responsibilities, and any specific skills needed...'}
               placeholderTextColor={colors.textSecondary}
               value={description}
               onChangeText={setDescription}
@@ -604,11 +789,11 @@ export default function PostJobScreen({ navigation, route }) {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              Location <Text style={styles.required}>*</Text>
+              {locale === 'hi' ? 'स्थान' : 'Location'} <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g., Industrial Area, Phase 1, Bangalore"
+              placeholder={locale === 'hi' ? 'उदाहरण: औद्योगिक क्षेत्र, चरण 1, बेंगलुरु' : 'e.g., Industrial Area, Phase 1, Bangalore'}
               placeholderTextColor={colors.textSecondary}
               value={location}
               onChangeText={setLocation}
@@ -621,12 +806,14 @@ export default function PostJobScreen({ navigation, route }) {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardIcon}>📅</Text>
-            <Text style={styles.cardTitle}>Schedule</Text>
+            <Text style={styles.cardTitle}>
+              {locale === 'hi' ? 'अनुसूची' : 'Schedule'}
+            </Text>
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              Job Date <Text style={styles.required}>*</Text>
+              {locale === 'hi' ? 'नौकरी की तारीख' : 'Job Date'} <Text style={styles.required}>*</Text>
             </Text>
             <TouchableOpacity 
               style={styles.dateTimeButton}
@@ -641,7 +828,7 @@ export default function PostJobScreen({ navigation, route }) {
           <View style={styles.timeRow}>
             <View style={styles.timeColumn}>
               <Text style={styles.label}>
-                Start Time <Text style={styles.required}>*</Text>
+                {locale === 'hi' ? 'प्रारंभ समय' : 'Start Time'} <Text style={styles.required}>*</Text>
               </Text>
               <TouchableOpacity 
                 style={styles.dateTimeButton}
@@ -655,7 +842,7 @@ export default function PostJobScreen({ navigation, route }) {
 
             <View style={styles.timeColumn}>
               <Text style={styles.label}>
-                End Time <Text style={styles.required}>*</Text>
+                {locale === 'hi' ? 'समाप्ति समय' : 'End Time'} <Text style={styles.required}>*</Text>
               </Text>
               <TouchableOpacity 
                 style={styles.dateTimeButton}
@@ -672,7 +859,7 @@ export default function PostJobScreen({ navigation, route }) {
             <View style={styles.durationBadge}>
               <Text style={styles.durationIcon}>⏱️</Text>
               <Text style={styles.durationText}>
-                {calculateDuration()} hours total
+                {calculateDuration()} {locale === 'hi' ? 'कुल घंटे' : 'hours total'}
               </Text>
             </View>
           )}
@@ -682,42 +869,54 @@ export default function PostJobScreen({ navigation, route }) {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardIcon}>💰</Text>
-            <Text style={styles.cardTitle}>Payment</Text>
+            <Text style={styles.cardTitle}>
+              {locale === 'hi' ? 'भुगतान' : 'Payment'}
+            </Text>
           </View>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              Hourly Rate <Text style={styles.required}>*</Text>
+              {locale === 'hi' ? 'प्रति घंटा दर' : 'Hourly Rate'} <Text style={styles.required}>*</Text>
             </Text>
             <View style={styles.rateInputContainer}>
               <Text style={styles.rupeeSymbol}>₹</Text>
               <TextInput
                 style={styles.rateInput}
-                placeholder="Rate per hour"
+                placeholder={locale === 'hi' ? 'प्रति घंटा दर' : 'Rate per hour'}
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
                 value={rate}
                 onChangeText={(text) => setRate(text.replace(/[^0-9]/g, ''))}
                 returnKeyType="done"
               />
-              <Text style={styles.perHourText}>/ hour</Text>
+              <Text style={styles.perHourText}>
+                {locale === 'hi' ? '/ घंटा' : '/ hour'}
+              </Text>
             </View>
-            <Text style={styles.hint}>Minimum rate: ₹50/hour</Text>
+            <Text style={styles.hint}>
+              {locale === 'hi' ? 'न्यूनतम दर: ₹50/घंटा' : 'Minimum rate: ₹50/hour'}
+            </Text>
           </View>
 
           {calculateDuration() > 0 && rate && (
             <View style={styles.paymentSummary}>
               <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Hourly Rate:</Text>
+                <Text style={styles.paymentLabel}>
+                  {locale === 'hi' ? 'प्रति घंटा दर:' : 'Hourly Rate:'}
+                </Text>
                 <Text style={styles.paymentValue}>₹{rate}</Text>
               </View>
               <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Duration:</Text>
-                <Text style={styles.paymentValue}>{calculateDuration()} hours</Text>
+                <Text style={styles.paymentLabel}>
+                  {locale === 'hi' ? 'अवधि:' : 'Duration:'}
+                </Text>
+                <Text style={styles.paymentValue}>{calculateDuration()} {locale === 'hi' ? 'घंटे' : 'hours'}</Text>
               </View>
               <View style={styles.paymentDivider} />
               <View style={styles.paymentRow}>
-                <Text style={styles.paymentTotalLabel}>Total Payment:</Text>
+                <Text style={styles.paymentTotalLabel}>
+                  {locale === 'hi' ? 'कुल भुगतान:' : 'Total Payment:'}
+                </Text>
                 <Text style={styles.paymentTotalValue}>₹{calculateTotal()}</Text>
               </View>
             </View>
@@ -771,7 +970,9 @@ export default function PostJobScreen({ navigation, route }) {
             ) : (
               <>
                 <Text style={styles.postButtonIcon}>📤</Text>
-                <Text style={styles.postButtonText}>Post Job</Text>
+                <Text style={styles.postButtonText}>
+                  {locale === 'hi' ? 'नौकरी पोस्ट करें' : 'Post Job'}
+                </Text>
               </>
             )}
           </TouchableOpacity>
@@ -781,12 +982,14 @@ export default function PostJobScreen({ navigation, route }) {
             onPress={handleBackPress}
             disabled={loading || processingFee}
           >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
+            <Text style={styles.cancelButtonText}>
+              {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
+            </Text>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.footerHint}>
-          💡 Tip: Provide clear job details and competitive rates to attract more qualified workers.
+          {locale === 'hi' ? '💡 सुझाव: अधिक योग्य कर्मचारियों को आकर्षित करने के लिए स्पष्ट नौकरी विवरण और प्रतिस्पर्धी दरें प्रदान करें।' : '💡 Tip: Provide clear job details and competitive rates to attract more qualified workers.'}
         </Text>
 
         <View style={styles.bottomSpacing} />
@@ -801,16 +1004,20 @@ export default function PostJobScreen({ navigation, route }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>💰 Platform Fee</Text>
+            <Text style={styles.modalTitle}>
+              {locale === 'hi' ? '💰 प्लेटफॉर्म शुल्क' : '💰 Platform Fee'}
+            </Text>
             
             <View style={styles.feeInfoBox}>
               <Text style={styles.feeAmount}>₹{feeInfo?.platformFee || 0}</Text>
               <Text style={styles.feeDescription}>
-                5% platform fee on total payment of ₹{calculateTotal()}
+                {locale === 'hi' ? '₹' : ''}{calculateTotal()}{locale === 'hi' ? ' के कुल भुगतान पर 5% प्लेटफॉर्म शुल्क' : '5% platform fee on total payment of ₹'}
               </Text>
             </View>
 
-            <Text style={styles.modalSubtitle}>Choose Payment Option:</Text>
+            <Text style={styles.modalSubtitle}>
+              {locale === 'hi' ? 'भुगतान विकल्प चुनें:' : 'Choose Payment Option:'}
+            </Text>
 
             <TouchableOpacity
               style={[styles.paymentOptionCard, !razorpayEnabled && styles.disabledOption]}
@@ -820,11 +1027,14 @@ export default function PostJobScreen({ navigation, route }) {
               <View style={styles.optionHeader}>
                 <Text style={styles.optionIcon}>💳</Text>
                 <View style={styles.optionInfo}>
-                  <Text style={styles.optionTitle}>Pay Now</Text>
+                  <Text style={styles.optionTitle}>
+                    {locale === 'hi' ? 'अभी भुगतान करें' : 'Pay Now'}
+                  </Text>
                   <Text style={styles.optionSubtitle}>
                     {razorpayEnabled 
-                      ? 'Instant online payment via UPI/Card'
-                      : 'Currently unavailable'}
+                      ? (locale === 'hi' ? 'यूपीआई/कार्ड के माध्यम से तत्काल ऑनलाइन भुगतान' : 'Instant online payment via UPI/Card')
+                      : (locale === 'hi' ? 'वर्तमान में अनुपलब्ध' : 'Currently unavailable')
+                    }
                   </Text>
                 </View>
                 {processingFee && selectedPaymentOption === 'now' && (
@@ -841,9 +1051,11 @@ export default function PostJobScreen({ navigation, route }) {
               <View style={styles.optionHeader}>
                 <Text style={styles.optionIcon}>⏰</Text>
                 <View style={styles.optionInfo}>
-                  <Text style={styles.optionTitle}>Pay After Job Completion</Text>
+                  <Text style={styles.optionTitle}>
+                    {locale === 'hi' ? 'नौकरी पूरा होने के बाद भुगतान करें' : 'Pay After Job Completion'}
+                  </Text>
                   <Text style={styles.optionSubtitle}>
-                    Post now, pay when job is completed
+                    {locale === 'hi' ? 'अभी पोस्ट करें, नौकरी पूरी होने पर भुगतान करें' : 'Post now, pay when job is completed'}
                   </Text>
                 </View>
                 {processingFee && selectedPaymentOption === 'later' && (
@@ -853,7 +1065,7 @@ export default function PostJobScreen({ navigation, route }) {
             </TouchableOpacity>
 
             <Text style={styles.modalNote}>
-              ℹ️ If you choose "Pay Later", payment will be required before posting your next job.
+              {locale === 'hi' ? 'ℹ️ यदि आप "बाद में भुगतान" चुनते हैं, तो आपकी अगली नौकरी पोस्ट करने से पहले भुगतान आवश्यक होगा।' : 'ℹ️ If you choose "Pay Later", payment will be required before posting your next job.'}
             </Text>
 
             <TouchableOpacity
@@ -861,7 +1073,9 @@ export default function PostJobScreen({ navigation, route }) {
               onPress={() => setShowFeeModal(false)}
               disabled={processingFee}
             >
-              <Text style={styles.modalCancelText}>Cancel</Text>
+              <Text style={styles.modalCancelText}>
+                {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

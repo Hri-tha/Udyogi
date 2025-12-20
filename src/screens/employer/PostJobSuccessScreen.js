@@ -1,4 +1,4 @@
-// src/screens/employer/PostJobSuccessScreen.js
+// src/screens/employer/PostJobSuccessScreen.js - HINDI VERSION
 import React, { useEffect } from 'react';
 import { 
   View, 
@@ -11,11 +11,105 @@ import {
 } from 'react-native';
 import { colors } from '../../constants/colors';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function PostJobSuccessScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { locale, t } = useLanguage();
   const { jobData, isPaid = true } = route.params || {};
+
+  // Translations for this screen
+  const translations = {
+    en: {
+      jobPostedSuccessfully: "Job Posted Successfully! 🎉",
+      jobPosted: "Job Posted!",
+      successTitle: "Success!",
+      successText: "Your job has been posted successfully.",
+      successTextDetailed: "Your job has been posted successfully and is now visible to workers.",
+      platformFeePaid: "Platform fee paid",
+      jobDetails: "Job Details",
+      jobTitle: "Job Title:",
+      description: "Description:",
+      date: "Date:",
+      time: "Time:",
+      duration: "Duration:",
+      hourlyRate: "Hourly Rate:",
+      totalPayment: "Total Payment:",
+      platformFee: "Platform Fee:",
+      paid: "(Paid)",
+      pending: "(Pending)",
+      location: "Location:",
+      whatsNext: "What's Next?",
+      waitForApplications: "Wait for Applications",
+      waitForApplicationsDesc: "Workers will see your job and start applying. You'll receive notifications when applications come in.",
+      reviewApplications: "Review Applications",
+      reviewApplicationsDesc: "Go to \"Applications\" tab to review worker profiles, ratings, and experience.",
+      selectWorker: "Select Worker",
+      selectWorkerDesc: "Choose the best worker for your job and send them a confirmation.",
+      trackJobProgress: "Track Job Progress",
+      trackJobProgressDesc: "Monitor the job status and communicate with the worker through chat.",
+      viewMyJobs: "View My Jobs",
+      postAnotherJob: "Post Another Job",
+      shareThisJob: "Share This Job",
+      shareFeature: "Share Feature",
+      shareFeatureMessage: "Job sharing feature will be added soon!",
+      proTip: "💡 Pro Tip: Check your job post regularly and respond quickly to applications to find the best workers!",
+      noDescription: "No description provided",
+      notAvailable: "N/A",
+      hours: "hours",
+      perHour: "/hour",
+      loading: "Loading...",
+      filter: "Filter",
+      sort: "Sort",
+      search: "Search",
+    },
+    hi: {
+      jobPostedSuccessfully: "नौकरी सफलतापूर्वक पोस्ट की गई! 🎉",
+      jobPosted: "नौकरी पोस्ट की गई!",
+      successTitle: "सफलता!",
+      successText: "आपकी नौकरी सफलतापूर्वक पोस्ट की गई है।",
+      successTextDetailed: "आपकी नौकरी सफलतापूर्वक पोस्ट की गई है और अब कर्मचारियों को दिखाई दे रही है।",
+      platformFeePaid: "प्लेटफॉर्म शुल्क चुकाया गया",
+      jobDetails: "नौकरी विवरण",
+      jobTitle: "नौकरी शीर्षक:",
+      description: "विवरण:",
+      date: "तारीख:",
+      time: "समय:",
+      duration: "अवधि:",
+      hourlyRate: "प्रति घंटा दर:",
+      totalPayment: "कुल भुगतान:",
+      platformFee: "प्लेटफॉर्म शुल्क:",
+      paid: "(चुकाया गया)",
+      pending: "(लंबित)",
+      location: "स्थान:",
+      whatsNext: "अगले कदम क्या हैं?",
+      waitForApplications: "आवेदनों की प्रतीक्षा करें",
+      waitForApplicationsDesc: "कर्मचारी आपकी नौकरी देखेंगे और आवेदन करना शुरू कर देंगे। आवेदन आने पर आपको सूचनाएं मिलेंगी।",
+      reviewApplications: "आवेदनों की समीक्षा करें",
+      reviewApplicationsDesc: "कर्मचारी प्रोफाइल, रेटिंग और अनुभव की समीक्षा करने के लिए \"आवेदन\" टैब पर जाएं।",
+      selectWorker: "कर्मचारी चुनें",
+      selectWorkerDesc: "अपनी नौकरी के लिए सर्वश्रेष्ठ कर्मचारी चुनें और उन्हें पुष्टि भेजें।",
+      trackJobProgress: "नौकरी प्रगति ट्रैक करें",
+      trackJobProgressDesc: "नौकरी की स्थिति की निगरानी करें और चैट के माध्यम से कर्मचारी से संवाद करें।",
+      viewMyJobs: "मेरी नौकरियां देखें",
+      postAnotherJob: "एक और नौकरी पोस्ट करें",
+      shareThisJob: "इस नौकरी को साझा करें",
+      shareFeature: "साझा करें सुविधा",
+      shareFeatureMessage: "नौकरी साझा करने की सुविधा जल्द ही जोड़ी जाएगी!",
+      proTip: "💡 पेशेवर सुझाव: सर्वश्रेष्ठ कर्मचारियों को खोजने के लिए नियमित रूप से अपनी नौकरी पोस्ट की जांच करें और आवेदनों का त्वरित जवाब दें!",
+      noDescription: "कोई विवरण प्रदान नहीं किया गया",
+      notAvailable: "उपलब्ध नहीं",
+      hours: "घंटे",
+      perHour: "/घंटा",
+      loading: "लोड हो रहा है...",
+      filter: "फ़िल्टर",
+      sort: "क्रमबद्ध करें",
+      search: "खोजें",
+    }
+  };
+
+  const tr = translations[locale] || translations.en;
 
   // Optional: Log the received data for debugging
   useEffect(() => {
@@ -34,14 +128,14 @@ export default function PostJobSuccessScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Job Posted!</Text>
+          <Text style={styles.headerTitle}>{tr.jobPosted}</Text>
         </View>
         <View style={styles.content}>
           <View style={styles.successCard}>
             <Text style={styles.successIcon}>✅</Text>
-            <Text style={styles.successTitle}>Success!</Text>
+            <Text style={styles.successTitle}>{tr.successTitle}</Text>
             <Text style={styles.successText}>
-              Your job has been posted successfully.
+              {tr.successText}
             </Text>
           </View>
           <View style={styles.actions}>
@@ -49,13 +143,13 @@ export default function PostJobSuccessScreen() {
               style={styles.viewJobsButton}
               onPress={handleViewJobs}
             >
-              <Text style={styles.viewJobsButtonText}>View My Jobs</Text>
+              <Text style={styles.viewJobsButtonText}>{tr.viewMyJobs}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.postAnotherButton}
               onPress={handlePostAnother}
             >
-              <Text style={styles.postAnotherButtonText}>Post Another Job</Text>
+              <Text style={styles.postAnotherButtonText}>{tr.postAnotherJob}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -67,100 +161,100 @@ export default function PostJobSuccessScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Job Posted Successfully! 🎉</Text>
+        <Text style={styles.headerTitle}>{tr.jobPostedSuccessfully}</Text>
       </View>
 
       <ScrollView style={styles.content}>
         {/* Success Banner */}
         <View style={styles.successCard}>
           <Text style={styles.successIcon}>✅</Text>
-          <Text style={styles.successTitle}>Job Posted!</Text>
+          <Text style={styles.successTitle}>{tr.jobPosted}</Text>
           <Text style={styles.successText}>
-            Your job has been posted successfully and is now visible to workers.
+            {tr.successTextDetailed}
           </Text>
           
           {isPaid && (
             <View style={styles.paymentStatus}>
               <Text style={styles.paymentStatusIcon}>💰</Text>
-              <Text style={styles.paymentStatusText}>Platform fee paid</Text>
+              <Text style={styles.paymentStatusText}>{tr.platformFeePaid}</Text>
             </View>
           )}
         </View>
 
         {/* Job Details Card */}
         <View style={styles.detailsCard}>
-          <Text style={styles.detailsTitle}>Job Details</Text>
+          <Text style={styles.detailsTitle}>{tr.jobDetails}</Text>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Job Title:</Text>
+            <Text style={styles.detailLabel}>{tr.jobTitle}</Text>
             <Text style={styles.detailValue}>{jobData.title}</Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Description:</Text>
+            <Text style={styles.detailLabel}>{tr.description}</Text>
             <Text style={styles.detailValue} numberOfLines={2}>
-              {jobData.description || 'No description provided'}
+              {jobData.description || tr.noDescription}
             </Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Date:</Text>
+            <Text style={styles.detailLabel}>{tr.date}</Text>
             <Text style={styles.detailValue}>{jobData.jobDate}</Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Time:</Text>
+            <Text style={styles.detailLabel}>{tr.time}</Text>
             <Text style={styles.detailValue}>
               {jobData.startTime} - {jobData.endTime}
             </Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Duration:</Text>
+            <Text style={styles.detailLabel}>{tr.duration}</Text>
             <Text style={styles.detailValue}>
-              {jobData.duration || 'N/A'} hours
+              {jobData.duration || tr.notAvailable} {tr.hours}
             </Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Hourly Rate:</Text>
+            <Text style={styles.detailLabel}>{tr.hourlyRate}</Text>
             <Text style={styles.detailValue}>
-              ₹{jobData.rate || 'N/A'}/hour
+              ₹{jobData.rate || tr.notAvailable}{tr.perHour}
             </Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Total Payment:</Text>
+            <Text style={styles.detailLabel}>{tr.totalPayment}</Text>
             <Text style={styles.detailValue}>
-              ₹{jobData.totalPayment || 'N/A'}
+              ₹{jobData.totalPayment || tr.notAvailable}
             </Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Platform Fee:</Text>
+            <Text style={styles.detailLabel}>{tr.platformFee}</Text>
             <Text style={[styles.detailValue, { color: isPaid ? colors.success : colors.warning }]}>
-              ₹{jobData.platformFee || '0'} {isPaid ? '(Paid)' : '(Pending)'}
+              ₹{jobData.platformFee || '0'} {isPaid ? tr.paid : tr.pending}
             </Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Location:</Text>
-            <Text style={styles.detailValue}>{jobData.location || 'N/A'}</Text>
+            <Text style={styles.detailLabel}>{tr.location}</Text>
+            <Text style={styles.detailValue}>{jobData.location || tr.notAvailable}</Text>
           </View>
         </View>
 
         {/* Next Steps */}
         <View style={styles.nextStepsCard}>
-          <Text style={styles.nextStepsTitle}>What's Next?</Text>
+          <Text style={styles.nextStepsTitle}>{tr.whatsNext}</Text>
           
           <View style={styles.step}>
             <View style={styles.stepNumber}>
               <Text style={styles.stepNumberText}>1</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Wait for Applications</Text>
+              <Text style={styles.stepTitle}>{tr.waitForApplications}</Text>
               <Text style={styles.stepText}>
-                Workers will see your job and start applying. You'll receive notifications when applications come in.
+                {tr.waitForApplicationsDesc}
               </Text>
             </View>
           </View>
@@ -170,9 +264,9 @@ export default function PostJobSuccessScreen() {
               <Text style={styles.stepNumberText}>2</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Review Applications</Text>
+              <Text style={styles.stepTitle}>{tr.reviewApplications}</Text>
               <Text style={styles.stepText}>
-                Go to "Applications" tab to review worker profiles, ratings, and experience.
+                {tr.reviewApplicationsDesc}
               </Text>
             </View>
           </View>
@@ -182,9 +276,9 @@ export default function PostJobSuccessScreen() {
               <Text style={styles.stepNumberText}>3</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Select Worker</Text>
+              <Text style={styles.stepTitle}>{tr.selectWorker}</Text>
               <Text style={styles.stepText}>
-                Choose the best worker for your job and send them a confirmation.
+                {tr.selectWorkerDesc}
               </Text>
             </View>
           </View>
@@ -194,9 +288,9 @@ export default function PostJobSuccessScreen() {
               <Text style={styles.stepNumberText}>4</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Track Job Progress</Text>
+              <Text style={styles.stepTitle}>{tr.trackJobProgress}</Text>
               <Text style={styles.stepText}>
-                Monitor the job status and communicate with the worker through chat.
+                {tr.trackJobProgressDesc}
               </Text>
             </View>
           </View>
@@ -208,28 +302,28 @@ export default function PostJobSuccessScreen() {
             style={styles.viewJobsButton}
             onPress={handleViewJobs}
           >
-            <Text style={styles.viewJobsButtonText}>View My Jobs</Text>
+            <Text style={styles.viewJobsButtonText}>{tr.viewMyJobs}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.postAnotherButton}
             onPress={handlePostAnother}
           >
-            <Text style={styles.postAnotherButtonText}>Post Another Job</Text>
+            <Text style={styles.postAnotherButtonText}>{tr.postAnotherJob}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.shareButton}
             onPress={() => {
-              Alert.alert('Share Feature', 'Job sharing feature will be added soon!');
+              Alert.alert(tr.shareFeature, tr.shareFeatureMessage);
             }}
           >
-            <Text style={styles.shareButtonText}>Share This Job</Text>
+            <Text style={styles.shareButtonText}>{tr.shareThisJob}</Text>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.tipText}>
-          💡 Pro Tip: Check your job post regularly and respond quickly to applications to find the best workers!
+          {tr.proTip}
         </Text>
       </ScrollView>
     </View>
