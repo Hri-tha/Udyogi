@@ -1,4 +1,4 @@
-// src/screens/employer/PostJobScreen.js - HINDI VERSION
+// src/screens/employer/PostJobScreen.js - CLEAN PROFESSIONAL VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,10 +13,21 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  Dimensions,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { createJobWithTiming } from '../../services/database';
+import { 
+  createJobWithTiming, 
+  getEmployerJobPostingStats, 
+  checkSubscriptionStatus, 
+  updateFreeJobPostCount,
+  canPostJobForFree,
+  activateMonthlySubscription,
+  resetMonthlyFreePosts
+} from '../../services/database';
 import { colors } from '../../constants/colors';
 import CustomDateTimePicker from '../../components/CustomDateTimePicker';
 import {
@@ -25,20 +36,27 @@ import {
   createPlatformFee,
 } from '../../services/platformFeeService';
 import {
-  isRazorpayAvailable
+  isRazorpayAvailable,
+  initiateRazorpayPayment,
+  verifyRazorpayPayment
 } from '../../services/razorpay';
+import RazorpayWebView from '../../components/RazorpayWebView';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width, height } = Dimensions.get('window');
 
 export default function PostJobScreen({ navigation, route }) {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, refreshUserProfile } = useAuth();
   const { locale, t } = useLanguage();
-  
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState(userProfile?.location || '');
   const [rate, setRate] = useState('');
   const [loading, setLoading] = useState(false);
   const [checkingEligibility, setCheckingEligibility] = useState(true);
-  
+
   // Platform fee states
   const [feeInfo, setFeeInfo] = useState(null);
   const [showFeeModal, setShowFeeModal] = useState(false);
@@ -47,6 +65,13 @@ export default function PostJobScreen({ navigation, route }) {
   const [razorpayEnabled, setRazorpayEnabled] = useState(false);
   const [pendingFeesExist, setPendingFeesExist] = useState(false);
   
+  // Free posts and subscription states
+  const [postingStats, setPostingStats] = useState(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showRazorpayWebView, setShowRazorpayWebView] = useState(false);
+  const [webViewPaymentData, setWebViewPaymentData] = useState(null);
+
   // Date and Time states
   const [jobDate, setJobDate] = useState(new Date());
   const [startTime, setStartTime] = useState(new Date());
@@ -54,6 +79,10 @@ export default function PostJobScreen({ navigation, route }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+
+  // Animation states
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(30));
 
   // Translations for this screen
   const translations = {
@@ -115,9 +144,35 @@ export default function PostJobScreen({ navigation, route }) {
       tryAgain: "Please try again.",
       platformFeeDesc: "5% platform fee on total payment of ₹",
       loading: "Loading...",
-      filter: "Filter",
-      sort: "Sort",
-      search: "Search",
+      // New translations for subscription
+      activeMonthlySubscription: "Active Monthly Subscription",
+      unlimitedJobPosting: "Unlimited job posting",
+      daysRemaining: "days remaining",
+      freeJobPosts: "Free Job Posts",
+      freePostsRemaining: "free posts remaining",
+      used: "used",
+      getUnlimited: "Get Unlimited",
+      freePostsExhausted: "Free Posts Exhausted",
+      allFreePostsUsed: "All 3 free posts have been used",
+      monthlySubscription: "Monthly Subscription",
+      perMonth: "per month",
+      noPlatformFees: "No platform fees",
+      prioritySupport: "Priority support",
+      advancedAnalytics: "Advanced analytics",
+      subscribeNow: "Subscribe Now",
+      later: "Later",
+      unlimitedPosts: "Unlimited posts",
+      subscribeNowPerMonth: "Subscribe Now - ₹49/month",
+      subscriptionFailed: "Subscription Failed",
+      failedToProcessSubscription: "Failed to process subscription",
+      subscriptionActivated: "Subscription Activated",
+      unlimitedJobsNow: "You can now post unlimited jobs!",
+      paymentProcessing: "Processing payment...",
+      postAJob: "Post a Job",
+      fillDetailsBelow: "Fill in the details below to post your job",
+      viewAllJobs: "View All Jobs",
+      postSuccess: "Job Posted Successfully!",
+      jobPostedMessage: "Your job has been posted and is now visible to workers",
     },
     hi: {
       postNewJob: "नई नौकरी पोस्ट करें",
@@ -178,15 +233,58 @@ export default function PostJobScreen({ navigation, route }) {
       platformFeeDesc: "₹",
       platformFeeOnTotal: "के कुल भुगतान पर 5% प्लेटफॉर्म शुल्क",
       loading: "लोड हो रहा है...",
-      filter: "फ़िल्टर",
-      sort: "क्रमबद्ध करें",
-      search: "खोजें",
+      // New translations for subscription
+      activeMonthlySubscription: "सक्रिय मासिक सदस्यता",
+      unlimitedJobPosting: "असीमित नौकरी पोस्टिंग",
+      daysRemaining: "दिन शेष",
+      freeJobPosts: "मुफ्त नौकरी पोस्ट",
+      freePostsRemaining: "मुफ्त पोस्ट शेष",
+      used: "इस्तेमाल किए गए",
+      getUnlimited: "असीमित पोस्ट पाएं",
+      freePostsExhausted: "मुफ्त पोस्ट समाप्त",
+      allFreePostsUsed: "सभी 3 मुफ्त पोस्ट इस्तेमाल हो चुके हैं",
+      monthlySubscription: "मासिक सदस्यता",
+      perMonth: "प्रति माह",
+      noPlatformFees: "कोई प्लेटफॉर्म शुल्क नहीं",
+      prioritySupport: "प्राथमिकिक सपोर्ट",
+      advancedAnalytics: "उन्नत एनालिटिक्स",
+      subscribeNow: "अभी सब्सक्राइब करें",
+      later: "बाद में",
+      unlimitedPosts: "असीमित पोस्ट",
+      subscribeNowPerMonth: "अभी सब्सक्राइब करें - ₹49/माह",
+      subscriptionFailed: "सदस्यता विफल",
+      failedToProcessSubscription: "सदस्यता प्रोसेस करने में विफल",
+      subscriptionActivated: "सदस्यता सक्रिय",
+      unlimitedJobsNow: "अब आप असीमित नौकरियां पोस्ट कर सकते हैं!",
+      paymentProcessing: "भुगतान प्रोसेस हो रहा है...",
+      postAJob: "नौकरी पोस्ट करें",
+      fillDetailsBelow: "अपनी नौकरी पोस्ट करने के लिए नीचे विवरण भरें",
+      viewAllJobs: "सभी नौकरियां देखें",
+      postSuccess: "नौकरी सफलतापूर्वक पोस्ट हो गई!",
+      jobPostedMessage: "आपकी नौकरी पोस्ट हो गई है और अब कर्मचारियों को दिखाई दे रही है",
     }
   };
 
   const tr = translations[locale] || translations.en;
 
   useEffect(() => {
+    // Start animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    loadPostingStats();
     checkPostingEligibility();
     checkRazorpayAvailability();
   }, []);
@@ -202,10 +300,35 @@ export default function PostJobScreen({ navigation, route }) {
     setRazorpayEnabled(available);
   };
 
+  const loadPostingStats = async () => {
+    try {
+      console.log('🔄 Loading posting stats for:', user.uid);
+      
+      // First check if we need to reset monthly free posts
+      await resetMonthlyFreePosts(user.uid);
+      
+      const statsResult = await getEmployerJobPostingStats(user.uid);
+      if (statsResult.success) {
+        console.log('📊 Posting stats loaded:', statsResult.stats);
+        setPostingStats(statsResult.stats);
+      } else {
+        console.error('❌ Failed to load posting stats:', statsResult.error);
+      }
+      
+      const subscriptionResult = await checkSubscriptionStatus(user.uid);
+      if (subscriptionResult.success) {
+        console.log('👑 Subscription status:', subscriptionResult.subscription);
+        setSubscriptionStatus(subscriptionResult.subscription);
+      }
+    } catch (error) {
+      console.error('❌ Error loading posting stats:', error);
+    }
+  };
+
   const checkPostingEligibility = async () => {
     try {
       const result = await canPostJob(user.uid);
-      
+
       if (!result.success) {
         Alert.alert(
           locale === 'hi' ? 'त्रुटि' : 'Error',
@@ -244,7 +367,7 @@ export default function PostJobScreen({ navigation, route }) {
         setPendingFeesExist(false);
       }
     } catch (error) {
-      console.error('Error checking posting eligibility:', error);
+      console.error('❌ Error checking posting eligibility:', error);
     } finally {
       setCheckingEligibility(false);
     }
@@ -258,18 +381,18 @@ export default function PostJobScreen({ navigation, route }) {
   };
 
   const formatDateForDisplay = (date) => {
-    return date.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+    return date.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
 
   const formatTime = (date) => {
-    return date.toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', { 
-      hour: '2-digit', 
+    return date.toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: true 
+      hour12: true
     });
   };
 
@@ -332,7 +455,7 @@ export default function PostJobScreen({ navigation, route }) {
     today.setHours(0, 0, 0, 0);
     const selectedDate = new Date(jobDate);
     selectedDate.setHours(0, 0, 0, 0);
-    
+
     if (selectedDate < today) {
       Alert.alert(
         locale === 'hi' ? 'त्रुटि' : 'Error',
@@ -358,26 +481,116 @@ export default function PostJobScreen({ navigation, route }) {
       return;
     }
 
-    // Calculate platform fee
-    const totalPayment = calculateTotal();
-    const feeResult = await calculateJobPostingFee(totalPayment, user.uid);
+    // Check if employer can post for free
+    const canPostFreeResult = await canPostJobForFree(user.uid);
     
-    if (!feeResult.success) {
+    if (!canPostFreeResult.success) {
       Alert.alert(
         locale === 'hi' ? 'त्रुटि' : 'Error',
-        feeResult.error
+        canPostFreeResult.error
       );
       return;
     }
-
-    setFeeInfo(feeResult);
-
-    // If free or no fee, post directly
-    if (feeResult.isFree || feeResult.platformFee === 0) {
-      await proceedWithJobPosting(null);
+    
+    console.log('✅ Can post check result:', canPostFreeResult);
+    
+    if (canPostFreeResult.canPostForFree) {
+      // Free post available or active subscription
+      await proceedWithFreeJobPosting();
     } else {
-      // Show fee modal for payment selection
+      // Need to pay platform fee
+      // Calculate platform fee
+      const totalPayment = calculateTotal();
+      const feeResult = await calculateJobPostingFee(totalPayment, user.uid);
+      
+      if (!feeResult.success) {
+        Alert.alert(
+          locale === 'hi' ? 'त्रुटि' : 'Error',
+          feeResult.error
+        );
+        return;
+      }
+
+      setFeeInfo(feeResult);
       setShowFeeModal(true);
+    }
+  };
+
+  const proceedWithFreeJobPosting = async () => {
+    setLoading(true);
+
+    try {
+      // Update free post count if not subscription
+      if (!subscriptionStatus?.isActive) {
+        const updateResult = await updateFreeJobPostCount(user.uid);
+        if (!updateResult.success) {
+          throw new Error(updateResult.error);
+        }
+        console.log('✅ Free post count updated:', updateResult);
+      }
+      
+      const totalPayment = calculateTotal();
+      const duration = calculateDuration();
+      
+      const jobData = {
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim(),
+        rate: parseInt(rate),
+        employerId: user.uid,
+        companyName: userProfile?.companyName || userProfile?.name || (locale === 'hi' ? 'कंपनी' : 'Company'),
+        employerPhone: userProfile?.phoneNumber || '',
+        jobDate: formatDateForStorage(jobDate),
+        startTime: formatTimeForStorage(startTime),
+        endTime: formatTimeForStorage(endTime),
+        category: 'General',
+        isFreePost: !subscriptionStatus?.isActive, // Mark if it's a free post
+        subscriptionPost: subscriptionStatus?.isActive || false // Mark if it's a subscription post
+      };
+
+      const result = await createJobWithTiming(jobData);
+      
+      if (!result.success) {
+        throw new Error(result.error || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल' : 'Failed to post job'));
+      }
+
+      const jobId = result.jobId;
+      
+      // Refresh user profile to update free posts count
+      await refreshUserProfile?.();
+      
+      // Refresh posting stats
+      await loadPostingStats();
+      
+      // Navigate to success screen
+      navigation.replace('PostJobSuccess', {
+        jobData: {
+          jobId: jobId,
+          title: title.trim(),
+          description: description.trim(),
+          location: location.trim(),
+          jobDate: formatDateForDisplay(jobDate),
+          startTime: formatTime(startTime),
+          endTime: formatTime(endTime),
+          duration: duration,
+          rate: parseInt(rate),
+          totalPayment: totalPayment,
+          platformFee: 0,
+          isFreePost: !subscriptionStatus?.isActive,
+          subscriptionPost: subscriptionStatus?.isActive || false
+        },
+        isPaid: false,
+        isFree: true
+      });
+
+    } catch (error) {
+      console.error('❌ Error in free job posting:', error);
+      Alert.alert(
+        locale === 'hi' ? 'त्रुटि' : 'Error',
+        error.message || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल। कृपया पुनः प्रयास करें।' : 'Failed to post job. Please try again.')
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -399,7 +612,7 @@ export default function PostJobScreen({ navigation, route }) {
       // Calculate everything
       const totalPayment = calculateTotal();
       const duration = calculateDuration();
-      
+
       // Create job data
       const jobData = {
         title: title.trim(),
@@ -418,13 +631,13 @@ export default function PostJobScreen({ navigation, route }) {
       // Create the job first
       console.log('📝 Creating job...');
       const result = await createJobWithTiming(jobData);
-      
+
       if (!result.success) {
         throw new Error(locale === 'hi' ? 'नौकरी बनाने में विफल' : 'Failed to create job');
       }
 
       const jobId = result.jobId;
-      
+
       // Create platform fee record
       const feeData = {
         employerId: user.uid,
@@ -440,14 +653,14 @@ export default function PostJobScreen({ navigation, route }) {
 
       console.log('💰 Creating fee record...');
       const feeResult = await createPlatformFee(feeData);
-      
+
       if (!feeResult.success) {
         throw new Error(locale === 'hi' ? 'शुल्क रिकॉर्ड बनाने में विफल' : 'Failed to create fee record');
       }
 
       // Navigate to payment screen with job data
       console.log('📍 Navigating to payment screen with fee ID:', feeResult.feeId);
-      
+
       navigation.navigate('PlatformFeePayment', {
         feeIds: [feeResult.feeId],
         totalAmount: feeInfo.platformFee,
@@ -489,7 +702,7 @@ export default function PostJobScreen({ navigation, route }) {
     try {
       const totalPayment = calculateTotal();
       const duration = calculateDuration();
-      
+
       // Create job data
       const jobData = {
         title: title.trim(),
@@ -508,13 +721,13 @@ export default function PostJobScreen({ navigation, route }) {
       // Create the job
       console.log('📝 Creating job...');
       const result = await createJobWithTiming(jobData);
-      
+
       if (!result.success) {
         throw new Error(locale === 'hi' ? 'नौकरी बनाने में विफल' : 'Failed to create job');
       }
 
       const jobId = result.jobId;
-      
+
       // Create platform fee record with 'later' option
       if (feeInfo && !feeInfo.isFree && feeInfo.platformFee > 0) {
         const feeData = {
@@ -562,77 +775,84 @@ export default function PostJobScreen({ navigation, route }) {
     }
   };
 
-  const proceedWithJobPosting = async (feePaymentData) => {
-    setLoading(true);
-
+  const handleSubscribe = async () => {
+    setProcessingFee(true);
+    
     try {
-      const totalPayment = calculateTotal();
-      const duration = calculateDuration();
+      if (!razorpayEnabled) {
+        Alert.alert(
+          locale === 'hi' ? 'त्रुटि' : 'Error',
+          locale === 'hi' ? 'ऑनलाइन भुगतान वर्तमान में अनुपलब्ध है' : 'Online payment is currently unavailable'
+        );
+        return;
+      }
       
-      const jobData = {
-        title: title.trim(),
-        description: description.trim(),
-        location: location.trim(),
-        rate: parseInt(rate),
+      const paymentData = {
+        amount: 4900, // ₹49 in paise
+        description: locale === 'hi' ? 'मासिक सदस्यता - असीमित नौकरी पोस्टिंग' : 'Monthly Subscription - Unlimited Job Posting',
+        employerName: user.displayName || userProfile?.name || 'Employer',
         employerId: user.uid,
-        companyName: userProfile?.companyName || userProfile?.name || (locale === 'hi' ? 'कंपनी' : 'Company'),
-        employerPhone: userProfile?.phoneNumber || '',
-        jobDate: formatDateForStorage(jobDate),
-        startTime: formatTimeForStorage(startTime),
-        endTime: formatTimeForStorage(endTime),
-        category: 'General',
+        subscription: true
       };
-
-      const result = await createJobWithTiming(jobData);
       
-      if (!result.success) {
-        throw new Error(result.error || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल' : 'Failed to post job'));
-      }
-
-      const jobId = result.jobId;
+      const razorpayResult = await initiateRazorpayPayment(paymentData);
       
-      // Create platform fee record if applicable
-      if (feeInfo && !feeInfo.isFree && feeInfo.platformFee > 0) {
-        const feeData = {
-          employerId: user.uid,
-          jobId: jobId,
-          jobTitle: title.trim(),
-          amount: feeInfo.platformFee,
-          totalJobPayment: totalPayment,
-          paymentOption: feePaymentData?.paymentOption || 'later',
-          status: feePaymentData?.paymentOption === 'now' ? 'paid' : 'pending',
-          needsPayment: false
+      if (razorpayResult.success && razorpayResult.useWebView) {
+        const webViewData = {
+          ...razorpayResult.webViewConfig,
+          htmlContent: razorpayResult.htmlContent,
+          onSuccess: async (paymentResult) => {
+            try {
+              const verificationResult = await verifyRazorpayPayment(paymentResult);
+              
+              if (verificationResult.success && verificationResult.verified) {
+                // Activate subscription
+                await activateMonthlySubscription(user.uid, {
+                  paymentId: paymentResult.paymentId,
+                  transactionId: paymentResult.orderId
+                });
+                
+                // Refresh user profile
+                await refreshUserProfile?.();
+                
+                // Refresh posting stats
+                await loadPostingStats();
+                
+                Alert.alert(
+                  locale === 'hi' ? 'सफलता' : 'Success',
+                  locale === 'hi' ? 
+                    'मासिक सदस्यता सक्रिय हो गई है! अब आप असीमित नौकरियां पोस्ट कर सकते हैं।' :
+                    'Monthly subscription activated! You can now post unlimited jobs.',
+                  [{
+                    text: locale === 'hi' ? 'बढ़िया' : 'Great',
+                    onPress: () => {
+                      setShowSubscriptionModal(false);
+                    }
+                  }]
+                );
+              }
+            } catch (error) {
+              console.error('Subscription activation error:', error);
+            }
+          },
+          onError: (error) => {
+            Alert.alert(
+              locale === 'hi' ? 'भुगतान विफल' : 'Payment Failed',
+              error.error || (locale === 'hi' ? 'सदस्यता सक्रिय करने में विफल' : 'Failed to activate subscription')
+            );
+          }
         };
-
-        await createPlatformFee(feeData);
+        
+        setWebViewPaymentData(webViewData);
+        setShowRazorpayWebView(true);
       }
-
-      // Navigate to success screen
-      navigation.replace('PostJobSuccess', {
-        jobData: {
-          jobId: jobId,
-          title: title.trim(),
-          description: description.trim(),
-          location: location.trim(),
-          jobDate: formatDateForDisplay(jobDate),
-          startTime: formatTime(startTime),
-          endTime: formatTime(endTime),
-          duration: duration,
-          rate: parseInt(rate),
-          totalPayment: totalPayment,
-          platformFee: feeInfo?.platformFee || 0
-        },
-        isPaid: feePaymentData?.paymentOption === 'now'
-      });
-
     } catch (error) {
-      console.error('❌ Error in job posting:', error);
+      console.error('Subscription error:', error);
       Alert.alert(
         locale === 'hi' ? 'त्रुटि' : 'Error',
-        error.message || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल। कृपया पुनः प्रयास करें।' : 'Failed to post job. Please try again.')
+        locale === 'hi' ? 'सदस्यता प्रोसेस करने में विफल' : 'Failed to process subscription'
       );
     } finally {
-      setLoading(false);
       setProcessingFee(false);
     }
   };
@@ -672,97 +892,180 @@ export default function PostJobScreen({ navigation, route }) {
   if (pendingFeesExist) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity 
+        <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+        <View style={styles.simpleHeader}>
+          <TouchableOpacity
             onPress={handleBackPress}
             style={styles.backButton}
           >
-            <Text style={styles.backButtonIcon}>←</Text>
-            <Text style={styles.backButtonText}>
-              {locale === 'hi' ? 'वापस' : 'Back'}
-            </Text>
+            <Icon name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>
+          <Text style={styles.simpleHeaderTitle}>
             {locale === 'hi' ? 'नई नौकरी पोस्ट करें' : 'Post New Job'}
           </Text>
-          <View style={{ width: 60 }} />
+          <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContent}>
-          <Text style={styles.errorIcon}>💰</Text>
-          <Text style={styles.errorText}>
-            {locale === 'hi' ? 'नई नौकरियाँ पोस्ट करने के लिए लंबित शुल्क साफ़ करें' : 'Please clear pending fees to post new jobs'}
-          </Text>
+          <View style={styles.errorCard}>
+            <View style={styles.errorIconContainer}>
+              <Icon name="error-outline" size={48} color={colors.warning} />
+            </View>
+            <Text style={styles.errorTitle}>
+              {locale === 'hi' ? 'भुगतान आवश्यक' : 'Payment Required'}
+            </Text>
+            <Text style={styles.errorMessage}>
+              {locale === 'hi' ? 'नई नौकरियाँ पोस्ट करने के लिए लंबित शुल्क साफ़ करें' : 'Please clear pending fees to post new jobs'}
+            </Text>
+            <TouchableOpacity
+              style={styles.payNowButton}
+              onPress={() => navigation.navigate('PlatformFeePayment')}
+            >
+              <Text style={styles.payNowButtonText}>
+                {locale === 'hi' ? 'शुल्क देखें' : 'View Fees'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity 
-            onPress={handleBackPress}
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonIcon}>←</Text>
-            <Text style={styles.backButtonText}>
-              {locale === 'hi' ? 'वापस' : 'Back'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {locale === 'hi' ? 'नई नौकरी पोस्ट करें' : 'Post New Job'}
-          </Text>
-          <TouchableOpacity 
-            onPress={clearForm}
-            style={styles.clearButton}
-          >
-            <Text style={styles.clearButtonText}>
-              {locale === 'hi' ? 'साफ करें' : 'Clear'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+
+      {/* Razorpay WebView Modal */}
+      <RazorpayWebView
+        visible={showRazorpayWebView}
+        onClose={() => setShowRazorpayWebView(false)}
+        paymentData={webViewPaymentData}
+        onPaymentSuccess={(result) => {
+          setShowRazorpayWebView(false);
+          webViewPaymentData?.onSuccess(result);
+        }}
+        onPaymentFailed={(error) => {
+          setShowRazorpayWebView(false);
+          webViewPaymentData?.onError(error);
+        }}
+      />
+
+      {/* Simple Clean Header */}
+      <View style={styles.simpleHeader}>
+        <TouchableOpacity
+          onPress={handleBackPress}
+          style={styles.backButton}
+        >
+          <Icon name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.simpleHeaderTitle}>
+          {locale === 'hi' ? 'नई नौकरी पोस्ट करें' : 'Post New Job'}
+        </Text>
+        <TouchableOpacity
+          onPress={clearForm}
+          style={styles.clearButton}
+        >
+          <Icon name="close" size={24} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <Animated.ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Free Jobs Remaining Banner */}
-        {feeInfo?.isFree && (
-          <View style={styles.freeBanner}>
-            <Text style={styles.freeBannerIcon}>🎉</Text>
-            <Text style={styles.freeBannerText}>
-              {locale === 'hi' ? 'मुफ्त नौकरी पोस्टिंग!' : 'Free job posting!'} {feeInfo.freeJobsRemaining} {locale === 'hi' ? 'मुफ्त पोस्ट शेष' : `free post${feeInfo.freeJobsRemaining !== 1 ? 's' : ''} remaining`}
-            </Text>
-          </View>
+        {/* Free Posts & Subscription Status Bar - Very Compact */}
+        {(postingStats || subscriptionStatus) && (
+          <Animated.View 
+            style={[
+              styles.statusBar,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }]
+              }
+            ]}
+          >
+            {subscriptionStatus?.isActive ? (
+              <View style={styles.subscriptionStatus}>
+                <Icon name="workspace-premium" size={18} color="#FFD700" />
+                <Text style={styles.subscriptionStatusText}>
+                  {tr.unlimitedJobPosting} • {subscriptionStatus.daysRemaining} {tr.daysRemaining}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.freePostsStatus}>
+                <Icon 
+                  name={postingStats?.freePostsRemaining > 0 ? "local-offer" : "error-outline"} 
+                  size={18} 
+                  color={postingStats?.freePostsRemaining > 0 ? colors.success : colors.warning} 
+                />
+                <Text style={styles.freePostsStatusText}>
+                  {postingStats?.freePostsRemaining > 0 ? (
+                    <>
+                      <Text style={styles.freePostsCount}>{postingStats.freePostsRemaining}</Text> {tr.freePostsRemaining}
+                    </>
+                  ) : (
+                    tr.freePostsExhausted
+                  )}
+                </Text>
+                {postingStats?.freePostsRemaining === 0 && (
+                  <TouchableOpacity 
+                    style={styles.getUnlimitedButton}
+                    onPress={() => setShowSubscriptionModal(true)}
+                  >
+                    <Text style={styles.getUnlimitedText}>{tr.getUnlimited}</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </Animated.View>
         )}
 
-        {/* Job Details Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardIcon}>📋</Text>
-            <Text style={styles.cardTitle}>
-              {locale === 'hi' ? 'नौकरी विवरण' : 'Job Details'}
-            </Text>
-          </View>
+        {/* Free Banner - Only shown when actually posting a free job */}
+        {!subscriptionStatus?.isActive && postingStats?.freePostsRemaining > 0 && (
+          <Animated.View 
+            style={[
+              styles.freeBanner,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }]
+              }
+            ]}
+          >
+            <View style={styles.freeBannerContent}>
+              <Icon name="check-circle" size={20} color={colors.success} />
+              <Text style={styles.freeBannerText}>
+                <Text style={styles.freeBannerHighlight}>{tr.freeJobBanner}</Text> ({postingStats?.freePostsRemaining} {tr.freeJobsRemaining})
+              </Text>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Job Details Section */}
+        <Animated.View 
+          style={[
+            styles.section,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          <Text style={styles.sectionTitle}>
+            {tr.jobDetails}
+          </Text>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              {locale === 'hi' ? 'नौकरी शीर्षक' : 'Job Title'} <Text style={styles.required}>*</Text>
+              {tr.jobTitle}
             </Text>
             <TextInput
               style={styles.input}
-              placeholder={locale === 'hi' ? 'उदाहरण: फैक्टरी हेल्पर चाहिए' : 'e.g., Factory Helper Needed'}
+              placeholder={tr.jobTitlePlaceholder}
               placeholderTextColor={colors.textSecondary}
               value={title}
               onChangeText={setTitle}
@@ -772,11 +1075,11 @@ export default function PostJobScreen({ navigation, route }) {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              {locale === 'hi' ? 'विवरण' : 'Description'} <Text style={styles.required}>*</Text>
+              {tr.description}
             </Text>
             <TextInput
               style={[styles.input, styles.textArea]}
-              placeholder={locale === 'hi' ? 'काम की आवश्यकताएं, जिम्मेदारियाँ और आवश्यक कौशल का विवरण दें...' : 'Describe the work requirements, responsibilities, and any specific skills needed...'}
+              placeholder={tr.descriptionPlaceholder}
               placeholderTextColor={colors.textSecondary}
               value={description}
               onChangeText={setDescription}
@@ -789,112 +1092,122 @@ export default function PostJobScreen({ navigation, route }) {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              {locale === 'hi' ? 'स्थान' : 'Location'} <Text style={styles.required}>*</Text>
+              {tr.location}
             </Text>
             <TextInput
               style={styles.input}
-              placeholder={locale === 'hi' ? 'उदाहरण: औद्योगिक क्षेत्र, चरण 1, बेंगलुरु' : 'e.g., Industrial Area, Phase 1, Bangalore'}
+              placeholder={tr.locationPlaceholder}
               placeholderTextColor={colors.textSecondary}
               value={location}
               onChangeText={setLocation}
               returnKeyType="done"
             />
           </View>
-        </View>
+        </Animated.View>
 
-        {/* Schedule Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardIcon}>📅</Text>
-            <Text style={styles.cardTitle}>
-              {locale === 'hi' ? 'अनुसूची' : 'Schedule'}
-            </Text>
-          </View>
+        {/* Schedule Section */}
+        <Animated.View 
+          style={[
+            styles.section,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          <Text style={styles.sectionTitle}>
+            {tr.schedule}
+          </Text>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              {locale === 'hi' ? 'नौकरी की तारीख' : 'Job Date'} <Text style={styles.required}>*</Text>
+              {tr.jobDate}
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.dateTimeButton}
               onPress={() => setShowDatePicker(true)}
             >
-              <Text style={styles.dateTimeIcon}>📅</Text>
+              <Icon name="calendar-today" size={20} color={colors.primary} style={styles.dateTimeIcon} />
               <Text style={styles.dateTimeText}>{formatDateForDisplay(jobDate)}</Text>
-              <Text style={styles.dateTimeArrow}>›</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.timeRow}>
             <View style={styles.timeColumn}>
               <Text style={styles.label}>
-                {locale === 'hi' ? 'प्रारंभ समय' : 'Start Time'} <Text style={styles.required}>*</Text>
+                {tr.startTime}
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.dateTimeButton}
                 onPress={() => setShowStartTimePicker(true)}
               >
-                <Text style={styles.dateTimeIcon}>🕐</Text>
+                <Icon name="access-time" size={20} color={colors.primary} style={styles.dateTimeIcon} />
                 <Text style={styles.dateTimeText}>{formatTime(startTime)}</Text>
-                <Text style={styles.dateTimeArrow}>›</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.timeColumn}>
               <Text style={styles.label}>
-                {locale === 'hi' ? 'समाप्ति समय' : 'End Time'} <Text style={styles.required}>*</Text>
+                {tr.endTime}
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.dateTimeButton}
                 onPress={() => setShowEndTimePicker(true)}
               >
-                <Text style={styles.dateTimeIcon}>🕐</Text>
+                <Icon name="access-time" size={20} color={colors.primary} style={styles.dateTimeIcon} />
                 <Text style={styles.dateTimeText}>{formatTime(endTime)}</Text>
-                <Text style={styles.dateTimeArrow}>›</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {calculateDuration() > 0 && (
             <View style={styles.durationBadge}>
-              <Text style={styles.durationIcon}>⏱️</Text>
               <Text style={styles.durationText}>
-                {calculateDuration()} {locale === 'hi' ? 'कुल घंटे' : 'hours total'}
+                {calculateDuration()} {tr.hoursTotal}
               </Text>
             </View>
           )}
-        </View>
+        </Animated.View>
 
-        {/* Payment Card */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardIcon}>💰</Text>
-            <Text style={styles.cardTitle}>
-              {locale === 'hi' ? 'भुगतान' : 'Payment'}
-            </Text>
-          </View>
+        {/* Payment Section */}
+        <Animated.View 
+          style={[
+            styles.section,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          <Text style={styles.sectionTitle}>
+            {tr.payment}
+          </Text>
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              {locale === 'hi' ? 'प्रति घंटा दर' : 'Hourly Rate'} <Text style={styles.required}>*</Text>
+              {tr.hourlyRate}
             </Text>
             <View style={styles.rateInputContainer}>
-              <Text style={styles.rupeeSymbol}>₹</Text>
+              <View style={styles.rateInputPrefix}>
+                <Text style={styles.rupeeSymbol}>₹</Text>
+              </View>
               <TextInput
                 style={styles.rateInput}
-                placeholder={locale === 'hi' ? 'प्रति घंटा दर' : 'Rate per hour'}
+                placeholder={tr.ratePlaceholder}
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
                 value={rate}
                 onChangeText={(text) => setRate(text.replace(/[^0-9]/g, ''))}
                 returnKeyType="done"
               />
-              <Text style={styles.perHourText}>
-                {locale === 'hi' ? '/ घंटा' : '/ hour'}
-              </Text>
+              <View style={styles.rateInputSuffix}>
+                <Text style={styles.perHourText}>
+                  {tr.perHour}
+                </Text>
+              </View>
             </View>
             <Text style={styles.hint}>
-              {locale === 'hi' ? 'न्यूनतम दर: ₹50/घंटा' : 'Minimum rate: ₹50/hour'}
+              {tr.minimumRate}
             </Text>
           </View>
 
@@ -902,26 +1215,26 @@ export default function PostJobScreen({ navigation, route }) {
             <View style={styles.paymentSummary}>
               <View style={styles.paymentRow}>
                 <Text style={styles.paymentLabel}>
-                  {locale === 'hi' ? 'प्रति घंटा दर:' : 'Hourly Rate:'}
+                  {tr.hourlyRateLabel}
                 </Text>
                 <Text style={styles.paymentValue}>₹{rate}</Text>
               </View>
               <View style={styles.paymentRow}>
                 <Text style={styles.paymentLabel}>
-                  {locale === 'hi' ? 'अवधि:' : 'Duration:'}
+                  {tr.durationLabel}
                 </Text>
                 <Text style={styles.paymentValue}>{calculateDuration()} {locale === 'hi' ? 'घंटे' : 'hours'}</Text>
               </View>
               <View style={styles.paymentDivider} />
               <View style={styles.paymentRow}>
                 <Text style={styles.paymentTotalLabel}>
-                  {locale === 'hi' ? 'कुल भुगतान:' : 'Total Payment:'}
+                  {tr.totalPayment}:
                 </Text>
                 <Text style={styles.paymentTotalValue}>₹{calculateTotal()}</Text>
               </View>
             </View>
           )}
-        </View>
+        </Animated.View>
 
         {/* Custom Date/Time Pickers */}
         <CustomDateTimePicker
@@ -969,9 +1282,9 @@ export default function PostJobScreen({ navigation, route }) {
               <ActivityIndicator color={colors.white} size="small" />
             ) : (
               <>
-                <Text style={styles.postButtonIcon}>📤</Text>
+                <Icon name="send" size={20} color={colors.white} style={styles.postButtonIcon} />
                 <Text style={styles.postButtonText}>
-                  {locale === 'hi' ? 'नौकरी पोस्ट करें' : 'Post Job'}
+                  {tr.postJob}
                 </Text>
               </>
             )}
@@ -983,19 +1296,19 @@ export default function PostJobScreen({ navigation, route }) {
             disabled={loading || processingFee}
           >
             <Text style={styles.cancelButtonText}>
-              {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
+              {tr.cancel}
             </Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footerHint}>
-          {locale === 'hi' ? '💡 सुझाव: अधिक योग्य कर्मचारियों को आकर्षित करने के लिए स्पष्ट नौकरी विवरण और प्रतिस्पर्धी दरें प्रदान करें।' : '💡 Tip: Provide clear job details and competitive rates to attract more qualified workers.'}
+        <Text style={styles.footerNote}>
+          {tr.tip}
         </Text>
 
         <View style={styles.bottomSpacing} />
-      </ScrollView>
+      </Animated.ScrollView>
 
-      {/* Platform Fee Modal */}
+      {/* Platform Fee Modal - Clean Version */}
       <Modal
         visible={showFeeModal}
         animationType="slide"
@@ -1003,20 +1316,23 @@ export default function PostJobScreen({ navigation, route }) {
         onRequestClose={() => setShowFeeModal(false)}
       >
         <View style={styles.modalOverlay}>
+          <View style={styles.modalOverlayBackground} />
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {locale === 'hi' ? '💰 प्लेटफॉर्म शुल्क' : '💰 Platform Fee'}
-            </Text>
-            
-            <View style={styles.feeInfoBox}>
-              <Text style={styles.feeAmount}>₹{feeInfo?.platformFee || 0}</Text>
-              <Text style={styles.feeDescription}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {tr.platformFee}
+              </Text>
+              <Text style={styles.modalSubtitle}>
                 {locale === 'hi' ? '₹' : ''}{calculateTotal()}{locale === 'hi' ? ' के कुल भुगतान पर 5% प्लेटफॉर्म शुल्क' : '5% platform fee on total payment of ₹'}
               </Text>
             </View>
 
-            <Text style={styles.modalSubtitle}>
-              {locale === 'hi' ? 'भुगतान विकल्प चुनें:' : 'Choose Payment Option:'}
+            <View style={styles.feeAmountContainer}>
+              <Text style={styles.feeAmount}>₹{feeInfo?.platformFee || 0}</Text>
+            </View>
+
+            <Text style={styles.modalOptionTitle}>
+              {tr.choosePaymentOption}
             </Text>
 
             <TouchableOpacity
@@ -1025,15 +1341,15 @@ export default function PostJobScreen({ navigation, route }) {
               disabled={!razorpayEnabled || processingFee}
             >
               <View style={styles.optionHeader}>
-                <Text style={styles.optionIcon}>💳</Text>
+                <Icon name="credit-card" size={24} color={colors.primary} />
                 <View style={styles.optionInfo}>
                   <Text style={styles.optionTitle}>
-                    {locale === 'hi' ? 'अभी भुगतान करें' : 'Pay Now'}
+                    {tr.payNow}
                   </Text>
                   <Text style={styles.optionSubtitle}>
-                    {razorpayEnabled 
-                      ? (locale === 'hi' ? 'यूपीआई/कार्ड के माध्यम से तत्काल ऑनलाइन भुगतान' : 'Instant online payment via UPI/Card')
-                      : (locale === 'hi' ? 'वर्तमान में अनुपलब्ध' : 'Currently unavailable')
+                    {razorpayEnabled
+                      ? tr.instantOnline
+                      : tr.currentlyUnavailable
                     }
                   </Text>
                 </View>
@@ -1049,13 +1365,13 @@ export default function PostJobScreen({ navigation, route }) {
               disabled={processingFee}
             >
               <View style={styles.optionHeader}>
-                <Text style={styles.optionIcon}>⏰</Text>
+                <Icon name="watch-later" size={24} color={colors.warning} />
                 <View style={styles.optionInfo}>
                   <Text style={styles.optionTitle}>
-                    {locale === 'hi' ? 'नौकरी पूरा होने के बाद भुगतान करें' : 'Pay After Job Completion'}
+                    {tr.payAfterJob}
                   </Text>
                   <Text style={styles.optionSubtitle}>
-                    {locale === 'hi' ? 'अभी पोस्ट करें, नौकरी पूरी होने पर भुगतान करें' : 'Post now, pay when job is completed'}
+                    {tr.postNowPayLater}
                   </Text>
                 </View>
                 {processingFee && selectedPaymentOption === 'later' && (
@@ -1065,7 +1381,7 @@ export default function PostJobScreen({ navigation, route }) {
             </TouchableOpacity>
 
             <Text style={styles.modalNote}>
-              {locale === 'hi' ? 'ℹ️ यदि आप "बाद में भुगतान" चुनते हैं, तो आपकी अगली नौकरी पोस्ट करने से पहले भुगतान आवश्यक होगा।' : 'ℹ️ If you choose "Pay Later", payment will be required before posting your next job.'}
+              {tr.notePayLater}
             </Text>
 
             <TouchableOpacity
@@ -1074,7 +1390,79 @@ export default function PostJobScreen({ navigation, route }) {
               disabled={processingFee}
             >
               <Text style={styles.modalCancelText}>
-                {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
+                {tr.cancelButton}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Subscription Modal - Clean Version */}
+      <Modal
+        visible={showSubscriptionModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSubscriptionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalOverlayBackground} />
+          <View style={styles.subscriptionModalContent}>
+            <View style={styles.modalHeader}>
+              <Icon name="workspace-premium" size={32} color="#FFD700" />
+              <Text style={styles.modalTitle}>
+                {tr.monthlySubscription}
+              </Text>
+            </View>
+            
+            <View style={styles.subscriptionPlanCard}>
+              <Text style={styles.planPrice}>₹49</Text>
+              <Text style={styles.planDuration}>
+                {tr.perMonth}
+              </Text>
+            </View>
+            
+            <View style={styles.featuresList}>
+              <View style={styles.featureItem}>
+                <Icon name="check" size={20} color={colors.success} />
+                <Text style={styles.featureText}>
+                  {tr.unlimitedJobPosting}
+                </Text>
+              </View>
+              <View style={styles.featureItem}>
+                <Icon name="check" size={20} color={colors.success} />
+                <Text style={styles.featureText}>
+                  {tr.noPlatformFees}
+                </Text>
+              </View>
+              <View style={styles.featureItem}>
+                <Icon name="check" size={20} color={colors.success} />
+                <Text style={styles.featureText}>
+                  {tr.prioritySupport}
+                </Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.subscribeNowButton}
+              onPress={handleSubscribe}
+              disabled={processingFee}
+            >
+              {processingFee ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.subscribeNowText}>
+                  {tr.subscribeNowPerMonth}
+                </Text>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowSubscriptionModal(false)}
+              disabled={processingFee}
+            >
+              <Text style={styles.modalCancelText}>
+                {tr.later}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1100,160 +1488,214 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
+  // Simple Header
+  simpleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 40,
-  },
-  errorIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  errorText: {
-    fontSize: 18,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: colors.white,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
     paddingTop: Platform.OS === 'ios' ? 50 : 40,
   },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+  simpleHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
   },
   backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
     padding: 8,
-  },
-  backButtonIcon: {
-    fontSize: 20,
-    color: colors.primary,
-    marginRight: 4,
-  },
-  backButtonText: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
   },
   clearButton: {
     padding: 8,
-  },
-  clearButtonText: {
-    color: colors.error,
-    fontSize: 16,
-    fontWeight: '600',
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
-  },
-  freeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.success + '20',
     padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.success,
   },
-  freeBannerIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  freeBannerText: {
+  centerContent: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.success,
-  },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
-    marginBottom: 20,
+  },
+  errorCard: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 400,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  cardHeader: {
+  errorIconContainer: {
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.warning,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  payNowButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  payNowButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Status Bar (Compact)
+  statusBar: {
+    marginBottom: 16,
+  },
+  subscriptionStatus: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FFD700',
   },
-  cardIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  subscriptionStatusText: {
+    fontSize: 13,
     color: colors.text,
+    fontWeight: '500',
+    marginLeft: 8,
   },
-  inputGroup: {
-    marginBottom: 20,
+  freePostsStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
-  label: {
+  freePostsStatusText: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  freePostsCount: {
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  getUnlimitedButton: {
+    marginLeft: 'auto',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  getUnlimitedText: {
+    fontSize: 11,
+    color: colors.white,
+    fontWeight: '600',
+  },
+  // Free Banner
+  freeBanner: {
+    marginBottom: 16,
+  },
+  freeBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success + '10',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  freeBannerText: {
+    fontSize: 14,
+    color: colors.success,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  freeBannerHighlight: {
+    fontWeight: '600',
+  },
+  // Sections
+  section: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 8,
+    marginBottom: 16,
   },
-  required: {
-    color: colors.error,
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text,
+    marginBottom: 6,
   },
   input: {
     backgroundColor: colors.background,
-    padding: 16,
-    borderRadius: 12,
-    fontSize: 16,
+    padding: 14,
+    borderRadius: 8,
+    fontSize: 15,
     color: colors.text,
     borderWidth: 1,
     borderColor: colors.borderLight,
   },
   textArea: {
-    height: 120,
+    height: 100,
     textAlignVertical: 'top',
+    paddingTop: 14,
   },
   dateTimeButton: {
     backgroundColor: colors.background,
-    padding: 16,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.borderLight,
   },
   dateTimeIcon: {
-    fontSize: 18,
-    marginRight: 12,
+    marginRight: 10,
   },
   dateTimeText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.text,
-    fontWeight: '500',
-  },
-  dateTimeArrow: {
-    fontSize: 20,
-    color: colors.textSecondary,
   },
   timeRow: {
     flexDirection: 'row',
@@ -1263,60 +1705,62 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   durationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.info + '20',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: colors.primary + '10',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
     alignSelf: 'flex-start',
     marginTop: 8,
   },
-  durationIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
   durationText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.info,
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.primary,
   },
   rateInputContainer: {
-    backgroundColor: colors.background,
-    padding: 16,
-    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.borderLight,
+    overflow: 'hidden',
+  },
+  rateInputPrefix: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: colors.primary + '10',
   },
   rupeeSymbol: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
     color: colors.primary,
-    marginRight: 8,
   },
   rateInput: {
     flex: 1,
-    fontSize: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    fontSize: 15,
     color: colors.text,
   },
-  perHourText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginLeft: 8,
+  rateInputSuffix: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
-  hint: {
+  perHourText: {
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  hint: {
+    fontSize: 12,
+    color: colors.textSecondary,
     marginTop: 6,
-    fontStyle: 'italic',
   },
   paymentSummary: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.primary + '5',
     padding: 16,
-    borderRadius: 12,
-    marginTop: 12,
+    borderRadius: 8,
+    marginTop: 8,
   },
   paymentRow: {
     flexDirection: 'row',
@@ -1336,13 +1780,12 @@ const styles = StyleSheet.create({
   },
   paymentDivider: {
     height: 1,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.borderLight,
     marginVertical: 8,
-    opacity: 0.3,
   },
   paymentTotalLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '600',
     color: colors.primary,
   },
   paymentTotalValue: {
@@ -1351,112 +1794,107 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   actionsContainer: {
-    marginTop: 20,
+    marginTop: 8,
+    marginBottom: 16,
   },
   postButton: {
     backgroundColor: colors.primary,
-    padding: 18,
-    borderRadius: 12,
+    padding: 16,
+    borderRadius: 8,
     alignItems: 'center',
+    marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 12,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
   disabledButton: {
     opacity: 0.6,
   },
   postButtonIcon: {
-    fontSize: 20,
-    color: colors.white,
     marginRight: 8,
   },
   postButtonText: {
     color: colors.white,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   cancelButton: {
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.white,
   },
   cancelButtonText: {
     color: colors.textSecondary,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
-  footerHint: {
+  footerNote: {
     fontSize: 13,
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
-    marginTop: 20,
+    marginTop: 8,
     fontStyle: 'italic',
   },
   bottomSpacing: {
-    height: 40,
+    height: 20,
   },
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
+  },
+  modalOverlayBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 30,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
   },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    textAlign: 'center',
+  modalHeader: {
+    alignItems: 'center',
     marginBottom: 20,
   },
-  feeInfoBox: {
-    backgroundColor: colors.primary + '20',
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginBottom: 24,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.primary,
-  },
-  feeAmount: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: colors.primary,
-    marginBottom: 8,
-  },
-  feeDescription: {
-    fontSize: 14,
-    color: colors.text,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  modalSubtitle: {
-    fontSize: 16,
+  modalTitle: {
+    fontSize: 20,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  feeAmountContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  feeAmount: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  modalOptionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
   },
   paymentOptionCard: {
     backgroundColor: colors.background,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 8,
     marginBottom: 12,
-    borderWidth: 2,
-    borderColor: colors.border,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
   disabledOption: {
     opacity: 0.5,
@@ -1465,18 +1903,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  optionIcon: {
-    fontSize: 32,
-    marginRight: 16,
-  },
   optionInfo: {
     flex: 1,
+    marginLeft: 12,
   },
   optionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   optionSubtitle: {
     fontSize: 13,
@@ -1485,22 +1920,74 @@ const styles = StyleSheet.create({
   },
   modalNote: {
     fontSize: 13,
-    color: colors.info,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 20,
+    marginTop: 12,
+    marginBottom: 16,
     lineHeight: 18,
+    fontStyle: 'italic',
   },
   modalCancelButton: {
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
+    backgroundColor: colors.white,
   },
   modalCancelText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.textSecondary,
+  },
+  // Subscription Modal
+  subscriptionModalContent: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 20,
+    margin: 16,
+  },
+  subscriptionPlanCard: {
+    alignItems: 'center',
+    marginBottom: 20,
+    padding: 20,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 12,
+  },
+  planPrice: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  planDuration: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  featuresList: {
+    marginBottom: 20,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  featureText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    marginLeft: 12,
+  },
+  subscribeNowButton: {
+    backgroundColor: colors.primary,
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  subscribeNowText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

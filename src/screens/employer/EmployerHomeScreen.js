@@ -1,4 +1,4 @@
-// src/screens/employer/EmployerHomeScreen.js - HINDI VERSION
+// src/screens/employer/EmployerHomeScreen.js - FIXED VERSION WITH SHOW ALL JOBS
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -12,18 +12,28 @@ import {
   Alert,
   Dimensions,
   Modal,
+  Image,
+  Animated,
+  FlatList,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { Platform } from 'react-native';
 import { 
   fetchAllEmployerJobs,
   fetchJobApplications,
-  deletePastJob 
+  deletePastJob,
+  getEmployerJobPostingStats
 } from '../../services/database';
 import { colors } from '../../constants/colors';
 import { useFocusEffect } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+
+// Mock user avatar if no image available
+const defaultAvatar = 'https://ui-avatars.com/api/?name=Employer&background=007AFF&color=fff&size=128';
 
 export default function EmployerHomeScreen({ navigation }) {
   const { user, userProfile, refreshUserProfile } = useAuth();
@@ -33,6 +43,10 @@ export default function EmployerHomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showPastJobs, setShowPastJobs] = useState(false);
+  const [showJobDetails, setShowJobDetails] = useState(false);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [postingStats, setPostingStats] = useState(null);
+  const [showAllJobs, setShowAllJobs] = useState(false); // NEW: State to track if showing all jobs
 
   // Translations for this screen
   const translations = {
@@ -91,6 +105,56 @@ export default function EmployerHomeScreen({ navigation }) {
       showAll: "Show All",
       filter: "Filter",
       sort: "Sort",
+      // Subscription related
+      activeSubscription: "Active Subscription",
+      unlimitedJobPosting: "Unlimited job posting",
+      expires: "Expires",
+      expiresNotSet: "Not set",
+      freeJobPosts: "Free Job Posts",
+      freePostsUsed: "used",
+      manageSubscription: "Manage",
+      subscriptionBenefits: "Go Unlimited",
+      unlimitedPosts: "Unlimited job posts",
+      noPlatformFees: "No platform fees",
+      prioritySupport: "Priority support",
+      upgradeNow: "Upgrade Now",
+      subscriptionExpired: "Subscription Expired",
+      renewSubscription: "Renew Subscription",
+      daysLeft: "days left",
+      freePostsRemaining: "Free posts remaining",
+      viewAllJobs: "View All Jobs",
+      viewLessJobs: "Show Less", // NEW
+      postNow: "Post Now",
+      featuredJobs: "Featured Jobs",
+      quickActions: "Quick Actions",
+      analytics: "Analytics",
+      notifications: "Notifications",
+      helpCenter: "Help Center",
+      earnings: "Earnings",
+      profile: "Profile",
+      // New additions
+      jobsThisMonth: "Jobs this month",
+      activeApplications: "Active applications",
+      responseRate: "Response rate",
+      averageRating: "Average rating",
+      viewInsights: "View Insights",
+      boostVisibility: "Boost Visibility",
+      featuredEmployer: "Featured Employer",
+      verifiedBadge: "Verified",
+      trending: "Trending",
+      newFeature: "New",
+      limitedTime: "Limited Time",
+      // Job details modal
+      jobTitle: "Job Title",
+      jobDescription: "Description",
+      requirements: "Requirements",
+      contactInfo: "Contact Information",
+      email: "Email",
+      phone: "Phone",
+      close: "Close",
+      viewAllApplications: "View All Applications",
+      // Updated text for + button
+      viewMoreJobs: "View More Jobs",
     },
     hi: {
       welcome: "वापसी पर स्वागत है",
@@ -147,6 +211,56 @@ export default function EmployerHomeScreen({ navigation }) {
       showAll: "सभी दिखाएं",
       filter: "फ़िल्टर",
       sort: "क्रमबद्ध करें",
+      // Subscription related
+      activeSubscription: "सक्रिय सदस्यता",
+      unlimitedJobPosting: "असीमित नौकरी पोस्टिंग",
+      expires: "समाप्ति",
+      expiresNotSet: "निर्धारित नहीं",
+      freeJobPosts: "मुफ्त नौकरी पोस्ट",
+      freePostsUsed: "इस्तेमाल किए गए",
+      manageSubscription: "प्रबंधित करें",
+      subscriptionBenefits: "असीमित पोस्ट पाएं",
+      unlimitedPosts: "असीमित नौकरी पोस्ट",
+      noPlatformFees: "कोई प्लेटफॉर्म शुल्क नहीं",
+      prioritySupport: "प्राथमिकिक सपोर्ट",
+      upgradeNow: "अभी अपग्रेड करें",
+      subscriptionExpired: "सदस्यता समाप्त",
+      renewSubscription: "सदस्यता नवीनीकरण करें",
+      daysLeft: "दिन शेष",
+      freePostsRemaining: "मुफ्त पोस्ट शेष",
+      viewAllJobs: "सभी नौकरियां देखें",
+      viewLessJobs: "कम दिखाएं", // NEW
+      postNow: "अभी पोस्ट करें",
+      featuredJobs: "फीचर्ड नौकरियां",
+      quickActions: "त्वरित कार्रवाई",
+      analytics: "विश्लेषण",
+      notifications: "सूचनाएं",
+      helpCenter: "सहायता केंद्र",
+      earnings: "कमाई",
+      profile: "प्रोफ़ाइल",
+      // New additions
+      jobsThisMonth: "इस माह की नौकरियां",
+      activeApplications: "सक्रिय आवेदन",
+      responseRate: "प्रतिक्रिया दर",
+      averageRating: "औसत रेटिंग",
+      viewInsights: "इनसाइट्स देखें",
+      boostVisibility: "दृश्यता बढ़ाएं",
+      featuredEmployer: "फीचर्ड नियोक्ता",
+      verifiedBadge: "सत्यापित",
+      trending: "ट्रेंडिंग",
+      newFeature: "नया",
+      limitedTime: "सीमित समय",
+      // Job details modal
+      jobTitle: "नौकरी शीर्षक",
+      jobDescription: "विवरण",
+      requirements: "आवश्यकताएं",
+      contactInfo: "संपर्क जानकारी",
+      email: "ईमेल",
+      phone: "फोन",
+      close: "बंद करें",
+      viewAllApplications: "सभी आवेदन देखें",
+      // Updated text for + button
+      viewMoreJobs: "अधिक नौकरियां देखें",
     }
   };
 
@@ -160,10 +274,24 @@ export default function EmployerHomeScreen({ navigation }) {
     }, [user?.uid])
   );
 
+  // Load posting stats
+  const loadPostingStats = async () => {
+    try {
+      if (!user?.uid) return;
+      
+      const result = await getEmployerJobPostingStats(user.uid);
+      if (result.success) {
+        setPostingStats(result.stats);
+      }
+    } catch (error) {
+      console.error('❌ Error loading posting stats:', error);
+    }
+  };
+
   const loadData = async () => {
     try {
-      console.log('Loading employer data for:', user?.uid);
       await loadJobs();
+      await loadPostingStats();
       await refreshUserProfile?.();
     } catch (error) {
       console.error('Error loading data:', error);
@@ -175,14 +303,9 @@ export default function EmployerHomeScreen({ navigation }) {
 
   const loadJobs = async () => {
     try {
-      if (!user?.uid) {
-        console.log('No user ID available');
-        return;
-      }
+      if (!user?.uid) return;
 
-      console.log('Fetching all jobs for employer:', user.uid);
       const result = await fetchAllEmployerJobs(user.uid);
-      console.log('Jobs fetch result:', result);
       
       if (result.success) {
         // Fetch applications for each future job
@@ -207,13 +330,9 @@ export default function EmployerHomeScreen({ navigation }) {
           })
         );
         
-        console.log('Future jobs loaded:', futureJobsWithApps.length);
-        console.log('Past jobs loaded:', pastJobsWithApps.length);
-        
         setFutureJobs(futureJobsWithApps);
         setPastJobs(pastJobsWithApps);
       } else {
-        console.error('Failed to load jobs:', result.error);
         Alert.alert(
           locale === 'hi' ? 'त्रुटि' : 'Error',
           locale === 'hi' ? 'नौकरियां लोड करने में विफल' : 'Failed to load jobs'
@@ -229,109 +348,47 @@ export default function EmployerHomeScreen({ navigation }) {
   };
 
   const onRefresh = () => {
-    console.log('Refreshing employer home...');
     setRefreshing(true);
     loadData();
   };
 
-  const handleDeletePastJob = (job) => {
-    Alert.alert(
-      `🗑️ ${locale === 'hi' ? 'पिछली नौकरी हटाएं' : 'Delete Past Job'}`,
-      `${locale === 'hi' ? 'क्या आप निश्चित रूप से हटाना चाहते हैं' : 'Are you sure you want to delete'} "${job.title}"?\n\n${locale === 'hi' ? 'तारीख' : 'Date'}: ${job.jobDate}\n${locale === 'hi' ? 'स्थान' : 'Location'}: ${job.location}\n\n${locale === 'hi' ? 'इस क्रिया को पूर्ववत नहीं किया जा सकता' : 'This action cannot be undone.'}`,
-      [
-        {
-          text: locale === 'hi' ? 'रद्द करें' : 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: locale === 'hi' ? 'हटाएं' : 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const result = await deletePastJob(job.id, user.uid);
-              
-              if (result.success) {
-                Alert.alert(
-                  '✅ ' + (locale === 'hi' ? 'सफल' : 'Success'),
-                  locale === 'hi' ? 'पिछली नौकरी सफलतापूर्वक हटाई गई' : 'Past job deleted successfully'
-                );
-                loadData(); // Refresh data
-              } else {
-                Alert.alert('❌ ' + (locale === 'hi' ? 'त्रुटि' : 'Error'), result.error);
-              }
-            } catch (error) {
-              console.error('Error deleting past job:', error);
-              Alert.alert(
-                locale === 'hi' ? 'त्रुटि' : 'Error',
-                locale === 'hi' ? 'पिछली नौकरी हटाने में विफल' : 'Failed to delete past job'
-              );
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const handleJobOptions = (job, isPastJob = false) => {
-    const completedApps = job.applications?.filter(app => app.status === 'completed').length || 0;
-    const totalApps = job.applications?.length || 0;
-    
-    const jobDetails = locale === 'hi' 
-      ? `📍 ${tr.location}: ${job.location}\n💰 ${tr.rate}: ₹${job.rate}/hour\n⏱️ ${tr.duration}: ${job.hours || job.expectedDuration} hours\n📅 ${tr.date}: ${job.jobDate || (locale === 'hi' ? 'निर्दिष्ट नहीं' : 'Not specified')}\n🕐 ${tr.time}: ${job.startTime} - ${job.endTime}\n📝 ${tr.status}: ${job.status}\n📊 ${tr.applications}: ${totalApps}\n✅ ${tr.completed}: ${completedApps}\n\n${job.description}`
-      : `📍 Location: ${job.location}\n💰 Rate: ₹${job.rate}/hour\n⏱️ Duration: ${job.hours || job.expectedDuration} hours\n📅 Date: ${job.jobDate || 'Not specified'}\n🕐 Time: ${job.startTime} - ${job.endTime}\n📝 Status: ${job.status}\n📊 Applications: ${totalApps}\n✅ Completed: ${completedApps}\n\n${job.description}`;
-
-    const options = [
-      {
-        text: '👁 ' + (locale === 'hi' ? 'आवेदन देखें' : 'View Applications'),
-        onPress: () => {
-          setShowPastJobs(false);
-          navigation.navigate('Applications', { 
-            jobId: job.id,
-            jobTitle: job.title 
-          });
-        }
-      },
-      {
-        text: '📋 ' + (locale === 'hi' ? 'नौकरी विवरण' : 'Job Details'),
-        onPress: () => {
-          Alert.alert(job.title, jobDetails, [{ text: 'OK' }]);
-        }
-      }
-    ];
-
-    // Add Delete option for past jobs
-    if (isPastJob) {
-      options.push({
-        text: '🗑 ' + (locale === 'hi' ? 'नौकरी हटाएं' : 'Delete Job'),
-        onPress: () => handleDeletePastJob(job),
-        style: 'destructive'
-      });
+  // Helper functions
+  const getGreetingName = () => {
+    if (userProfile?.name) {
+      return locale === 'hi' 
+        ? `${userProfile.name.split(' ')[0]} जी`
+        : userProfile.name.split(' ')[0];
     }
-
-    options.push({
-      text: locale === 'hi' ? 'रद्द करें' : 'Cancel',
-      style: 'cancel',
-    });
-
-    Alert.alert(
-      `${job.title}`,
-      (locale === 'hi' ? 'एक क्रिया चुनें:' : 'Choose an action:'),
-      options
-    );
+    return locale === 'hi' ? '' : '';
   };
 
-  const StatCard = ({ value, label, subtitle, color = colors.primary, icon }) => (
-    <View style={[styles.statCard, { borderLeftColor: color }]}>
-      <View style={styles.statHeader}>
-        <Text style={styles.statIcon}>{icon}</Text>
-        <Text style={[styles.statValue, { color }]}>{value}</Text>
-      </View>
-      <Text style={styles.statLabel}>{label}</Text>
-      {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
-    </View>
-  );
+  const getGreetingMessage = () => {
+    const name = getGreetingName();
+    if (name) {
+      return locale === 'hi' ? `${name}, ${tr.welcome}` : `${tr.welcome}, ${name}`;
+    }
+    return tr.welcome;
+  };
 
-  // Format job date for display
+  const isSubscriptionActive = () => {
+    const hasSubscription = userProfile?.subscriptionStatus === 'active' || 
+                           postingStats?.hasActiveSubscription;
+    return hasSubscription;
+  };
+
+  const getFreePostsUsed = () => {
+    return postingStats?.freePostsUsed || userProfile?.freePostsUsed || 0;
+  };
+
+  const getFreePostsRemaining = () => {
+    if (postingStats?.freePostsRemaining !== undefined) {
+      return postingStats.freePostsRemaining;
+    }
+    const freePostsUsed = userProfile?.freePostsUsed || 0;
+    const freePostsAvailable = userProfile?.freePostsAvailable || 3;
+    return Math.max(0, freePostsAvailable - freePostsUsed);
+  };
+
   const formatJobDate = (jobDate, startTime) => {
     if (!jobDate) return locale === 'hi' ? 'तारीख सेट नहीं' : 'Date not set';
     
@@ -349,34 +406,140 @@ export default function EmployerHomeScreen({ navigation }) {
     }
   };
 
-  // Get status text based on locale
   const getStatusText = (status, completedCount = 0) => {
     if (locale === 'hi') {
       switch(status) {
-        case 'open': return '🟢 सक्रिय';
-        case 'closed': return '🔴 बंद';
-        case 'cancelled': return '🔴 रद्द';
-        default: return completedCount > 0 ? '✅ पूर्ण' : '📅 समाप्त';
+        case 'open': return 'सक्रिय';
+        case 'closed': return 'बंद';
+        case 'cancelled': return 'रद्द';
+        default: return completedCount > 0 ? 'पूर्ण' : 'समाप्त';
       }
     } else {
       switch(status) {
-        case 'open': return '🟢 Active';
-        case 'closed': return '🔴 Closed';
-        case 'cancelled': return '🔴 Cancelled';
-        default: return completedCount > 0 ? '✅ Completed' : '📅 Expired';
+        case 'open': return 'Active';
+        case 'closed': return 'Closed';
+        case 'cancelled': return 'Cancelled';
+        default: return completedCount > 0 ? 'Completed' : 'Expired';
       }
     }
   };
 
-  // Get greeting name
-  const getGreetingName = () => {
-    if (userProfile?.name) {
-      return locale === 'hi' 
-        ? `${userProfile.name.split(' ')[0]} जी`
-        : userProfile.name.split(' ')[0];
-    }
-    return locale === 'hi' ? 'नियोक्ता' : 'Employer';
+  const handleDeletePastJob = (job) => {
+    Alert.alert(
+      `🗑️ ${locale === 'hi' ? 'पिछली नौकरी हटाएं' : 'Delete Past Job'}`,
+      `${locale === 'hi' ? 'क्या आप निश्चित रूप से हटाना चाहते हैं' : 'Are you sure you want to delete'} "${job.title}"?`,
+      [
+        { text: locale === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
+        {
+          text: locale === 'hi' ? 'हटाएं' : 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const result = await deletePastJob(job.id, user.uid);
+              if (result.success) {
+                Alert.alert('✅ ' + (locale === 'hi' ? 'सफल' : 'Success'), result.message);
+                loadData();
+              } else {
+                Alert.alert('❌ ' + (locale === 'hi' ? 'त्रुटि' : 'Error'), result.error);
+              }
+            } catch (error) {
+              console.error('Error deleting past job:', error);
+              Alert.alert(
+                locale === 'hi' ? 'त्रुटि' : 'Error',
+                locale === 'hi' ? 'पिछली नौकरी हटाने में विफल' : 'Failed to delete past job'
+              );
+            }
+          }
+        }
+      ]
+    );
   };
+
+  // Handle job card press - show job details modal
+  const handleJobCardPress = (job) => {
+    setSelectedJob(job);
+    setShowJobDetails(true);
+  };
+
+  // Handle view all jobs press - toggle showing all jobs
+  const handleViewAllJobs = () => {
+    setShowAllJobs(!showAllJobs);
+  };
+
+  // Quick Actions Data
+  const quickActions = [
+    { 
+      id: '1', 
+      title: tr.postNewJob, 
+      subtitle: tr.findWorkers, 
+      icon: 'add-business', 
+      color: colors.primary,
+      action: () => navigation.navigate('PostJob')
+    },
+    { 
+      id: '2', 
+      title: tr.viewApplications, 
+      subtitle: `${futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0)} ${locale === 'hi' ? 'नए' : 'new'}`, 
+      icon: 'people', 
+      color: colors.success,
+      action: () => navigation.navigate('Applications')
+    },
+    { 
+      id: '3', 
+      title: tr.pastJobs, 
+      subtitle: `${pastJobs.length} ${locale === 'hi' ? 'पूर्ण' : 'completed'}`, 
+      icon: 'history', 
+      color: colors.warning,
+      action: () => setShowPastJobs(true)
+    },
+    { 
+      id: '4', 
+      title: tr.settings, 
+      subtitle: tr.manageSubscription, 
+      icon: 'settings', 
+      color: colors.info,
+      action: () => navigation.navigate('EmployerProfile')
+    },
+  ];
+
+  // Stats Data
+  const statsData = [
+    {
+      id: '1',
+      title: tr.upcomingJobs,
+      value: futureJobs.length,
+      subtitle: tr.futureDates,
+      icon: 'event',
+      color: colors.primary,
+    },
+    {
+      id: '2',
+      title: tr.totalHires,
+      value: pastJobs.reduce((sum, job) => sum + (job.applications?.filter(app => app.status === 'completed').length || 0), 0),
+      subtitle: tr.completedWork,
+      icon: 'work',
+      color: colors.success,
+    },
+    {
+      id: '3',
+      title: tr.applications,
+      value: futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0),
+      subtitle: tr.totalReceived,
+      icon: 'description',
+      color: colors.info,
+    },
+    {
+      id: '4',
+      title: tr.responseRate,
+      value: '92%',
+      subtitle: '24h response',
+      icon: 'trending-up',
+      color: colors.warning,
+    },
+  ];
+
+  // Determine which jobs to show based on showAllJobs state
+  const jobsToShow = showAllJobs ? futureJobs : futureJobs.slice(0, 3);
 
   if (loading && !refreshing) {
     return (
@@ -389,32 +552,117 @@ export default function EmployerHomeScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.greeting}>
-              {tr.welcome}, {getGreetingName()}! 👋
-            </Text>
-            <Text style={styles.subGreeting}>{tr.subtitle}</Text>
-          </View>
-          <TouchableOpacity 
-            style={styles.profileButton}
-            onPress={() => navigation.navigate('EmployerProfile')}
-          >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {userProfile?.name?.charAt(0) || (locale === 'hi' ? 'नि' : 'E')}
-              </Text>
+      {/* Fixed Header with Padding */}
+      <View style={styles.fixedHeader}>
+        <LinearGradient
+          colors={[colors.primary, colors.primaryDark]}
+          style={styles.headerGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+        >
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.greeting}>{getGreetingMessage()}</Text>
+              <Text style={styles.subGreeting}>{tr.subtitle} 👋</Text>
             </View>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity 
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('EmployerProfile')}
+            >
+              <Image 
+                source={{ 
+                  uri: userProfile?.photoURL || defaultAvatar 
+                }}
+                style={styles.avatar}
+              />
+              {userProfile?.subscriptionStatus === 'active' && (
+                <View style={styles.premiumBadge}>
+                  <Icon name="star" size={12} color={colors.white} />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+          
+          {/* Subscription/Free Posts Card */}
+          <View style={styles.subscriptionCard}>
+            {isSubscriptionActive() ? (
+              <View style={styles.premiumCard}>
+                <View style={styles.premiumCardContent}>
+                  <View style={styles.premiumIcon}>
+                    <Icon name="workspace-premium" size={24} color={colors.white} />
+                  </View>
+                  <View style={styles.premiumInfo}>
+                    <Text style={styles.premiumTitle}>{tr.activeSubscription}</Text>
+                    <Text style={styles.premiumSubtitle}>
+                      {tr.unlimitedJobPosting} • {tr.daysLeft}: {postingStats?.subscriptionExpiry ? 
+                        new Date(postingStats.subscriptionExpiry).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')
+                        : tr.expiresNotSet}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity 
+                  style={styles.managePremiumButton}
+                  onPress={() => navigation.navigate('Subscription')}
+                >
+                  <Text style={styles.managePremiumText}>{tr.manageSubscription}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.freePostsCard}>
+                <View style={styles.freePostsHeader}>
+                  <Icon name="celebration" size={20} color={colors.white} />
+                  <Text style={styles.freePostsTitle}>{tr.freeJobPosts}</Text>
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>{tr.limitedTime}</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressLabels}>
+                    <Text style={styles.progressText}>
+                      {getFreePostsUsed()} / 3 {tr.freePostsUsed}
+                    </Text>
+                    <Text style={styles.progressText}>
+                      {getFreePostsRemaining()} {tr.freePostsRemaining}
+                    </Text>
+                  </View>
+                  <View style={styles.progressBar}>
+                    <View 
+                      style={[
+                        styles.progressFill,
+                        { width: `${(getFreePostsUsed() / 3) * 100}%` }
+                      ]}
+                    />
+                  </View>
+                </View>
+                
+                <TouchableOpacity 
+                  style={styles.upgradeButton}
+                  onPress={() => navigation.navigate('Subscription')}
+                >
+                  <LinearGradient
+                    colors={[colors.primary, colors.primaryDark]}
+                    style={styles.upgradeGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Icon name="rocket-launch" size={16} color={colors.white} />
+                    <Text style={styles.upgradeButtonText}>{tr.upgradeNow}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </LinearGradient>
       </View>
 
-      <ScrollView 
-        style={styles.scrollContent}
+      {/* Main Content with proper spacing */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -422,99 +670,111 @@ export default function EmployerHomeScreen({ navigation }) {
             tintColor={colors.primary}
           />
         }
-        showsVerticalScrollIndicator={false}
       >
         {/* Quick Stats Grid */}
-        <Text style={styles.sectionTitle}>{tr.overview}</Text>
-        <View style={styles.statsGrid}>
-          <StatCard 
-            value={futureJobs.length}
-            label={tr.upcomingJobs}
-            subtitle={tr.futureDates}
-            color={colors.primary}
-            icon="📅"
-          />
-          <StatCard 
-            value={pastJobs.length}
-            label={tr.pastJobs}
-            subtitle={tr.completedExpired}
-            color={colors.info}
-            icon="📝"
-          />
-          <StatCard 
-            value={futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0)}
-            label={tr.applications}
-            subtitle={tr.totalReceived}
-            color={colors.success}
-            icon="📨"
-          />
-          <StatCard 
-            value={pastJobs.reduce((sum, job) => sum + (job.applications?.filter(app => app.status === 'completed').length || 0), 0)}
-            label={tr.totalHires}
-            subtitle={tr.completedWork}
-            color={colors.warning}
-            icon="🎯"
-          />
+        <View style={styles.statsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{tr.overview}</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('EmployerProfile')}>
+              <Text style={styles.viewAllText}>{tr.viewInsights}</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.statsGrid}>
+            {statsData.map((stat) => (
+              <View key={stat.id} style={styles.statCard}>
+                <View style={[styles.statIconContainer, { backgroundColor: stat.color + '20' }]}>
+                  <Icon name={stat.icon} size={20} color={stat.color} />
+                </View>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statLabel}>{stat.title}</Text>
+                <Text style={styles.statSubtitle}>{stat.subtitle}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
         {/* Quick Actions */}
         <View style={styles.actionsSection}>
-          <TouchableOpacity 
-            style={styles.primaryAction}
-            onPress={() => navigation.navigate('PostJob')}
-          >
-            <View style={styles.actionContent}>
-              <Text style={styles.actionIcon}>+</Text>
-              <View style={styles.actionTexts}>
-                <Text style={styles.actionTitle}>{tr.postNewJob}</Text>
-                <Text style={styles.actionSubtitle}>{tr.findWorkers}</Text>
-              </View>
-            </View>
-            <Text style={styles.actionArrow}>›</Text>
-          </TouchableOpacity>
-
-          <View style={styles.secondaryActions}>
-            <TouchableOpacity 
-              style={styles.secondaryAction}
-              onPress={() => navigation.navigate('Applications')}
-            >
-              <Text style={styles.secondaryActionIcon}>👥</Text>
-              <Text style={styles.secondaryActionText}>{tr.viewApplications}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.secondaryAction}
-              onPress={() => setShowPastJobs(true)}
-            >
-              <Text style={styles.secondaryActionIcon}>📚</Text>
-              <Text style={styles.secondaryActionText}>{tr.pastJobs}</Text>
-              {pastJobs.length > 0 && (
-                <View style={styles.pastJobsBadge}>
-                  <Text style={styles.pastJobsBadgeText}>{pastJobs.length}</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{tr.quickActions}</Text>
+          </View>
+          
+          <View style={styles.actionsGrid}>
+            {quickActions.map((action) => (
+              <TouchableOpacity 
+                key={action.id} 
+                style={styles.actionCard}
+                onPress={action.action}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: action.color + '20' }]}>
+                  <Icon name={action.icon} size={24} color={action.color} />
                 </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.secondaryAction}
-              onPress={() => navigation.navigate('EmployerProfile')}
-            >
-              <Text style={styles.secondaryActionIcon}>⚙️</Text>
-              <Text style={styles.secondaryActionText}>{tr.settings}</Text>
-            </TouchableOpacity>
+                <Text style={styles.actionTitle}>{action.title}</Text>
+                <Text style={styles.actionSubtitle}>{action.subtitle}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
-        {/* Upcoming Job Posts Section */}
-        <View style={styles.section}>
+        {/* Subscription Promotion (if no active subscription) */}
+        {!isSubscriptionActive() && (
+          <TouchableOpacity 
+            style={styles.subscriptionPromo}
+            onPress={() => navigation.navigate('Subscription')}
+          >
+            <LinearGradient
+              colors={['#667eea', '#764ba2']}
+              style={styles.promoGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.promoContent}>
+                <View style={styles.promoTextContainer}>
+                  <Text style={styles.promoTitle}>🎯 {tr.subscriptionBenefits}</Text>
+                  <Text style={styles.promoSubtitle}>
+                    {tr.unlimitedPosts} • {tr.noPlatformFees} • {tr.prioritySupport}
+                  </Text>
+                </View>
+                <View style={styles.promoPriceContainer}>
+                  <Text style={styles.promoPrice}>₹49</Text>
+                  <Text style={styles.promoDuration}>/{locale === 'hi' ? 'माह' : 'month'}</Text>
+                </View>
+              </View>
+              <Icon name="arrow-forward" size={20} color={colors.white} style={styles.promoArrow} />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* Upcoming Jobs */}
+        <View style={styles.jobsSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{tr.upcomingJobs}</Text>
-            <View style={styles.jobCountBadge}>
-              <Text style={styles.jobCountText}>{futureJobs.length}</Text>
+            <View>
+              <Text style={styles.sectionTitle}>{tr.upcomingJobs}</Text>
+              <Text style={styles.sectionSubtitle}>
+                {futureJobs.length} {locale === 'hi' ? 'सक्रिय नौकरियां' : 'active jobs'}
+              </Text>
             </View>
+            {futureJobs.length > 0 && (
+              <TouchableOpacity 
+                style={styles.viewAllButton}
+                onPress={handleViewAllJobs}
+              >
+                <Text style={styles.viewAllButtonText}>
+                  {showAllJobs ? tr.viewLessJobs : tr.viewAllJobs}
+                </Text>
+                <Icon 
+                  name={showAllJobs ? "expand-less" : "chevron-right"} 
+                  size={16} 
+                  color={colors.primary} 
+                />
+              </TouchableOpacity>
+            )}
           </View>
 
           {futureJobs.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateIcon}>📅</Text>
+              <Icon name="work-outline" size={64} color={colors.textLight} />
               <Text style={styles.emptyStateTitle}>{tr.noUpcomingJobs}</Text>
               <Text style={styles.emptyStateSubtitle}>
                 {tr.noJobsDesc}
@@ -523,104 +783,89 @@ export default function EmployerHomeScreen({ navigation }) {
                 style={styles.emptyStateButton}
                 onPress={() => navigation.navigate('PostJob')}
               >
+                <Icon name="add" size={20} color={colors.white} />
                 <Text style={styles.emptyStateButtonText}>{tr.postNewJob}</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.jobsList}>
-              {futureJobs.map((job) => {
-                const completedCount = job.applications?.filter(app => app.status === 'completed').length || 0;
-                const totalApps = job.applications?.length || 0;
-                
-                return (
-                  <View key={job.id} style={styles.jobCard}>
-                    <TouchableOpacity 
-                      onPress={() => handleJobOptions(job, false)}
-                      style={styles.jobContent}
-                    >
-                      <View style={styles.jobHeader}>
-                        <View style={styles.jobTitleSection}>
-                          <Text style={styles.jobTitle}>{job.title}</Text>
-                          <View style={[
-                            styles.statusBadge,
-                            job.status === 'open' && styles.statusOpen,
-                            job.status === 'closed' && styles.statusCompleted,
-                            job.status === 'cancelled' && styles.statusCancelled
-                          ]}>
-                            <Text style={styles.statusText}>
-                              {getStatusText(job.status)}
-                            </Text>
-                          </View>
-                        </View>
-                        <Text style={styles.jobSalary}>₹{job.rate}/hr</Text>
-                      </View>
-                      
-                      {/* Job Date */}
-                      <View style={styles.jobDateSection}>
-                        <Text style={styles.jobDateIcon}>📅</Text>
-                        <Text style={styles.jobDateText}>
-                          {formatJobDate(job.jobDate, job.startTime)}
+              {jobsToShow.map((job) => (
+                <TouchableOpacity 
+                  key={job.id}
+                  style={styles.jobCard}
+                  onPress={() => handleJobCardPress(job)}
+                >
+                  <View style={styles.jobCardHeader}>
+                    <View style={styles.jobTitleContainer}>
+                      <Text style={styles.jobTitle}>{job.title}</Text>
+                      <View style={[
+                        styles.jobStatus,
+                        job.status === 'open' && styles.jobStatusActive,
+                        job.status === 'closed' && styles.jobStatusCompleted,
+                      ]}>
+                        <Text style={styles.jobStatusText}>
+                          {getStatusText(job.status)}
                         </Text>
                       </View>
-
-                      <View style={styles.jobDetails}>
-                        <View style={styles.jobDetail}>
-                          <Text style={styles.jobDetailIcon}>📍</Text>
-                          <Text style={styles.jobDetailText}>{job.location}</Text>
-                        </View>
-                        <View style={styles.jobDetail}>
-                          <Text style={styles.jobDetailIcon}>⏱️</Text>
-                          <Text style={styles.jobDetailText}>
-                            {job.hours || job.expectedDuration} {locale === 'hi' ? 'घंटे' : 'hours'}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Show completed count if any */}
-                      {completedCount > 0 && (
-                        <View style={styles.completedBadge}>
-                          <Text style={styles.completedBadgeText}>
-                            ✅ {completedCount} {completedCount === 1 ? tr.worker : tr.workers} {locale === 'hi' ? 'पूर्ण' : 'completed'}
-                          </Text>
-                        </View>
-                      )}
-
-                      <Text style={styles.jobDescription} numberOfLines={2}>
-                        {job.description}
+                    </View>
+                    <Text style={styles.jobSalary}>₹{job.rate}/hr</Text>
+                  </View>
+                  
+                  <View style={styles.jobDetails}>
+                    <View style={styles.jobDetail}>
+                      <Icon name="location-on" size={14} color={colors.textLight} />
+                      <Text style={styles.jobDetailText}>{job.location}</Text>
+                    </View>
+                    <View style={styles.jobDetail}>
+                      <Icon name="access-time" size={14} color={colors.textLight} />
+                      <Text style={styles.jobDetailText}>
+                        {formatJobDate(job.jobDate, job.startTime)}
                       </Text>
-
-                      <View style={styles.jobFooter}>
-                        <View style={styles.applicationsInfo}>
-                          <Text style={styles.applicationsIcon}>📨</Text>
-                          <Text style={[
-                            styles.applicationsCount,
-                            totalApps > 0 && styles.hasApplications
-                          ]}>
-                            {totalApps} {locale === 'hi' ? 'आवेदन' : 'applications'}
-                          </Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-
-                    {/* Quick Actions for Job */}
-                    <View style={styles.jobActions}>
-                      {totalApps > 0 && (
-                        <TouchableOpacity
-                          style={[styles.jobActionButton, styles.viewAppsButton]}
-                          onPress={() => navigation.navigate('Applications', { 
-                            jobId: job.id, 
-                            jobTitle: job.title 
-                          })}
-                        >
-                          <Text style={styles.jobActionText}>
-                            👀 {locale === 'hi' ? 'देखें' : 'View'} ({totalApps})
-                          </Text>
-                        </TouchableOpacity>
-                      )}
                     </View>
                   </View>
-                );
-              })}
+                  
+                  <View style={styles.jobFooter}>
+                    <View style={styles.applicationsContainer}>
+                      <Icon name="people" size={16} color={colors.primary} />
+                      <Text style={styles.applicationsCount}>
+                        {job.applications?.length || 0} {tr.applicationsCount}
+                      </Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.viewApplicationsButton}
+                      onPress={() => {
+                        setShowJobDetails(false);
+                        navigation.navigate('Applications', { 
+                          jobId: job.id,
+                          jobTitle: job.title 
+                        });
+                      }}
+                    >
+                      <Text style={styles.viewApplicationsText}>
+                        {locale === 'hi' ? 'आवेदन देखें' : 'View Applications'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              ))}
+              
+              {/* View More Jobs Button - Always visible when there are more than 3 jobs and not showing all */}
+              {futureJobs.length > 3 && !showAllJobs && (
+                <TouchableOpacity 
+                  style={styles.viewMoreJobs}
+                  onPress={handleViewAllJobs}
+                >
+                  <View style={styles.viewMoreIconContainer}>
+                    <Icon name="add" size={20} color={colors.primary} />
+                  </View>
+                  <Text style={styles.viewMoreText}>
+                    {locale === 'hi' ? 
+                      `+ ${futureJobs.length - 3} और नौकरियां देखें` : 
+                      `+${futureJobs.length - 3} ${tr.viewMoreJobs}`
+                    }
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
@@ -628,6 +873,153 @@ export default function EmployerHomeScreen({ navigation }) {
         {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
+
+      {/* Floating Post Job Button */}
+      {/* FIXED: Always show the floating button, but change text based on free posts */}
+      <TouchableOpacity 
+        style={styles.floatingButton}
+        onPress={() => navigation.navigate('PostJob')}
+      >
+        <LinearGradient
+          colors={[colors.primary, colors.primaryDark]}
+          style={styles.floatingButtonGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+        >
+          <Icon name="add" size={24} color={colors.white} />
+          <Text style={styles.floatingButtonText}>
+            {isSubscriptionActive() 
+              ? (locale === 'hi' ? 'नौकरी पोस्ट करें' : 'Post Job')
+              : getFreePostsRemaining() > 0
+                ? (locale === 'hi' ? 'मुफ्त नौकरी पोस्ट करें' : 'Post Free Job')
+                : (locale === 'hi' ? 'नौकरी पोस्ट करें' : 'Post Job')
+            }
+          </Text>
+        </LinearGradient>
+      </TouchableOpacity>
+
+      {/* Job Details Modal */}
+      <Modal
+        visible={showJobDetails}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowJobDetails(false)}
+      >
+        <View style={styles.jobDetailsModal}>
+          <View style={styles.jobDetailsContent}>
+            <View style={styles.jobDetailsHeader}>
+              <Text style={styles.jobDetailsTitle}>{tr.jobDetails}</Text>
+              <TouchableOpacity 
+                style={styles.jobDetailsCloseButton}
+                onPress={() => setShowJobDetails(false)}
+              >
+                <Icon name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            
+            {selectedJob && (
+              <ScrollView style={styles.jobDetailsScroll} showsVerticalScrollIndicator={false}>
+                <View style={styles.jobDetailsCard}>
+                  <View style={styles.jobDetailsHeaderRow}>
+                    <Text style={styles.jobDetailsJobTitle}>{selectedJob.title}</Text>
+                    <Text style={styles.jobDetailsSalary}>₹{selectedJob.rate}/hr</Text>
+                  </View>
+                  
+                  <View style={styles.jobDetailsStatusContainer}>
+                    <View style={[
+                      styles.jobDetailsStatus,
+                      selectedJob.status === 'open' && styles.jobDetailsStatusActive,
+                      selectedJob.status === 'closed' && styles.jobDetailsStatusCompleted,
+                    ]}>
+                      <Text style={styles.jobDetailsStatusText}>
+                        {getStatusText(selectedJob.status)}
+                      </Text>
+                    </View>
+                    <Text style={styles.jobDetailsDate}>
+                      {formatJobDate(selectedJob.jobDate, selectedJob.startTime)}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.jobDetailsSection}>
+                    <View style={styles.jobDetailsRow}>
+                      <Icon name="location-on" size={18} color={colors.textLight} />
+                      <Text style={styles.jobDetailsLocation}>{selectedJob.location}</Text>
+                    </View>
+                    
+                    {selectedJob.duration && (
+                      <View style={styles.jobDetailsRow}>
+                        <Icon name="access-time" size={18} color={colors.textLight} />
+                        <Text style={styles.jobDetailsDuration}>{selectedJob.duration} hours</Text>
+                      </View>
+                    )}
+                    
+                    <View style={styles.jobDetailsRow}>
+                      <Icon name="people" size={18} color={colors.textLight} />
+                      <Text style={styles.jobDetailsApplications}>
+                        {selectedJob.applications?.length || 0} {tr.applicationsCount}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  {selectedJob.description && (
+                    <View style={styles.jobDetailsSection}>
+                      <Text style={styles.jobDetailsSectionTitle}>{tr.jobDescription}</Text>
+                      <Text style={styles.jobDetailsDescription}>{selectedJob.description}</Text>
+                    </View>
+                  )}
+                  
+                  {selectedJob.requirements && (
+                    <View style={styles.jobDetailsSection}>
+                      <Text style={styles.jobDetailsSectionTitle}>{tr.requirements}</Text>
+                      <Text style={styles.jobDetailsDescription}>{selectedJob.requirements}</Text>
+                    </View>
+                  )}
+                  
+                  <View style={styles.jobDetailsSection}>
+                    <Text style={styles.jobDetailsSectionTitle}>{tr.contactInfo}</Text>
+                    {userProfile?.email && (
+                      <View style={styles.jobDetailsRow}>
+                        <Icon name="email" size={18} color={colors.textLight} />
+                        <Text style={styles.jobDetailsContact}>{userProfile.email}</Text>
+                      </View>
+                    )}
+                    {userProfile?.phone && (
+                      <View style={styles.jobDetailsRow}>
+                        <Icon name="phone" size={18} color={colors.textLight} />
+                        <Text style={styles.jobDetailsContact}>{userProfile.phone}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </ScrollView>
+            )}
+            
+            <View style={styles.jobDetailsActions}>
+              <TouchableOpacity 
+                style={styles.jobDetailsCloseBtn}
+                onPress={() => setShowJobDetails(false)}
+              >
+                <Text style={styles.jobDetailsCloseBtnText}>{tr.close}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.jobDetailsViewApplicationsBtn}
+                onPress={() => {
+                  setShowJobDetails(false);
+                  navigation.navigate('Applications', { 
+                    jobId: selectedJob?.id,
+                    jobTitle: selectedJob?.title 
+                  });
+                }}
+              >
+                <Icon name="visibility" size={18} color={colors.white} />
+                <Text style={styles.jobDetailsViewApplicationsText}>
+                  {tr.viewAllApplications}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Past Jobs Modal */}
       <Modal
@@ -638,119 +1030,72 @@ export default function EmployerHomeScreen({ navigation }) {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{tr.modalTitle}</Text>
+            <Text style={styles.modalTitle}>{tr.pastJobs}</Text>
             <TouchableOpacity 
-              style={styles.closeButton}
+              style={styles.modalCloseButton}
               onPress={() => setShowPastJobs(false)}
             >
-              <Text style={styles.closeButtonText}>✕</Text>
+              <Icon name="close" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalContent}>
-            {pastJobs.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateIcon}>📝</Text>
-                <Text style={styles.emptyStateTitle}>{tr.noPastJobs}</Text>
-                <Text style={styles.emptyStateSubtitle}>
+          <FlatList
+            data={pastJobs}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.modalContent}
+            ListEmptyComponent={
+              <View style={styles.modalEmptyState}>
+                <Icon name="history" size={64} color={colors.textLight} />
+                <Text style={styles.modalEmptyStateTitle}>{tr.noPastJobs}</Text>
+                <Text style={styles.modalEmptyStateSubtitle}>
                   {tr.pastJobsDesc}
                 </Text>
               </View>
-            ) : (
-              <View style={styles.jobsList}>
-                {pastJobs.map((job) => {
-                  const completedCount = job.applications?.filter(app => app.status === 'completed').length || 0;
-                  const totalApps = job.applications?.length || 0;
-                  
-                  return (
-                    <View key={job.id} style={styles.jobCard}>
-                      <TouchableOpacity 
-                        onPress={() => handleJobOptions(job, true)}
-                        style={styles.jobContent}
-                      >
-                        <View style={styles.jobHeader}>
-                          <View style={styles.jobTitleSection}>
-                            <Text style={styles.jobTitle}>{job.title}</Text>
-                            <View style={[
-                              styles.statusBadge,
-                              completedCount > 0 ? styles.statusCompleted : styles.statusExpired
-                            ]}>
-                              <Text style={styles.statusText}>
-                                {getStatusText(job.status, completedCount)}
-                              </Text>
-                            </View>
-                          </View>
-                          <Text style={styles.jobSalary}>₹{job.rate}/hr</Text>
-                        </View>
-                        
-                        {/* Job Date */}
-                        <View style={styles.jobDateSection}>
-                          <Text style={styles.jobDateIcon}>📅</Text>
-                          <Text style={styles.jobDateText}>
-                            {job.jobDate ? new Date(job.jobDate).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN') : (locale === 'hi' ? 'तारीख सेट नहीं' : 'Date not set')}
-                            {job.startTime ? `, ${job.startTime}` : ''}
-                          </Text>
-                        </View>
-
-                        <View style={styles.jobDetails}>
-                          <View style={styles.jobDetail}>
-                            <Text style={styles.jobDetailIcon}>📍</Text>
-                            <Text style={styles.jobDetailText}>{job.location}</Text>
-                          </View>
-                          <View style={styles.jobDetail}>
-                            <Text style={styles.jobDetailIcon}>👥</Text>
-                            <Text style={styles.jobDetailText}>
-                              {totalApps} {locale === 'hi' ? 'आवेदन' : 'application'}{totalApps !== 1 ? (locale === 'hi' ? ' ' : 's') : ''}
-                            </Text>
-                          </View>
-                        </View>
-
-                        {/* Completion Stats */}
-                        <View style={styles.completionStats}>
-                          <Text style={styles.completionText}>
-                            {completedCount} {locale === 'hi' ? 'पूर्ण' : tr.of} {totalApps} {locale === 'hi' ? 'में से' : 'completed'}
-                          </Text>
-                        </View>
-
-                        <Text style={styles.jobDescription} numberOfLines={2}>
-                          {job.description}
-                        </Text>
-                      </TouchableOpacity>
-
-                      {/* Delete Button for Past Jobs */}
-                      <View style={styles.jobActions}>
-                        <TouchableOpacity
-                          style={[styles.jobActionButton, styles.deleteButton]}
-                          onPress={() => handleDeletePastJob(job)}
-                        >
-                          <Text style={styles.deleteButtonText}>
-                            🗑 {locale === 'hi' ? 'हटाएं' : 'Delete'}
-                          </Text>
-                        </TouchableOpacity>
-                        
-                        {totalApps > 0 && (
-                          <TouchableOpacity
-                            style={[styles.jobActionButton, styles.viewAppsButton]}
-                            onPress={() => {
-                              setShowPastJobs(false);
-                              navigation.navigate('Applications', { 
-                                jobId: job.id, 
-                                jobTitle: job.title 
-                              });
-                            }}
-                          >
-                            <Text style={styles.jobActionText}>
-                              {locale === 'hi' ? 'आवेदन देखें' : 'View Apps'} ({totalApps})
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  );
-                })}
+            }
+            renderItem={({ item: job }) => (
+              <View style={styles.modalJobCard}>
+                <View style={styles.modalJobHeader}>
+                  <View>
+                    <Text style={styles.modalJobTitle}>{job.title}</Text>
+                    <Text style={styles.modalJobDate}>
+                      {formatJobDate(job.jobDate, job.startTime)}
+                    </Text>
+                  </View>
+                  <Text style={styles.modalJobSalary}>₹{job.rate}/hr</Text>
+                </View>
+                
+                <View style={styles.modalJobDetails}>
+                  <Text style={styles.modalJobLocation}>{job.location}</Text>
+                  <Text style={styles.modalJobApplications}>
+                    {job.applications?.filter(app => app.status === 'completed').length || 0} {locale === 'hi' ? 'पूर्ण' : 'completed'}
+                  </Text>
+                </View>
+                
+                <View style={styles.modalJobActions}>
+                  <TouchableOpacity 
+                    style={styles.modalDeleteButton}
+                    onPress={() => handleDeletePastJob(job)}
+                  >
+                    <Icon name="delete-outline" size={18} color={colors.error} />
+                    <Text style={styles.modalDeleteText}>{tr.deleteJob}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.modalViewButton}
+                    onPress={() => {
+                      setShowPastJobs(false);
+                      navigation.navigate('Applications', { 
+                        jobId: job.id,
+                        jobTitle: job.title 
+                      });
+                    }}
+                  >
+                    <Icon name="visibility" size={18} color={colors.primary} />
+                    <Text style={styles.modalViewText}>{tr.viewDetails}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
-          </ScrollView>
+          />
         </View>
       </Modal>
     </View>
@@ -769,68 +1114,209 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
     fontSize: 16,
     color: colors.textSecondary,
+    fontWeight: '500',
   },
-  header: {
-    backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    paddingTop: 50,
-    paddingHorizontal: 0,
+  // Fixed Header (No Animation)
+  fixedHeader: {
+    backgroundColor: colors.primary,
+    paddingTop: Platform.OS === 'ios' ? 50 : 40,
+    zIndex: 1000,
   },
-  headerContent: {
+  headerGradient: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    marginBottom: 20,
   },
   greeting: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.white,
     marginBottom: 4,
   },
   subGreeting: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    fontWeight: '400',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
   },
   profileButton: {
-    padding: 4,
+    position: 'relative',
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  premiumBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: colors.warning,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: colors.primaryLight,
+    borderColor: colors.white,
   },
-  avatarText: {
-    color: colors.white,
-    fontSize: 18,
+  // Subscription Card
+  subscriptionCard: {
+    marginTop: 10,
+  },
+  premiumCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  premiumCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  premiumIcon: {
+    marginRight: 12,
+  },
+  premiumInfo: {
+    flex: 1,
+  },
+  premiumTitle: {
+    fontSize: 16,
     fontWeight: '600',
+    color: colors.white,
+    marginBottom: 2,
+  },
+  premiumSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  managePremiumButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  managePremiumText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.white,
+  },
+  freePostsCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  freePostsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  freePostsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.white,
+    marginLeft: 8,
+    flex: 1,
+  },
+  newBadge: {
+    backgroundColor: colors.success,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  newBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  progressContainer: {
+    marginBottom: 16,
+  },
+  progressLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  progressText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.white,
+    borderRadius: 3,
+  },
+  upgradeButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  upgradeGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  upgradeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.white,
+    marginLeft: 8,
+  },
+  // Scroll View
+  scrollView: {
+    flex: 1,
   },
   scrollContent: {
-    flex: 1,
-    padding: 20,
+    paddingTop: 20,
+    paddingBottom: 100,
+  },
+  // Stats Section
+  statsSection: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: 16,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 24,
   },
   statCard: {
     backgroundColor: colors.white,
@@ -838,25 +1324,25 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     flex: 1,
     minWidth: (width - 52) / 2,
-    borderLeftWidth: 4,
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  statHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  statIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  statIcon: {
-    fontSize: 20,
+    marginBottom: 12,
   },
   statValue: {
     fontSize: 24,
     fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
   },
   statLabel: {
     fontSize: 14,
@@ -867,234 +1353,211 @@ const styles = StyleSheet.create({
   statSubtitle: {
     fontSize: 12,
     color: colors.textSecondary,
-    fontWeight: '400',
   },
+  // Actions Section
   actionsSection: {
-    marginBottom: 32,
+    paddingHorizontal: 20,
+    marginBottom: 24,
   },
-  primaryAction: {
-    backgroundColor: colors.primary,
-    padding: 20,
-    borderRadius: 16,
+  actionsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  actionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  actionIcon: {
-    fontSize: 24,
-    color: colors.white,
-    marginRight: 12,
-    fontWeight: '300',
-  },
-  actionTexts: {
-    flex: 1,
-  },
-  actionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.white,
-    marginBottom: 2,
-  },
-  actionSubtitle: {
-    fontSize: 14,
-    color: colors.white,
-    opacity: 0.9,
-    fontWeight: '400',
-  },
-  actionArrow: {
-    fontSize: 20,
-    color: colors.white,
-    fontWeight: '300',
-  },
-  secondaryActions: {
-    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
-  secondaryAction: {
-    flex: 1,
+  actionCard: {
     backgroundColor: colors.white,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
+    flex: 1,
+    minWidth: (width - 52) / 2,
     alignItems: 'center',
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-    position: 'relative',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  secondaryActionIcon: {
-    fontSize: 20,
-    marginBottom: 6,
-  },
-  secondaryActionText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.text,
-  },
-  pastJobsBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: colors.info,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  actionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.white,
+    marginBottom: 12,
   },
-  pastJobsBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: colors.white,
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  jobCountBadge: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  jobCountText: {
-    color: colors.white,
+  actionTitle: {
     fontSize: 14,
     fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  actionSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  // Subscription Promotion
+  subscriptionPromo: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#764ba2',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  promoGradient: {
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  promoContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  promoTextContainer: {
+    flex: 1,
+  },
+  promoTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.white,
+    marginBottom: 4,
+  },
+  promoSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  promoPriceContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginLeft: 16,
+  },
+  promoPrice: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: colors.white,
+  },
+  promoDuration: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginLeft: 2,
+  },
+  promoArrow: {
+    marginLeft: 12,
+  },
+  // Jobs Section
+  jobsSection: {
+    paddingHorizontal: 20,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  viewAllButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+    marginRight: 4,
   },
   emptyState: {
-    alignItems: 'center',
-    padding: 48,
     backgroundColor: colors.white,
+    padding: 40,
     borderRadius: 16,
-    borderWidth: 2,
-    borderColor: colors.borderLight,
-    borderStyle: 'dashed',
-  },
-  emptyStateIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+    alignItems: 'center',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   emptyStateTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.text,
+    marginTop: 16,
     marginBottom: 8,
-    textAlign: 'center',
   },
   emptyStateSubtitle: {
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
     lineHeight: 20,
+    marginBottom: 24,
   },
   emptyStateButton: {
     backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   emptyStateButtonText: {
     color: colors.white,
     fontSize: 16,
     fontWeight: '600',
+    marginLeft: 8,
   },
   jobsList: {
-    gap: 16,
+    gap: 12,
   },
   jobCard: {
     backgroundColor: colors.white,
     borderRadius: 16,
-    overflow: 'hidden',
+    padding: 16,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  jobContent: {
-    padding: 20,
-  },
-  jobHeader: {
+  jobCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
   },
-  jobTitleSection: {
+  jobTitleContainer: {
     flex: 1,
     marginRight: 12,
   },
   jobTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 6,
-    lineHeight: 22,
+    marginBottom: 8,
   },
-  statusBadge: {
+  jobStatus: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 6,
   },
-  statusOpen: {
-    backgroundColor: colors.successLight,
+  jobStatusActive: {
+    backgroundColor: colors.success + '20',
   },
-  statusCompleted: {
-    backgroundColor: colors.success + '30',
+  jobStatusCompleted: {
+    backgroundColor: colors.warning + '20',
   },
-  statusExpired: {
-    backgroundColor: colors.warning + '30',
-  },
-  statusCancelled: {
-    backgroundColor: colors.errorLight,
-  },
-  statusText: {
-    fontSize: 11,
+  jobStatusText: {
+    fontSize: 10,
     fontWeight: '700',
     color: colors.text,
   },
   jobSalary: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.primary,
-  },
-  jobDateSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary + '10',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  jobDateIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  jobDateText: {
-    fontSize: 14,
-    fontWeight: '600',
     color: colors.primary,
   },
   jobDetails: {
@@ -1107,105 +1570,253 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  jobDetailIcon: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
   jobDetailText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  completedBadge: {
-    backgroundColor: colors.success + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-  },
-  completedBadgeText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: colors.success,
-  },
-  completionStats: {
-    backgroundColor: colors.info + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-  },
-  completionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.info,
-  },
-  jobDescription: {
-    fontSize: 14,
     color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 16,
   },
   jobFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
   },
-  applicationsInfo: {
+  applicationsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  applicationsIcon: {
-    fontSize: 14,
-  },
   applicationsCount: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  viewApplicationsButton: {
+    backgroundColor: colors.primary + '10',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  viewApplicationsText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  viewMoreJobs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderStyle: 'dashed',
+  },
+  viewMoreIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary + '10',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  viewMoreText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  // Floating Button
+  floatingButton: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    borderRadius: 25,
+    overflow: 'hidden',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  floatingButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  floatingButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  bottomSpacing: {
+    height: 40,
+  },
+  // Job Details Modal
+  jobDetailsModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  jobDetailsContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: height * 0.9,
+  },
+  jobDetailsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  jobDetailsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  jobDetailsCloseButton: {
+    padding: 4,
+  },
+  jobDetailsScroll: {
+    padding: 20,
+  },
+  jobDetailsCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  jobDetailsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  jobDetailsJobTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    flex: 1,
+    marginRight: 12,
+  },
+  jobDetailsSalary: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  jobDetailsStatusContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  jobDetailsStatus: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: colors.success + '20',
+  },
+  jobDetailsStatusActive: {
+    backgroundColor: colors.success + '20',
+  },
+  jobDetailsStatusCompleted: {
+    backgroundColor: colors.warning + '20',
+  },
+  jobDetailsStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  jobDetailsDate: {
     fontSize: 14,
     color: colors.textSecondary,
     fontWeight: '500',
   },
-  hasApplications: {
-    color: colors.primary,
+  jobDetailsSection: {
+    marginBottom: 24,
+  },
+  jobDetailsSectionTitle: {
+    fontSize: 16,
     fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
   },
-  jobDate: {
-    fontSize: 12,
-    color: colors.textTertiary,
-    fontWeight: '500',
-  },
-  jobActions: {
+  jobDetailsRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  jobDetailsLocation: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginLeft: 8,
+    flex: 1,
+  },
+  jobDetailsDuration: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginLeft: 8,
+  },
+  jobDetailsApplications: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginLeft: 8,
+  },
+  jobDetailsDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  jobDetailsContact: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginLeft: 8,
+  },
+  jobDetailsActions: {
+    flexDirection: 'row',
+    padding: 20,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
+    gap: 12,
   },
-  jobActionButton: {
+  jobDetailsCloseBtn: {
     flex: 1,
-    padding: 14,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.borderLight,
+    alignItems: 'center',
+  },
+  jobDetailsCloseBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  jobDetailsViewApplicationsBtn: {
+    flex: 2,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  viewAppsButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
     backgroundColor: colors.primary,
-    borderRightWidth: 1,
-    borderRightColor: colors.white,
+    gap: 8,
   },
-  deleteButton: {
-    backgroundColor: colors.error,
-  },
-  jobActionText: {
-    color: colors.white,
-    fontSize: 14,
+  jobDetailsViewApplicationsText: {
+    fontSize: 16,
     fontWeight: '600',
-  },
-  deleteButtonText: {
     color: colors.white,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  bottomSpacing: {
-    height: 20,
   },
   // Modal Styles
   modalContainer: {
@@ -1228,16 +1839,108 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
   },
-  closeButton: {
+  modalCloseButton: {
     padding: 4,
   },
-  closeButtonText: {
-    fontSize: 24,
-    color: colors.textSecondary,
-    fontWeight: '300',
-  },
   modalContent: {
-    flex: 1,
     padding: 20,
+    paddingBottom: 40,
+  },
+  modalEmptyState: {
+    alignItems: 'center',
+    padding: 48,
+  },
+  modalEmptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  modalEmptyStateSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalJobCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  modalJobHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  modalJobTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  modalJobDate: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  modalJobSalary: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  modalJobDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalJobLocation: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  modalJobApplications: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.success,
+  },
+  modalJobActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalDeleteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.error + '10',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  modalDeleteText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.error,
+  },
+  modalViewButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary + '10',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  modalViewText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });

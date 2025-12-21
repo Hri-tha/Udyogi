@@ -23,6 +23,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { colors } from '../../constants/colors';
 import { useLanguage } from '../../context/LanguageContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -36,6 +37,7 @@ export default function LoginScreen({ navigation, route }) {
   const [otpSent, setOtpSent] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [otpFocusedIndex, setOtpFocusedIndex] = useState(null);
+  const phoneInputRef = useRef(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -44,13 +46,13 @@ export default function LoginScreen({ navigation, route }) {
 
   const translations = {
     en: {
-      title: otpSent ? 'Enter Verification Code' : 'Welcome Back',
+      title: otpSent ? 'Enter Verification Code' : 'Enter Mobile Number',
       subtitle: otpSent 
-        ? `We've sent a 6-digit code to +91 ${phoneNumber}`
-        : 'Enter your mobile number to continue',
-      phonePlaceholder: 'Enter mobile number',
-      sendOtp: 'Send OTP',
-      verifyContinue: 'Verify & Continue',
+        ? `Code sent to +91 ${phoneNumber}`
+        : 'We\'ll send you an OTP to verify your number',
+      phonePlaceholder: 'Enter 10-digit mobile number',
+      sendOtp: 'CONTINUE',
+      verifyContinue: 'VERIFY OTP',
       resendOtp: 'Resend OTP',
       changeNumber: 'Change Number',
       continueAs: 'Continue as',
@@ -75,16 +77,19 @@ export default function LoginScreen({ navigation, route }) {
       tapToSwitch: 'Tap to switch',
       appName: 'Udyogi',
       welcome: 'Welcome to',
-      orContinueAs: 'Or continue as'
+      orContinueAs: 'Or continue as',
+      didNotReceive: 'Didn\'t receive OTP?',
+      resendIn: 'Resend in',
+      seconds: 'seconds'
     },
     hi: {
-      title: otpSent ? 'सत्यापन कोड दर्ज करें' : 'वापसी पर स्वागत है',
+      title: otpSent ? 'सत्यापन कोड दर्ज करें' : 'मोबाइल नंबर दर्ज करें',
       subtitle: otpSent 
-        ? `हमने +91 ${phoneNumber} पर 6-अंकीय कोड भेजा है`
-        : 'जारी रखने के लिए अपना मोबाइल नंबर दर्ज करें',
-      phonePlaceholder: 'मोबाइल नंबर दर्ज करें',
-      sendOtp: 'OTP भेजें',
-      verifyContinue: 'सत्यापित करें और जारी रखें',
+        ? `+91 ${phoneNumber} पर कोड भेजा गया`
+        : 'हम आपके नंबर को सत्यापित करने के लिए OTP भेजेंगे',
+      phonePlaceholder: '10-अंकीय मोबाइल नंबर दर्ज करें',
+      sendOtp: 'जारी रखें',
+      verifyContinue: 'OTP सत्यापित करें',
       resendOtp: 'OTP फिर से भेजें',
       changeNumber: 'नंबर बदलें',
       continueAs: 'के रूप में जारी रखें',
@@ -109,7 +114,10 @@ export default function LoginScreen({ navigation, route }) {
       tapToSwitch: 'बदलने के लिए टैप करें',
       appName: 'उद्योगी',
       welcome: 'आपका स्वागत है',
-      orContinueAs: 'या के रूप में जारी रखें'
+      orContinueAs: 'या के रूप में जारी रखें',
+      didNotReceive: 'OTP प्राप्त नहीं हुआ?',
+      resendIn: 'सेकंड में फिर से भेजें',
+      seconds: 'सेकंड'
     }
   };
 
@@ -142,6 +150,22 @@ export default function LoginScreen({ navigation, route }) {
     };
   }, []);
 
+  useEffect(() => {
+    // Load saved phone number if exists
+    const loadSavedPhone = async () => {
+      try {
+        const savedPhone = await AsyncStorage.getItem('last_used_phone');
+        if (savedPhone) {
+          setPhoneNumber(savedPhone);
+        }
+      } catch (error) {
+        console.log('Error loading saved number:', error);
+      }
+    };
+    
+    loadSavedPhone();
+  }, []);
+
   const shakeAnimation = () => {
     Animated.sequence([
       Animated.timing(shakeAnim, { toValue: 10, duration: 100, useNativeDriver: true }),
@@ -167,6 +191,8 @@ export default function LoginScreen({ navigation, route }) {
 
       if (result.data.success) {
         setOtpSent(true);
+        // Save phone number for future use
+        await AsyncStorage.setItem('last_used_phone', phoneNumber);
 
         if (result.data.devOTP) {
           Alert.alert(
@@ -305,29 +331,13 @@ export default function LoginScreen({ navigation, route }) {
   };
 
   const handleSwitchUserType = () => {
-    Alert.alert(
-      tr.switchAccount,
-      tr.switchMessage,
-      [
-        {
-          text: tr.cancel,
-          style: 'cancel'
-        },
-        {
-          text: tr.switch,
-          onPress: () => {
-            setPhoneNumber('');
-            setOtp('');
-            setOtpSent(false);
+    const oppositeUserType = userType === 'worker' ? 'employer' : 'worker';
+    navigation.replace('Login', { userType: oppositeUserType });
+  };
 
-            const oppositeUserType = userType === 'worker' ? 'employer' : 'worker';
-
-            navigation.replace('Login', { userType: oppositeUserType });
-          },
-          style: 'default'
-        }
-      ]
-    );
+  const handleClearInput = () => {
+    setPhoneNumber('');
+    phoneInputRef.current?.focus();
   };
 
   return (
@@ -351,72 +361,94 @@ export default function LoginScreen({ navigation, route }) {
             }
           ]}
         >
-          {/* Logo and App Name Section */}
+          {/* Logo Section - Clean and simple like real apps */}
           <View style={styles.logoSection}>
             <Image 
               source={require('../../assets/images/UdyogiLogo.png')}
               style={styles.logo}
               resizeMode="contain"
             />
-            <Text style={styles.welcomeText}>{tr.welcome}</Text>
-            <Text style={styles.appName}>{tr.appName}</Text>
-            <Text style={styles.tagline}>
-              {userType === 'worker' 
-                ? (locale === 'hi' ? 'नौकरी खोजें, आगे बढ़ें' : 'Find Jobs, Grow Forward')
-                : (locale === 'hi' ? 'प्रतिभा खोजें, व्यवसाय बढ़ाएं' : 'Find Talent, Grow Business')
-              }
-            </Text>
+            <View style={styles.userTypeContainer}>
+              <Text style={styles.userTypeLabel}>
+                {userType === 'worker' ? tr.worker : tr.employer}
+              </Text>
+            </View>
           </View>
 
           {/* Main Form Section */}
           <View style={styles.formSection}>
-            {/* User Type Badge */}
-            <TouchableOpacity
-              style={[
-                styles.userTypeBadge,
-                userType === 'worker' ? styles.workerBadge : styles.employerBadge
-              ]}
-              onPress={handleSwitchUserType}
-              activeOpacity={0.7}
-            >
-              <View style={styles.badgeContent}>
-                <Text style={styles.badgeIcon}>
-                  {userType === 'worker' ? '👷' : '💼'}
-                </Text>
-                <View style={styles.badgeTextContainer}>
-                  <Text style={styles.badgeTitle}>
-                    {userType === 'worker' ? tr.worker : tr.employer}
-                  </Text>
-                  <Text style={styles.badgeSubtitle}>{tr.tapToSwitch}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-
             <View style={styles.formHeader}>
               <Text style={styles.title}>{tr.title}</Text>
               <Text style={styles.subtitle}>{tr.subtitle}</Text>
             </View>
 
             {!otpSent ? (
-              <Animated.View style={[styles.inputContainer, { transform: [{ translateX: shakeAnim }] }]}>
-                <View style={styles.phoneInputWrapper}>
-                  <View style={styles.countryCodeWrapper}>
-                    <Text style={styles.countryCode}>🇮🇳 +91</Text>
+              <View style={styles.phoneInputContainer}>
+                <Animated.View style={[styles.inputContainer, { transform: [{ translateX: shakeAnim }] }]}>
+                  <View style={styles.phoneInputWrapper}>
+                    <View style={styles.countryCodeWrapper}>
+                      <Text style={styles.countryCode}>🇮🇳 +91</Text>
+                    </View>
+                    <TextInput
+                      ref={phoneInputRef}
+                      style={styles.phoneInput}
+                      placeholder={tr.phonePlaceholder}
+                      placeholderTextColor={colors.textPlaceholder}
+                      keyboardType="phone-pad"
+                      maxLength={10}
+                      value={phoneNumber}
+                      onChangeText={setPhoneNumber}
+                      editable={!loading}
+                      autoFocus={true}
+                      selectionColor={colors.primary}
+                    />
+                    {phoneNumber.length > 0 && (
+                      <TouchableOpacity 
+                        style={styles.clearButton}
+                        onPress={handleClearInput}
+                        disabled={loading}
+                      >
+                        <Text style={styles.clearButtonText}>✕</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
-                  <TextInput
-                    style={styles.phoneInput}
-                    placeholder={tr.phonePlaceholder}
-                    placeholderTextColor={colors.textPlaceholder}
-                    keyboardType="phone-pad"
-                    maxLength={10}
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    editable={!loading}
-                    autoFocus={!keyboardVisible}
-                    selectionColor={colors.primary}
-                  />
+                </Animated.View>
+
+                {/* User Type Toggle - Like Zomato/Swiggy */}
+                <View style={styles.userTypeToggleContainer}>
+                  <Text style={styles.userTypeToggleLabel}>
+                    {tr.continueAs}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.userTypeToggle}
+                    onPress={handleSwitchUserType}
+                    disabled={loading}
+                  >
+                    <View style={[
+                      styles.toggleOption,
+                      userType === 'worker' && styles.toggleOptionActive
+                    ]}>
+                      <Text style={[
+                        styles.toggleOptionText,
+                        userType === 'worker' && styles.toggleOptionTextActive
+                      ]}>
+                        {locale === 'hi' ? 'मजदूर' : 'Worker'}
+                      </Text>
+                    </View>
+                    <View style={[
+                      styles.toggleOption,
+                      userType === 'employer' && styles.toggleOptionActive
+                    ]}>
+                      <Text style={[
+                        styles.toggleOptionText,
+                        userType === 'employer' && styles.toggleOptionTextActive
+                      ]}>
+                        {locale === 'hi' ? 'नियोक्ता' : 'Employer'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
-              </Animated.View>
+              </View>
             ) : (
               <View style={styles.otpContainer}>
                 <Text style={styles.otpLabel}>{tr.enterOtp}</Text>
@@ -442,18 +474,30 @@ export default function LoginScreen({ navigation, route }) {
                     />
                   ))}
                 </View>
-                {otpSent && (
+                
+                <View style={styles.otpActions}>
+                  <TouchableOpacity
+                    onPress={handleResendOTP}
+                    disabled={loading}
+                  >
+                    <Text style={[
+                      styles.resendButtonText,
+                      loading && styles.resendButtonTextDisabled
+                    ]}>
+                      {tr.resendOtp}
+                    </Text>
+                  </TouchableOpacity>
+                  
                   <TouchableOpacity
                     onPress={() => {
                       setOtpSent(false);
                       setOtp('');
                       Keyboard.dismiss();
                     }}
-                    style={styles.changeNumberButton}
                   >
-                    <Text style={styles.changeNumberText}>✏️ {tr.changeNumber}</Text>
+                    <Text style={styles.changeNumberText}>{tr.changeNumber}</Text>
                   </TouchableOpacity>
-                )}
+                </View>
               </View>
             )}
 
@@ -482,53 +526,13 @@ export default function LoginScreen({ navigation, route }) {
               )}
             </TouchableOpacity>
 
-            {otpSent && (
-              <View style={styles.resendContainer}>
-                <Text style={styles.resendText}>
-                  {locale === 'hi' ? 'कोड नहीं मिला?' : "Didn't receive code?"}
-                </Text>
-                <TouchableOpacity onPress={handleResendOTP} disabled={loading}>
-                  <Text style={[
-                    styles.resendButtonText,
-                    loading && styles.resendButtonTextDisabled
-                  ]}>
-                    {tr.resendOtp}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Switch User Type Option */}
-            {!otpSent && !keyboardVisible && (
-              <View style={styles.switchTypeContainer}>
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>{tr.orContinueAs}</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-                <TouchableOpacity
-                  style={styles.switchTypeButton}
-                  onPress={handleSwitchUserType}
-                  disabled={loading}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.switchTypeIcon}>
-                    {userType === 'worker' ? '💼' : '👷'}
-                  </Text>
-                  <Text style={styles.switchTypeText}>
-                    {userType === 'worker' ? tr.employer : tr.worker}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
             {/* Terms and Conditions */}
             <Text style={styles.termsText}>
               {tr.terms}
             </Text>
           </View>
 
-          {/* Help Section */}
+          {/* Help Section - Only show when keyboard is hidden */}
           {!keyboardVisible && (
             <View style={styles.helpSection}>
               <TouchableOpacity
@@ -562,12 +566,12 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
   },
   content: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
   },
   logoSection: {
     alignItems: 'center',
@@ -575,99 +579,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 16,
+    width: 90,
+    height: 90,
+    marginBottom: 10,
   },
-  welcomeText: {
-    fontSize: 18,
+  userTypeContainer: {
+    marginTop: 8,
+  },
+  userTypeLabel: {
+    fontSize: 13,
     color: colors.textSecondary,
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
-  },
-  appName: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: colors.primary,
-    marginBottom: 8,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
-  },
-  tagline: {
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-    maxWidth: '80%',
-    lineHeight: 20,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   formSection: {
     width: '100%',
     paddingHorizontal: 24,
     alignItems: 'center',
   },
-  userTypeBadge: {
-    width: '100%',
-    maxWidth: 200,
-    borderRadius: 20,
-    marginBottom: 32,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  workerBadge: {
-    backgroundColor: colors.warningLight,
-    borderWidth: 1.5,
-    borderColor: colors.warning,
-  },
-  employerBadge: {
-    backgroundColor: colors.secondaryLight,
-    borderWidth: 1.5,
-    borderColor: colors.secondary,
-  },
-  badgeContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeIcon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  badgeTextContainer: {
-    alignItems: 'center',
-  },
-  badgeTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  badgeSubtitle: {
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
   formHeader: {
     width: '100%',
     marginBottom: 32,
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     color: colors.text,
     marginBottom: 8,
-    textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: '90%',
+    lineHeight: 20,
+  },
+  phoneInputContainer: {
+    width: '100%',
+    marginBottom: 32,
   },
   inputContainer: {
     width: '100%',
@@ -677,19 +626,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.background,
-    borderRadius: 16,
-    borderWidth: 2,
+    borderRadius: 12,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    overflow: 'hidden',
-    height: 60,
+    height: 56,
   },
   countryCodeWrapper: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     height: '100%',
     justifyContent: 'center',
     backgroundColor: colors.gray100,
-    borderRightWidth: 2,
+    borderRightWidth: 1.5,
     borderRightColor: colors.border,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
   },
   countryCode: {
     fontSize: 16,
@@ -698,15 +648,66 @@ const styles = StyleSheet.create({
   },
   phoneInput: {
     flex: 1,
-    paddingHorizontal: 20,
-    fontSize: 18,
+    paddingHorizontal: 16,
+    fontSize: 16,
     fontWeight: '500',
     color: colors.text,
-    letterSpacing: 0.5,
+    minHeight: 56,
+  },
+  clearButton: {
+    paddingHorizontal: 16,
+    height: '100%',
+    justifyContent: 'center',
+  },
+  clearButtonText: {
+    fontSize: 18,
+    color: colors.textMuted,
+    opacity: 0.7,
+  },
+  userTypeToggleContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  userTypeToggleLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  userTypeToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.gray100,
+    borderRadius: 12,
+    padding: 4,
+    width: '100%',
+    maxWidth: 280,
+  },
+  toggleOption: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  toggleOptionActive: {
+    backgroundColor: colors.white,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  toggleOptionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  toggleOptionTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
   },
   otpContainer: {
     width: '100%',
-    marginBottom: 24,
+    marginBottom: 32,
     alignItems: 'center',
   },
   otpLabel: {
@@ -720,17 +721,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    maxWidth: 320,
-    marginBottom: 20,
+    maxWidth: 300,
+    marginBottom: 24,
   },
   otpInput: {
-    width: 50,
-    height: 60,
+    width: 46,
+    height: 54,
     borderRadius: 12,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.background,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '600',
     textAlign: 'center',
     color: colors.text,
@@ -740,11 +741,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight + '20',
   },
   otpInputFilled: {
-    borderColor: colors.success,
-    backgroundColor: colors.successLight,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight + '10',
   },
-  changeNumberButton: {
-    marginTop: 16,
+  otpActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    maxWidth: 300,
   },
   changeNumberText: {
     color: colors.primary,
@@ -754,15 +758,15 @@ const styles = StyleSheet.create({
   primaryButton: {
     width: '100%',
     backgroundColor: colors.primary,
-    borderRadius: 16,
-    paddingVertical: 18,
+    borderRadius: 12,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 4,
   },
   buttonDisabled: {
     backgroundColor: colors.gray400,
@@ -771,20 +775,10 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: colors.white,
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
-  },
-  resendContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-  },
-  resendText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginRight: 8,
+    letterSpacing: 0.5,
   },
   resendButtonText: {
     fontSize: 14,
@@ -794,94 +788,52 @@ const styles = StyleSheet.create({
   resendButtonTextDisabled: {
     color: colors.gray400,
   },
-  switchTypeContainer: {
-    width: '100%',
-    marginBottom: 32,
-    alignItems: 'center',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    paddingHorizontal: 16,
-    fontSize: 14,
-    color: colors.textMuted,
-  },
-  switchTypeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    width: '100%',
-    maxWidth: 280,
-  },
-  switchTypeIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  switchTypeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
   termsText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textMuted,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 15,
     maxWidth: '90%',
+    marginBottom: 16,
   },
   helpSection: {
     width: '100%',
     paddingHorizontal: 24,
     marginTop: 'auto',
-    paddingTop: 32,
+    paddingBottom: 20,
   },
   helpButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.infoLight,
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: colors.gray100,
+    borderRadius: 10,
+    padding: 14,
     borderWidth: 1,
-    borderColor: colors.info,
+    borderColor: colors.border,
   },
   helpIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.info,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.textSecondary,
     color: colors.white,
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 32,
-    marginRight: 16,
+    lineHeight: 26,
+    marginRight: 12,
   },
   helpTextContainer: {
     flex: 1,
   },
   helpTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   helpSubtitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.textMuted,
   },
 });

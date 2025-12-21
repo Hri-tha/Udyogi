@@ -1,6 +1,6 @@
-// src/services/database.js
+// src/services/database.js - UPDATE IMPORTS
 import { 
- collection, 
+  collection, 
   addDoc, 
   doc, 
   getDoc, 
@@ -14,7 +14,8 @@ import {
   arrayUnion,
   onSnapshot,
   increment,
-  arrayRemove
+  arrayRemove,
+  Timestamp // ADD THIS IMPORT
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { updateFeeOnJobCompletion } from './platformFeeService';
@@ -2618,6 +2619,326 @@ export const deletePastJob = async (jobId, employerId) => {
     return { success: true, message: 'Past job deleted successfully' };
   } catch (error) {
     console.error('Delete Past Job Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// src/services/database.js - ADD THESE FUNCTIONS
+
+/**
+ * Track free job posts for employers
+ */
+export const getEmployerJobPostingStats = async (employerId) => {
+  try {
+    const employerRef = doc(db, 'users', employerId);
+    const employerSnap = await getDoc(employerRef);
+    
+    if (!employerSnap.exists()) {
+      return { success: false, error: 'Employer not found' };
+    }
+    
+    const employerData = employerSnap.data();
+    
+    // Get current month's year and month
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1; // 1-12
+    const currentYear = currentDate.getFullYear();
+    
+    // Get all jobs posted this month
+    const startOfMonth = new Date(currentYear, currentMonth - 1, 1);
+    const endOfMonth = new Date(currentYear, currentMonth, 0, 23, 59, 59);
+    
+    const jobsQuery = query(
+      collection(db, 'jobs'),
+      where('employerId', '==', employerId),
+      where('createdAt', '>=', Timestamp.fromDate(startOfMonth)),
+      where('createdAt', '<=', Timestamp.fromDate(endOfMonth))
+    );
+    
+    const jobsSnap = await getDocs(jobsQuery);
+    const jobsPostedThisMonth = jobsSnap.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    // Check employer's subscription status
+    const hasActiveSubscription = employerData.subscriptionStatus === 'active';
+    const subscriptionExpiry = employerData.subscriptionExpiry;
+    
+    let isSubscriptionValid = false;
+    if (subscriptionExpiry) {
+      const expiryDate = subscriptionExpiry.toDate ? subscriptionExpiry.toDate() : new Date(subscriptionExpiry);
+      isSubscriptionValid = expiryDate > currentDate;
+    }
+    
+    // Calculate free posts used - FIXED LOGIC
+    const freePostsUsed = employerData.freePostsUsed || 0;
+    const freePostsAvailable = employerData.freePostsAvailable || 3;
+    const freePostsRemaining = Math.max(0, freePostsAvailable - freePostsUsed);
+    
+    console.log('📊 Employer stats calculation:', {
+      employerId,
+      freePostsUsed,
+      freePostsAvailable,
+      freePostsRemaining,
+      hasActiveSubscription,
+      isSubscriptionValid,
+      jobsPostedThisMonth: jobsPostedThisMonth.length,
+      subscriptionExpiry: subscriptionExpiry ? new Date(subscriptionExpiry).toISOString() : null
+    });
+    
+    return {
+      success: true,
+      stats: {
+        freePostsUsed,
+        freePostsAvailable,
+        freePostsRemaining,
+        hasActiveSubscription: hasActiveSubscription && isSubscriptionValid,
+        subscriptionExpiry: subscriptionExpiry,
+        jobsPostedThisMonth: jobsPostedThisMonth.length,
+        totalJobsPosted: employerData.totalJobsPosted || 0
+      }
+    };
+  } catch (error) {
+    console.error('❌ Get Employer Job Posting Stats Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+/**
+ * Update free job post count
+ */
+export const updateFreeJobPostCount = async (employerId) => {
+  try {
+    const employerRef = doc(db, 'users', employerId);
+    const employerSnap = await getDoc(employerRef);
+    
+    if (!employerSnap.exists()) {
+      return { success: false, error: 'Employer not found' };
+    }
+    
+    const employerData = employerSnap.data();
+    const currentFreePostsUsed = employerData.freePostsUsed || 0;
+    const freePostsAvailable = employerData.freePostsAvailable || 3;
+    
+    // Check if employer has free posts available
+    if (currentFreePostsUsed >= freePostsAvailable) {
+      return { 
+        success: false, 
+        error: 'No free job posts available',
+        requiresPayment: true
+      };
+    }
+    
+    // Increment free posts used
+    const newFreePostsUsed = currentFreePostsUsed + 1;
+    const freePostsRemaining = freePostsAvailable - newFreePostsUsed;
+    
+    await updateDoc(employerRef, {
+      freePostsUsed: newFreePostsUsed,
+      totalJobsPosted: (employerData.totalJobsPosted || 0) + 1,
+      lastJobPostedAt: serverTimestamp()
+    });
+    
+    console.log('✅ Updated free job post count:', {
+      employerId,
+      from: currentFreePostsUsed,
+      to: newFreePostsUsed,
+      remaining: freePostsRemaining
+    });
+    
+    return { 
+      success: true, 
+      freePostsUsed: newFreePostsUsed,
+      freePostsRemaining: freePostsRemaining
+    };
+  } catch (error) {
+    console.error('❌ Update Free Job Post Count Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Activate monthly subscription
+ */
+export const activateMonthlySubscription = async (employerId, subscriptionData) => {
+  try {
+    const employerRef = doc(db, 'users', employerId);
+    
+    // Calculate subscription expiry (1 month from now)
+    const currentDate = new Date();
+    const expiryDate = new Date(currentDate);
+    expiryDate.setMonth(expiryDate.getMonth() + 1);
+    
+    // Create subscription record
+    const subscriptionRecord = {
+      employerId: employerId,
+      plan: 'monthly',
+      amount: 49,
+      status: 'active',
+      activatedAt: serverTimestamp(),
+      expiresAt: expiryDate,
+      paymentId: subscriptionData.paymentId,
+      transactionId: subscriptionData.transactionId
+    };
+    
+    await addDoc(collection(db, 'subscriptions'), subscriptionRecord);
+    
+    // Update employer profile
+    await updateDoc(employerRef, {
+      subscriptionStatus: 'active',
+      subscriptionExpiry: expiryDate,
+      subscriptionPlan: 'monthly',
+      subscriptionActivatedAt: serverTimestamp(),
+      freePostsAvailable: 9999, // Unlimited for subscription users
+      hasUnlimitedPosts: true
+    });
+    
+    return { success: true, expiryDate: expiryDate };
+  } catch (error) {
+    console.error('Activate Monthly Subscription Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Check subscription status
+ */
+export const checkSubscriptionStatus = async (employerId) => {
+  try {
+    const employerRef = doc(db, 'users', employerId);
+    const employerSnap = await getDoc(employerRef);
+    
+    if (!employerSnap.exists()) {
+      return { success: false, error: 'Employer not found' };
+    }
+    
+    const employerData = employerSnap.data();
+    const currentDate = new Date();
+    
+    let isActive = false;
+    let daysRemaining = 0;
+    
+    if (employerData.subscriptionStatus === 'active' && employerData.subscriptionExpiry) {
+      const expiryDate = employerData.subscriptionExpiry.toDate();
+      isActive = expiryDate > currentDate;
+      
+      if (isActive) {
+        const timeDiff = expiryDate.getTime() - currentDate.getTime();
+        daysRemaining = Math.ceil(timeDiff / (1000 * 3600 * 24));
+      }
+    }
+    
+    return {
+      success: true,
+      subscription: {
+        isActive: isActive,
+        plan: employerData.subscriptionPlan,
+        expiryDate: employerData.subscriptionExpiry,
+        daysRemaining: daysRemaining,
+        hasUnlimitedPosts: employerData.hasUnlimitedPosts || false
+      }
+    };
+  } catch (error) {
+    console.error('Check Subscription Status Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Check if employer can post job for free
+ */
+export const canPostJobForFree = async (employerId) => {
+  try {
+    console.log('🔍 Checking if employer can post for free:', employerId);
+    
+    // Check subscription first
+    const subscriptionResult = await checkSubscriptionStatus(employerId);
+    
+    if (subscriptionResult.success && subscriptionResult.subscription?.isActive) {
+      console.log('✅ Employer has active subscription, can post unlimited');
+      return {
+        success: true,
+        canPostForFree: true,
+        reason: 'active_subscription',
+        freePostsRemaining: 9999,
+        subscription: subscriptionResult.subscription
+      };
+    }
+    
+    // Check free posts
+    const statsResult = await getEmployerJobPostingStats(employerId);
+    
+    if (!statsResult.success) {
+      console.error('❌ Failed to get posting stats:', statsResult.error);
+      return { success: false, error: statsResult.error };
+    }
+    
+    const stats = statsResult.stats;
+    const freePostsRemaining = stats.freePostsRemaining;
+    const canPostForFree = freePostsRemaining > 0;
+    
+    console.log('📊 Free posts check:', {
+      freePostsUsed: stats.freePostsUsed,
+      freePostsAvailable: stats.freePostsAvailable,
+      freePostsRemaining: freePostsRemaining,
+      canPostForFree: canPostForFree
+    });
+    
+    return {
+      success: true,
+      canPostForFree: canPostForFree,
+      freePostsRemaining: freePostsRemaining,
+      freePostsUsed: stats.freePostsUsed,
+      freePostsAvailable: stats.freePostsAvailable,
+      reason: canPostForFree ? 'free_posts_available' : 'no_free_posts'
+    };
+  } catch (error) {
+    console.error('❌ Can Post Job For Free Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const resetMonthlyFreePosts = async (employerId) => {
+  try {
+    const employerRef = doc(db, 'users', employerId);
+    const employerSnap = await getDoc(employerRef);
+    
+    if (!employerSnap.exists()) {
+      return { success: false, error: 'Employer not found' };
+    }
+    
+    const employerData = employerSnap.data();
+    const lastResetDate = employerData.freePostsLastReset;
+    const currentDate = new Date();
+    
+    // Check if we need to reset (new month)
+    if (lastResetDate) {
+      const lastReset = lastResetDate.toDate ? lastResetDate.toDate() : new Date(lastResetDate);
+      const lastResetMonth = lastReset.getMonth();
+      const lastResetYear = lastReset.getFullYear();
+      
+      const currentMonth = currentDate.getMonth();
+      const currentYear = currentDate.getFullYear();
+      
+      // If same month and year, don't reset
+      if (lastResetMonth === currentMonth && lastResetYear === currentYear) {
+        return { success: true, reset: false, message: 'Already reset this month' };
+      }
+    }
+    
+    // Reset free posts for new month
+    await updateDoc(employerRef, {
+      freePostsUsed: 0,
+      freePostsAvailable: 3,
+      freePostsLastReset: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    
+    console.log('🔄 Reset free posts for new month:', employerId);
+    
+    return { success: true, reset: true, message: 'Free posts reset for new month' };
+  } catch (error) {
+    console.error('❌ Reset Monthly Free Posts Error:', error);
     return { success: false, error: error.message };
   }
 };

@@ -1,4 +1,4 @@
-// App.js – Updated Version
+// App.js – COMPLETELY UPDATED & CORRECTED
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -16,15 +16,16 @@ import WelcomeScreen from './src/screens/auth/WelcomeScreen';
 import LanguageScreen from './src/screens/auth/LanguageScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import ProfileSetupScreen from './src/screens/auth/ProfileSetupScreen';
-import LoadingScreen from './src/screens/LoadingScreen'; // Add this import
+import LoadingScreen from './src/screens/LoadingScreen';
 
 // Screens - Worker
-import WorkerHomeScreen from './src/screens/worker/WorkerHomeScreen'; // Add this if missing
+import WorkerHomeScreen from './src/screens/worker/WorkerHomeScreen';
 import JobDetailsScreen from './src/screens/worker/JobDetailsScreen';
 import LocationFilterScreen from './src/screens/worker/LocationFilterScreen';
 import JobTrackingScreen from './src/screens/worker/JobTrackingScreen';
 
 // Screens - Employer
+import EmployerHomeScreen from './src/screens/employer/EmployerHomeScreen';
 import PostJobScreen from './src/screens/employer/PostJobScreen';
 import ApplicationsScreen from './src/screens/employer/ApplicationsScreen';
 import EmployerProfileScreen from './src/screens/employer/EmployerProfileScreen';
@@ -33,6 +34,7 @@ import CompleteJobScreen from './src/screens/employer/CompleteJobScreen';
 import EmployerJobTrackingScreen from './src/screens/employer/EmployerJobTrackingScreen';
 import PlatformFeePaymentScreen from './src/screens/employer/PlatformFeePaymentScreen';
 import PostJobSuccessScreen from './src/screens/employer/PostJobSuccessScreen';
+import SubscriptionScreen from './src/screens/employer/SubscriptionScreen';
 
 // Screens - Shared
 import JobLocationScreen from './src/screens/shared/JobLocationScreen';
@@ -69,6 +71,7 @@ function SplashScreen({ onFinish }) {
   );
 }
 
+// Main App Content Component
 function AppContent() {
   const [showSplash, setShowSplash] = useState(true);
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -90,26 +93,24 @@ function AppContent() {
     );
   }
 
-  return (
-    <>
+  // Render the main navigation
+  const renderNavigation = () => {
+    return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {/* 1️⃣ Show Language Selection for first-time users */}
         {!isLanguageSelected ? (
           <Stack.Screen name="Language" component={LanguageScreen} />
-
-        // 2️⃣ If language selected but no user logged in
         ) : !user ? (
+          // 2️⃣ If language selected but no user logged in
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
           </>
-
-        // 3️⃣ If user logged in but no profile set up
         ) : !userProfile?.name ? (
+          // 3️⃣ If user logged in but no profile set up
           <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-
-        // 4️⃣ Worker User Flow
         ) : userProfile?.userType === 'worker' ? (
+          // 4️⃣ Worker User Flow
           <>
             <Stack.Screen name="WorkerMain" component={WorkerBottomTabNavigator} />
             <Stack.Screen name="JobDetails" component={JobDetailsScreen} />
@@ -119,9 +120,8 @@ function AppContent() {
             <Stack.Screen name="ChatScreen" component={ChatScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
           </>
-
-        // 5️⃣ Employer User Flow
         ) : (
+          // 5️⃣ Employer User Flow
           <>
             <Stack.Screen name="EmployerMain" component={EmployerBottomTabNavigator} />
             <Stack.Screen name="PostJob" component={PostJobScreen} />
@@ -132,6 +132,7 @@ function AppContent() {
             <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
             <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
             <Stack.Screen name="PostJobSuccess" component={PostJobSuccessScreen} />
+            <Stack.Screen name="Subscription" component={SubscriptionScreen} />
             <Stack.Screen name="JobLocation" component={JobLocationScreen} />
             <Stack.Screen name="ChatScreen" component={ChatScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
@@ -145,17 +146,15 @@ function AppContent() {
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
+    );
+  };
 
-      {/* Global Job Tracking Banner - Only for Workers */}
-      {user && userProfile?.userType === 'worker' && (
-        <JobTrackingBanner />
-      )}
-
-      {/* Global Employer Job Tracking Banner - Only for Employers */}
-      {user && userProfile?.userType === 'employer' && (
-        <EmployerJobTrackingBanner />
-      )}
-
+  return (
+    <View style={styles.container}>
+      {/* Main Navigation */}
+      {renderNavigation()}
+      
+      {/* Notification Toast - Rendered on top */}
       <NotificationToast
         notification={toastNotification}
         onHide={hideToast}
@@ -163,7 +162,7 @@ function AppContent() {
           hideToast();
         }}
       />
-    </>
+    </View>
   );
 }
 
@@ -186,6 +185,10 @@ export default function App() {
 
 // Styles
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
   splashContainer: {
     flex: 1,
     backgroundColor: '#fff',

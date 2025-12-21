@@ -1,4 +1,4 @@
-// src/navigation/EmployerBottomTabNavigator.js - COMPLETE UPDATED
+// src/navigation/EmployerBottomTabNavigator.js - UPDATED & CORRECTED
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -13,6 +13,7 @@ import PaymentProcessingScreen from '../screens/employer/PaymentProcessingScreen
 import CompleteJobScreen from '../screens/employer/CompleteJobScreen';
 import PlatformFeePaymentScreen from '../screens/employer/PlatformFeePaymentScreen';
 import PostJobSuccessScreen from '../screens/employer/PostJobSuccessScreen';
+import SubscriptionScreen from '../screens/employer/SubscriptionScreen'; // Added import
 import { colors } from '../constants/colors';
 
 // Import the employer banner
@@ -54,6 +55,7 @@ function HomeStack() {
       <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
       <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
       <Stack.Screen name="CompleteJob" component={CompleteJobScreen} />
+      <Stack.Screen name="Subscription" component={SubscriptionScreen} />
     </Stack.Navigator>
   );
 }
@@ -89,6 +91,7 @@ function ProfileStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="EmployerProfileMain" component={EmployerProfileScreen} />
       <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
+      <Stack.Screen name="Subscription" component={SubscriptionScreen} />
     </Stack.Navigator>
   );
 }
@@ -105,74 +108,79 @@ function NotificationsStack() {
   );
 }
 
-// Create a wrapper component that includes the banner
+// Main Tab Navigator Component
+function MainTabNavigator() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: colors.white,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '500',
+        },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+      }}
+    >
+      <Tab.Screen 
+        name="Home" 
+        component={HomeStack}
+        options={{
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
+        }}
+      />
+      <Tab.Screen 
+        name="PostJob" 
+        component={PostJobStack}
+        options={{
+          tabBarLabel: 'Post Job',
+          tabBarIcon: ({ focused }) => <TabIcon name="post-job" focused={focused} />,
+        }}
+      />
+      <Tab.Screen 
+        name="Applications" 
+        component={ApplicationsStack}
+        options={{
+          tabBarLabel: 'Applications',
+          tabBarIcon: ({ focused }) => <TabIcon name="applications" focused={focused} />,
+        }}
+      />
+      <Tab.Screen 
+        name="Notifications" 
+        component={NotificationsStack}
+        options={{
+          tabBarLabel: 'Notifications',
+          tabBarIcon: ({ focused }) => <TabIcon name="notifications" focused={focused} />,
+        }}
+      />
+      <Tab.Screen 
+        name="Profile" 
+        component={ProfileStack}
+        options={{
+          tabBarLabel: 'Profile',
+          tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+// Main Export - TabNavigatorWithBanner (Now correctly structured)
 const TabNavigatorWithBanner = () => {
   return (
-    <View style={{ flex: 1 }}>
-      <Tab.Navigator
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: {
-            backgroundColor: colors.white,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            height: 60,
-            paddingBottom: 8,
-            paddingTop: 8,
-          },
-          tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: '500',
-          },
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.textSecondary,
-        }}
-      >
-        <Tab.Screen 
-          name="Home" 
-          component={HomeStack}
-          options={{
-            tabBarLabel: 'Home',
-            tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
-          }}
-        />
-        <Tab.Screen 
-          name="PostJob" 
-          component={PostJobStack}
-          options={{
-            tabBarLabel: 'Post Job',
-            tabBarIcon: ({ focused }) => <TabIcon name="post-job" focused={focused} />,
-          }}
-        />
-        <Tab.Screen 
-          name="Applications" 
-          component={ApplicationsStack}
-          options={{
-            tabBarLabel: 'Applications',
-            tabBarIcon: ({ focused }) => <TabIcon name="applications" focused={focused} />,
-          }}
-        />
-        <Tab.Screen 
-          name="Notifications" 
-          component={NotificationsStack}
-          options={{
-            tabBarLabel: 'Notifications',
-            tabBarIcon: ({ focused }) => <TabIcon name="notifications" focused={focused} />,
-          }}
-        />
-        <Tab.Screen 
-          name="Profile" 
-          component={ProfileStack}
-          options={{
-            tabBarLabel: 'Profile',
-            tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
-          }}
-        />
-      </Tab.Navigator>
-      
-      {/* Employer Job Tracking Banner - Only shown on main tab screens */}
+    <>
+      <MainTabNavigator />
       <EmployerJobTrackingBanner />
-    </View>
+    </>
   );
 }
 
