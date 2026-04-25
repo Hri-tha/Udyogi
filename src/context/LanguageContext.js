@@ -1,4 +1,3 @@
-// src/context/LanguageContext.js
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { I18n } from 'i18n-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -141,14 +140,17 @@ export const LanguageProvider = ({ children }) => {
   const [locale, setLocale] = useState('en');
   const [isLanguageSelected, setIsLanguageSelected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
 
   // Load saved language preference
   useEffect(() => {
+    console.log('🌐 LanguageContext initializing...');
     loadLanguagePreference();
   }, []);
 
   const loadLanguagePreference = async () => {
     try {
+      console.log('📖 Loading language preference...');
       const savedLanguage = await AsyncStorage.getItem('userLanguage');
       const languageSelected = await AsyncStorage.getItem('isLanguageSelected');
 
@@ -156,32 +158,43 @@ export const LanguageProvider = ({ children }) => {
         setLocale(savedLanguage);
         i18n.locale = savedLanguage;
         setIsLanguageSelected(languageSelected === 'true');
+        console.log('✅ Language loaded:', savedLanguage, 'Selected:', languageSelected === 'true');
       } else {
         setIsLanguageSelected(false);
+        console.log('ℹ️ No saved language found');
       }
     } catch (error) {
-      console.error('Error loading language preference:', error);
+      console.error('❌ Error loading language preference:', error);
       setIsLanguageSelected(false);
     } finally {
       setLoading(false);
+      setInitialized(true);
+      console.log('✅ LanguageContext initialized');
     }
   };
 
   const changeLanguage = async (language) => {
     try {
+      console.log('🌐 Changing language to:', language);
       setLocale(language);
       i18n.locale = language;
       await AsyncStorage.setItem('userLanguage', language);
       await AsyncStorage.setItem('isLanguageSelected', 'true');
       setIsLanguageSelected(true);
+      console.log('✅ Language changed to:', language);
     } catch (error) {
-      console.error('Error saving language preference:', error);
+      console.error('❌ Error saving language preference:', error);
     }
   };
 
   const t = (key) => {
     return i18n.t(key) || key;
   };
+
+  // Show loading screen while initializing
+  if (!initialized) {
+    return null; // Or a simple loading indicator
+  }
 
   return (
     <LanguageContext.Provider value={{

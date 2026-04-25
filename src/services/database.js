@@ -2,15 +2,11 @@
 import { 
   collection, 
   addDoc, 
-  doc, 
-  getDoc, 
   getDocs,
   query, 
   where,
   orderBy,
-  updateDoc,
   deleteDoc,
-  serverTimestamp,
   arrayUnion,
   onSnapshot,
   increment,
@@ -19,6 +15,10 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { updateFeeOnJobCompletion } from './platformFeeService';
+// Add to your existing database.js file - USER FUNCTIONS
+import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+
+// ========== USER FUNCTIONS ==========
 
 // ========== JOB FUNCTIONS ==========
 
@@ -630,36 +630,85 @@ export const sendJobReminderNotification = async (workerId, jobTitle, reminderTi
 
 export const fetchUserProfile = async (userId) => {
   try {
+    console.log('📥 Fetching user profile for:', userId);
+    
     const docRef = doc(db, 'users', userId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
+      const profileData = docSnap.data();
+      console.log('✅ User profile found:', profileData);
       return { 
         success: true, 
-        profile: docSnap.data() 
+        profile: profileData 
       };
     } else {
-      return { success: false, error: 'Profile not found' };
+      console.log('⚠️ User profile not found, creating default profile...');
+      // Create default profile
+      await setDoc(docRef, {
+        uid: userId,
+        userType: 'worker', // default type
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        profileComplete: false
+      });
+      
+      return { 
+        success: true, 
+        profile: {
+          uid: userId,
+          userType: 'worker',
+          profileComplete: false
+        }
+      };
     }
   } catch (error) {
-    console.error('Fetch Profile Error:', error);
-    return { success: false, error: error.message };
+    console.error('❌ Fetch Profile Error:', error);
+    return { 
+      success: false, 
+      error: error.message,
+      profile: {
+        uid: userId,
+        userType: 'worker',
+        profileComplete: false
+      }
+    };
   }
 };
 
 export const updateUserProfile = async (userId, profileData) => {
   try {
+    console.log('📝 Updating user profile for:', userId, profileData);
+    
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
+    const userSnap = await getDoc(userRef);
+    
+    const updateData = {
       ...profileData,
-      updatedAt: serverTimestamp()
-    });
+      updatedAt: serverTimestamp(),
+      profileComplete: true
+    };
+    
+    if (!userSnap.exists()) {
+      // Create new user document
+      await setDoc(userRef, {
+        uid: userId,
+        ...updateData,
+        createdAt: serverTimestamp()
+      });
+    } else {
+      // Update existing user document
+      await updateDoc(userRef, updateData);
+    }
+    
+    console.log('✅ User profile updated successfully');
     return { success: true };
   } catch (error) {
-    console.error('Update Profile Error:', error);
+    console.error('❌ Update Profile Error:', error);
     return { success: false, error: error.message };
   }
 };
+
 
 // ========== HELPER FUNCTIONS ==========
 
@@ -679,6 +728,45 @@ export const checkIfApplied = async (jobId, workerId) => {
     };
   } catch (error) {
     console.error('Check Application Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const createUserProfile = async (userId, userData) => {
+  try {
+    console.log('👤 Creating new user profile:', userId);
+    
+    const userRef = doc(db, 'users', userId);
+    
+    const profileData = {
+      uid: userId,
+      email: userData.email || '',
+      phoneNumber: userData.phoneNumber || '',
+      name: userData.name || '',
+      userType: userData.userType || 'worker',
+      profileComplete: false,
+      emailVerified: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      // Default fields
+      rating: 0,
+      totalRatings: 0,
+      completedJobs: 0,
+      totalEarnings: 0,
+      location: '',
+      skills: [],
+      // For employers
+      freePostsUsed: 0,
+      freePostsAvailable: 3,
+      totalJobsPosted: 0
+    };
+    
+    await setDoc(userRef, profileData);
+    
+    console.log('✅ New user profile created:', profileData);
+    return { success: true, profile: profileData };
+  } catch (error) {
+    console.error('❌ Create User Profile Error:', error);
     return { success: false, error: error.message };
   }
 };

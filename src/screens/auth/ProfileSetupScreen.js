@@ -1,4 +1,4 @@
-// src/screens/auth/ProfileSetupScreen.js
+// src/screens/auth/ProfileSetupScreen.js - UPDATED VERSION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,15 +13,17 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
+import { updateUserProfile, fetchUserProfile } from '../../services/database';
 
 export default function ProfileSetupScreen({ navigation, route }) {
   const { userType } = route?.params || { userType: 'worker' };
-  const { user, userProfile, updateUserProfile } = useAuth();
+  const { user, userProfile, setUserProfile, updateUserProfile: updateContextProfile } = useAuth();
   
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
   const [skills, setSkills] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -30,21 +32,44 @@ export default function ProfileSetupScreen({ navigation, route }) {
   useEffect(() => {
     // Check if user already has a profile
     const checkExistingProfile = async () => {
-      if (userProfile && userProfile.name) {
-        // User already has a profile, redirect to main screen
-        if (userType === 'worker') {
-          navigation.replace('WorkerMain');
-        } else {
-          navigation.replace('EmployerMain');
+      try {
+        console.log('📋 Checking existing profile for user:', user?.uid);
+        
+        if (user?.uid) {
+          const result = await fetchUserProfile(user.uid);
+          
+          if (result.success && result.profile && result.profile.name) {
+            console.log('✅ User already has profile:', result.profile);
+            setUserProfile(result.profile);
+            
+            // User already has a profile, redirect to main screen
+            if (userType === 'worker') {
+              navigation.replace('WorkerMain');
+            } else {
+              navigation.replace('EmployerMain');
+            }
+            return;
+          }
         }
-      } else {
+        
+        setCheckingProfile(false);
+        
+        // Get user phone number if available
+        if (user?.phoneNumber) {
+          setPhoneNumber(user.phoneNumber);
+        }
+        
+        // Try to get current location
+        getCurrentLocation();
+      } catch (error) {
+        console.error('Error checking profile:', error);
         setCheckingProfile(false);
         getCurrentLocation();
       }
     };
 
     checkExistingProfile();
-  }, [userProfile, navigation, userType]);
+  }, [user, userType, navigation]);
 
   const getCurrentLocation = async () => {
     setLocationLoading(true);
@@ -120,33 +145,80 @@ export default function ProfileSetupScreen({ navigation, route }) {
 
     setLoading(true);
 
-    const profileData = {
-      name: name.trim(),
-      location: location.trim(),
-      userType,
-      phoneNumber: user.phoneNumber,
-      createdAt: new Date().toISOString(),
-      ...(userType === 'worker' && {
-        skills: skills.split(',').map(s => s.trim()).filter(s => s),
-        rating: 0,
-        completedJobs: 0,
-        totalEarnings: 0,
-      }),
-      ...(userType === 'employer' && {
-        companyName: companyName.trim(),
-        rating: 0,
-        totalHires: 0,
-        activeJobs: 0,
-      }),
-    };
+    try {
+      const profileData = {
+        uid: user.uid,
+        name: name.trim(),
+        location: location.trim(),
+        userType,
+        phoneNumber: phoneNumber || user.phoneNumber || '',
+        email: user.email || '',
+        profileComplete: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...(userType === 'worker' && {
+          skills: skills.split(',').map(s => s.trim()).filter(s => s),
+          rating: 0,
+          completedJobs: 0,
+          totalEarnings: 0,
+          totalRatings: 0,
+        }),
+        ...(userType === 'employer' && {
+          companyName: companyName.trim(),
+          rating: 0,
+          totalRatings: 0,
+          totalHires: 0,
+          totalPayments: 0,
+          activeJobs: 0,
+          freePostsUsed: 0,
+          freePostsAvailable: 3,
+          totalJobsPosted: 0,
+        }),
+      };
 
-    const result = await updateUserProfile(profileData);
-    setLoading(false);
+      console.log('📝 Creating profile:', profileData);
 
-    if (result.success) {
-      Alert.alert('Success', 'Profile created successfully!');
-    } else {
-      Alert.alert('Error', result.error || 'Failed to create profile');
+      // Save to database
+      const result = await updateUserProfile(user.uid, profileData);
+      
+      if (result.success) {
+        console.log('✅ Profile created successfully');
+        
+        // Update context
+        setUserProfile(profileData);
+        updateContextProfile(profileData);
+        
+        // Navigate to appropriate screen
+        Alert.alert(
+          'Success!',
+          'Profile created successfully',
+          [
+            {
+              text: 'Continue',
+              onPress: () => {
+                if (userType === 'worker') {
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'WorkerMain' }],
+                  });
+                } else {
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'EmployerMain' }],
+                  });
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        throw new Error(result.error || 'Failed to create profile');
+      }
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -160,7 +232,7 @@ export default function ProfileSetupScreen({ navigation, route }) {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <StatusBar barStyle="dark-content" />
       
       <View style={styles.header}>
@@ -182,6 +254,7 @@ export default function ProfileSetupScreen({ navigation, route }) {
           placeholder="Enter your full name"
           value={name}
           onChangeText={setName}
+          autoCapitalize="words"
         />
 
         <Text style={styles.label}>Location *</Text>
@@ -210,6 +283,16 @@ export default function ProfileSetupScreen({ navigation, route }) {
             : 'Tap the pin to detect your location automatically'
           }
         </Text>
+
+        <Text style={styles.label}>Phone Number</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your phone number"
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          keyboardType="phone-pad"
+          editable={!user?.phoneNumber} // Disable if already from auth
+        />
 
         {userType === 'worker' ? (
           <>
@@ -293,6 +376,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+    paddingBottom: 40,
   },
   label: {
     fontSize: 16,

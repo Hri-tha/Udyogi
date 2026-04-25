@@ -2,36 +2,18 @@
   "expo": {
     "name": "Udyogi",
     "slug": "udyogi",
-    "version": "1.0.0",
-    "orientation": "portrait",
+    "scheme": "udyogi",
     "icon": "./assets/Logo.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/Logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+    "android": {
+      "package": "com.udyogi.app"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
     "ios": {
-      "supportsTablet": true,
       "bundleIdentifier": "com.udyogi.app"
     },
-    "android": {
-      "package": "com.udyogi.app",
-      "versionCode": 1,
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/Sls.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "plugins": [
-      "expo-localization"
+      "expo-localization",
+      "@react-native-community/datetimepicker",
+      "expo-font"
     ]
   }
 }

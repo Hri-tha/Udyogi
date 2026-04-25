@@ -1,4 +1,4 @@
-// src/screens/employer/EmployerHomeScreen.js - FIXED VERSION WITH SHOW ALL JOBS
+// src/screens/employer/EmployerHomeScreen.js - FIXED VERSION (LinearGradient → GradientView)
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -16,7 +16,7 @@ import {
   Animated,
   FlatList,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import GradientView from '../../components/GradientView';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { Platform } from 'react-native';
@@ -123,7 +123,7 @@ export default function EmployerHomeScreen({ navigation }) {
       daysLeft: "days left",
       freePostsRemaining: "Free posts remaining",
       viewAllJobs: "View All Jobs",
-      viewLessJobs: "Show Less", // NEW
+      viewLessJobs: "Show Less",
       postNow: "Post Now",
       featuredJobs: "Featured Jobs",
       quickActions: "Quick Actions",
@@ -229,7 +229,7 @@ export default function EmployerHomeScreen({ navigation }) {
       daysLeft: "दिन शेष",
       freePostsRemaining: "मुफ्त पोस्ट शेष",
       viewAllJobs: "सभी नौकरियां देखें",
-      viewLessJobs: "कम दिखाएं", // NEW
+      viewLessJobs: "कम दिखाएं",
       postNow: "अभी पोस्ट करें",
       featuredJobs: "फीचर्ड नौकरियां",
       quickActions: "त्वरित कार्रवाई",
@@ -556,7 +556,7 @@ export default function EmployerHomeScreen({ navigation }) {
       
       {/* Fixed Header with Padding */}
       <View style={styles.fixedHeader}>
-        <LinearGradient
+        <GradientView
           colors={[colors.primary, colors.primaryDark]}
           style={styles.headerGradient}
           start={{ x: 0, y: 0 }}
@@ -642,7 +642,7 @@ export default function EmployerHomeScreen({ navigation }) {
                   style={styles.upgradeButton}
                   onPress={() => navigation.navigate('Subscription')}
                 >
-                  <LinearGradient
+                  <GradientView
                     colors={[colors.primary, colors.primaryDark]}
                     style={styles.upgradeGradient}
                     start={{ x: 0, y: 0 }}
@@ -650,12 +650,12 @@ export default function EmployerHomeScreen({ navigation }) {
                   >
                     <Icon name="rocket-launch" size={16} color={colors.white} />
                     <Text style={styles.upgradeButtonText}>{tr.upgradeNow}</Text>
-                  </LinearGradient>
+                  </GradientView>
                 </TouchableOpacity>
               </View>
             )}
           </View>
-        </LinearGradient>
+        </GradientView>
       </View>
 
       {/* Main Content with proper spacing */}
@@ -723,7 +723,7 @@ export default function EmployerHomeScreen({ navigation }) {
             style={styles.subscriptionPromo}
             onPress={() => navigation.navigate('Subscription')}
           >
-            <LinearGradient
+            <GradientView
               colors={['#667eea', '#764ba2']}
               style={styles.promoGradient}
               start={{ x: 0, y: 0 }}
@@ -742,7 +742,7 @@ export default function EmployerHomeScreen({ navigation }) {
                 </View>
               </View>
               <Icon name="arrow-forward" size={20} color={colors.white} style={styles.promoArrow} />
-            </LinearGradient>
+            </GradientView>
           </TouchableOpacity>
         )}
 
@@ -875,12 +875,11 @@ export default function EmployerHomeScreen({ navigation }) {
       </ScrollView>
 
       {/* Floating Post Job Button */}
-      {/* FIXED: Always show the floating button, but change text based on free posts */}
       <TouchableOpacity 
         style={styles.floatingButton}
         onPress={() => navigation.navigate('PostJob')}
       >
-        <LinearGradient
+        <GradientView
           colors={[colors.primary, colors.primaryDark]}
           style={styles.floatingButtonGradient}
           start={{ x: 0, y: 0 }}
@@ -895,7 +894,7 @@ export default function EmployerHomeScreen({ navigation }) {
                 : (locale === 'hi' ? 'नौकरी पोस्ट करें' : 'Post Job')
             }
           </Text>
-        </LinearGradient>
+        </GradientView>
       </TouchableOpacity>
 
       {/* Job Details Modal */}

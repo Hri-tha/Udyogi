@@ -1,0 +1,79 @@
+// firestore.rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // OTP collection - publicly writable for OTP creation
+    match /otp/{email} {
+      allow read, write: if true;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Users can read their own data
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Users can create their own document
+      allow create: if request.auth != null && request.auth.uid == userId;
+      
+      // Users can update their own data
+      allow update: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Jobs collection
+    match /jobs/{jobId} {
+      // Anyone can read open jobs
+      allow read: if resource.data.status == 'open';
+      
+      // Employers can create jobs
+      allow create: if request.auth != null && 
+        request.auth.token.userType == 'employer';
+      
+      // Job owners can update their jobs
+      allow update: if request.auth != null && 
+        resource.data.employerId == request.auth.uid;
+    }
+    
+    // Applications collection
+    match /applications/{applicationId} {
+      // Applicants and employers can read their applications
+      allow read: if request.auth != null && 
+        (resource.data.workerId == request.auth.uid || 
+         resource.data.employerId == request.auth.uid);
+      
+      // Workers can create applications
+      allow create: if request.auth != null && 
+        request.auth.token.userType == 'worker';
+      
+      // Workers and employers can update their applications
+      allow update: if request.auth != null && 
+        (resource.data.workerId == request.auth.uid || 
+         resource.data.employerId == request.auth.uid);
+    }
+    
+    // Chat messages
+    match /chats/{chatId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid in resource.data.participants;
+    }
+    
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // Ratings
+    match /ratings/{ratingId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Earnings
+    match /earnings/{earningId} {
+      allow read: if request.auth != null && 
+        resource.data.workerId == request.auth.uid;
+      allow write: if request.auth != null && 
+        request.auth.token.userType == 'employer';
+    }
+  }
+}

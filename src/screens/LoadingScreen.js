@@ -1,96 +1,95 @@
-// src/screens/LoadingScreen.js
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  ActivityIndicator,
-  StatusBar,
-} from 'react-native';
-import { colors } from '../constants/colors';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
-export default function LoadingScreen() {
-  const { locale, t } = useLanguage();
+const DEV_BYPASS = false;
 
-  // Get app name based on language
-  const getAppName = () => {
-    return locale === 'hi' ? 'उद्योगी' : 'Udyogi';
-  };
+export default function LoadingScreen({ navigation }) {
+  const { user, userProfile, loading: authLoading, bypassLogin } = useAuth();
+  const { isLanguageSelected, loading: langLoading, changeLanguage } = useLanguage();
+  const hasNavigated = useRef(false);
+
+  // Clear any cached dev user when normal login is enabled
+  useEffect(() => {
+    if (!DEV_BYPASS) {
+      AsyncStorage.removeItem('current_user');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (DEV_BYPASS) {
+      if (!isLanguageSelected) {
+        changeLanguage('en');
+        return;
+      }
+      if (!userProfile || !userProfile.profileComplete) {
+        console.log('🚀 DEV: Bypassing login as worker');
+        bypassLogin('worker');
+        return;
+      }
+    }
+
+    if (authLoading || langLoading) {
+      console.log('🔄 Loading...', { authLoading, langLoading });
+      return;
+    }
+
+    if (hasNavigated.current) return;
+    hasNavigated.current = true;
+
+    if (!isLanguageSelected) {
+      navigation.replace('Language');
+      return;
+    }
+
+    if (!user && !userProfile) {
+      navigation.replace('Welcome');
+      return;
+    }
+
+    if (userProfile?.uid?.startsWith('dev-')) {
+      const mainScreen = userProfile.userType === 'employer' ? 'EmployerMain' : 'WorkerMain';
+      navigation.replace(mainScreen);
+      return;
+    }
+
+    if (userProfile && !userProfile.profileComplete) {
+      navigation.replace('ProfileSetup', {
+        userType: userProfile.userType || 'worker',
+        email: userProfile.email || user?.email || '',
+      });
+      return;
+    }
+
+    if (userProfile && userProfile.profileComplete) {
+      const mainScreen = userProfile.userType === 'employer' ? 'EmployerMain' : 'WorkerMain';
+      navigation.replace(mainScreen);
+      return;
+    }
+
+    navigation.replace('Welcome');
+  }, [authLoading, langLoading, isLanguageSelected, user, userProfile]);
+
+  useEffect(() => {
+    hasNavigated.current = false;
+  }, [user?.uid, userProfile?.uid, isLanguageSelected]);
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-      
-      {/* Logo */}
-      <View style={styles.logoContainer}>
-        <Image
-          source={require('../assets/images/UdyogiLogo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.appName}>{getAppName()}</Text>
-        <Text style={styles.appTagline}>{t('loading.tagline')}</Text>
-      </View>
-
-      {/* Loading Indicator */}
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.white} />
-        <Text style={styles.loadingText}>{t('loading.loadingProfile')}</Text>
-      </View>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>{t('loading.secureLogin')}</Text>
-      </View>
+      <Text style={styles.logo}>💼</Text>
+      <Text style={styles.appName}>Udyogi</Text>
+      <ActivityIndicator size="large" color="#007AFF" style={styles.spinner} />
+      <Text style={styles.tagline}>Connecting Skills & Opportunities</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 20,
-  },
-  appName: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: colors.white,
-    marginBottom: 8,
-  },
-  appTagline: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
-    maxWidth: 300,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: colors.white,
-    fontSize: 16,
-    marginTop: 20,
-    opacity: 0.9,
-  },
-  footer: {
-    alignItems: 'center',
-  },
-  footerText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
+  logo: { fontSize: 72, marginBottom: 16 },
+  appName: { fontSize: 36, fontWeight: '800', color: '#007AFF', marginBottom: 32, letterSpacing: 1 },
+  spinner: { marginBottom: 24 },
+  tagline: { fontSize: 14, color: '#999', fontStyle: 'italic' },
 });

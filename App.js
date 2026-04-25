@@ -1,30 +1,34 @@
-// App.js – COMPLETELY UPDATED & CORRECTED
+// App.js – COMPLETE FIXED VERSION
+// KEY FIX: useNotification imported at top (not bottom), AppWrapper uses it correctly
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { ActivityIndicator, View, StyleSheet, Text, Image } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Image } from 'react-native';
 
 // Context Providers
-import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
-import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { LanguageProvider } from './src/context/LanguageContext';
+import { AuthProvider } from './src/context/AuthContext';
 import { JobProvider } from './src/context/JobContext';
 import { NotificationProvider, useNotification } from './src/context/NotificationContext';
+
+// Components
+import NotificationSync from './src/components/NotificationSync';
 import NotificationToast from './src/components/NotificationToast';
 
-// Screens - Auth
-import WelcomeScreen from './src/screens/auth/WelcomeScreen';
+// Screens
+import LoadingScreen from './src/screens/LoadingScreen';
 import LanguageScreen from './src/screens/auth/LanguageScreen';
+import WelcomeScreen from './src/screens/auth/WelcomeScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import ProfileSetupScreen from './src/screens/auth/ProfileSetupScreen';
-import LoadingScreen from './src/screens/LoadingScreen';
 
-// Screens - Worker
+// Worker Screens
 import WorkerHomeScreen from './src/screens/worker/WorkerHomeScreen';
 import JobDetailsScreen from './src/screens/worker/JobDetailsScreen';
 import LocationFilterScreen from './src/screens/worker/LocationFilterScreen';
 import JobTrackingScreen from './src/screens/worker/JobTrackingScreen';
 
-// Screens - Employer
+// Employer Screens
 import EmployerHomeScreen from './src/screens/employer/EmployerHomeScreen';
 import PostJobScreen from './src/screens/employer/PostJobScreen';
 import ApplicationsScreen from './src/screens/employer/ApplicationsScreen';
@@ -36,7 +40,7 @@ import PlatformFeePaymentScreen from './src/screens/employer/PlatformFeePaymentS
 import PostJobSuccessScreen from './src/screens/employer/PostJobSuccessScreen';
 import SubscriptionScreen from './src/screens/employer/SubscriptionScreen';
 
-// Screens - Shared
+// Shared Screens
 import JobLocationScreen from './src/screens/shared/JobLocationScreen';
 import ChatScreen from './src/screens/shared/ChatScreen';
 import NotificationsScreen from './src/screens/common/NotificationsScreen';
@@ -45,18 +49,12 @@ import NotificationsScreen from './src/screens/common/NotificationsScreen';
 import WorkerBottomTabNavigator from './src/navigation/WorkerBottomTabNavigator';
 import EmployerBottomTabNavigator from './src/navigation/EmployerBottomTabNavigator';
 
-// Components
-import JobTrackingBanner from './src/components/JobTrackingBanner';
-import EmployerJobTrackingBanner from './src/components/EmployerJobTrackingBanner';
-
 const Stack = createStackNavigator();
 
-// Splash Screen Component
+// ─── Splash Screen ────────────────────────────────────────────────────────────
 function SplashScreen({ onFinish }) {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onFinish();
-    }, 2000);
+    const timer = setTimeout(onFinish, 2000);
     return () => clearTimeout(timer);
   }, [onFinish]);
 
@@ -65,117 +63,107 @@ function SplashScreen({ onFinish }) {
       <Image
         source={require('./assets/Sls.png')}
         style={styles.splashImage}
-        resizeMode="cover"
+        resizeMode="contain"
       />
     </View>
   );
 }
 
-// Main App Content Component
-function AppContent() {
-  const [showSplash, setShowSplash] = useState(true);
-  const { user, userProfile, loading: authLoading } = useAuth();
-  const { isLanguageSelected, loading: languageLoading } = useLanguage();
+// ─── App Stack Navigator ──────────────────────────────────────────────────────
+function AppNavigator() {
+  return (
+    <>
+      <NotificationSync />
+
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          gestureEnabled: false,
+        }}
+        initialRouteName="Loading">
+
+        {/* Loading */}
+        <Stack.Screen name="Loading" component={LoadingScreen} />
+
+        {/* Auth */}
+        <Stack.Screen name="Language" component={LanguageScreen} />
+        <Stack.Screen name="Welcome" component={WelcomeScreen} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+
+        {/* Worker */}
+        <Stack.Screen name="WorkerMain" component={WorkerBottomTabNavigator} />
+        <Stack.Screen name="JobDetails" component={JobDetailsScreen} />
+        <Stack.Screen name="JobTracking" component={JobTrackingScreen} />
+        <Stack.Screen name="LocationFilter" component={LocationFilterScreen} />
+        <Stack.Screen name="JobLocation" component={JobLocationScreen} />
+        <Stack.Screen name="ChatScreen" component={ChatScreen} />
+        <Stack.Screen name="Notifications" component={NotificationsScreen} />
+
+        {/* Employer */}
+        <Stack.Screen name="EmployerMain" component={EmployerBottomTabNavigator} />
+        <Stack.Screen name="PostJob" component={PostJobScreen} />
+        <Stack.Screen name="Applications" component={ApplicationsScreen} />
+        <Stack.Screen name="EmployerProfile" component={EmployerProfileScreen} />
+        <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
+        <Stack.Screen name="CompleteJob" component={CompleteJobScreen} />
+        <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
+        <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
+        <Stack.Screen name="PostJobSuccess" component={PostJobSuccessScreen} />
+        <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+      </Stack.Navigator>
+    </>
+  );
+}
+
+// ─── App Wrapper (needs NotificationProvider to be an ancestor) ───────────────
+// NOTE: useNotification is used HERE — inside NotificationProvider's tree
+function AppWrapper() {
   const { toastNotification, hideToast } = useNotification();
 
-  // Show splash screen first
+  return (
+    <View style={styles.container}>
+      <NavigationContainer>
+        <AppNavigator />
+      </NavigationContainer>
+
+      <NotificationToast
+        notification={toastNotification}
+        onHide={hideToast}
+      />
+    </View>
+  );
+}
+
+// ─── Root App Component ───────────────────────────────────────────────────────
+export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+  const [appInitialized, setAppInitialized] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAppInitialized(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
   if (showSplash) {
     return <SplashScreen onFinish={() => setShowSplash(false)} />;
   }
 
-  // Show loading spinner while initializing language & auth
-  if (authLoading || languageLoading) {
+  if (!appInitialized) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
 
-  // Render the main navigation
-  const renderNavigation = () => {
-    return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {/* 1️⃣ Show Language Selection for first-time users */}
-        {!isLanguageSelected ? (
-          <Stack.Screen name="Language" component={LanguageScreen} />
-        ) : !user ? (
-          // 2️⃣ If language selected but no user logged in
-          <>
-            <Stack.Screen name="Welcome" component={WelcomeScreen} />
-            <Stack.Screen name="Login" component={LoginScreen} />
-          </>
-        ) : !userProfile?.name ? (
-          // 3️⃣ If user logged in but no profile set up
-          <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
-        ) : userProfile?.userType === 'worker' ? (
-          // 4️⃣ Worker User Flow
-          <>
-            <Stack.Screen name="WorkerMain" component={WorkerBottomTabNavigator} />
-            <Stack.Screen name="JobDetails" component={JobDetailsScreen} />
-            <Stack.Screen name="JobTracking" component={JobTrackingScreen} />
-            <Stack.Screen name="LocationFilter" component={LocationFilterScreen} />
-            <Stack.Screen name="JobLocation" component={JobLocationScreen} />
-            <Stack.Screen name="ChatScreen" component={ChatScreen} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} />
-          </>
-        ) : (
-          // 5️⃣ Employer User Flow
-          <>
-            <Stack.Screen name="EmployerMain" component={EmployerBottomTabNavigator} />
-            <Stack.Screen name="PostJob" component={PostJobScreen} />
-            <Stack.Screen name="Applications" component={ApplicationsScreen} />
-            <Stack.Screen name="EmployerProfile" component={EmployerProfileScreen} />
-            <Stack.Screen name="PaymentProcessing" component={PaymentProcessingScreen} />
-            <Stack.Screen name="CompleteJob" component={CompleteJobScreen} />
-            <Stack.Screen name="EmployerJobTracking" component={EmployerJobTrackingScreen} />
-            <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
-            <Stack.Screen name="PostJobSuccess" component={PostJobSuccessScreen} />
-            <Stack.Screen name="Subscription" component={SubscriptionScreen} />
-            <Stack.Screen name="JobLocation" component={JobLocationScreen} />
-            <Stack.Screen name="ChatScreen" component={ChatScreen} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} />
-          </>
-        )}
-        
-        {/* Add Loading Screen route */}
-        <Stack.Screen 
-          name="Loading" 
-          component={LoadingScreen} 
-          options={{ headerShown: false }}
-        />
-      </Stack.Navigator>
-    );
-  };
-
-  return (
-    <View style={styles.container}>
-      {/* Main Navigation */}
-      {renderNavigation()}
-      
-      {/* Notification Toast - Rendered on top */}
-      <NotificationToast
-        notification={toastNotification}
-        onHide={hideToast}
-        onPress={(notification) => {
-          hideToast();
-        }}
-      />
-    </View>
-  );
-}
-
-// ✅ Main App with all Providers (correct order)
-export default function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
         <JobProvider>
+          {/* NotificationProvider wraps AppWrapper so useNotification works inside it */}
           <NotificationProvider>
-            <NavigationContainer>
-              <AppContent />
-            </NavigationContainer>
+            <AppWrapper />
           </NotificationProvider>
         </JobProvider>
       </AuthProvider>
@@ -183,7 +171,6 @@ export default function App() {
   );
 }
 
-// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -192,21 +179,17 @@ const styles = StyleSheet.create({
   splashContainer: {
     flex: 1,
     backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   splashImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
+    width: '80%',
+    height: '80%',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
+    backgroundColor: '#fff',
   },
 });

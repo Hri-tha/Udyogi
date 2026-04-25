@@ -1,4 +1,3 @@
-// src/context/JobContext.js - FIXED VERSION
 import React, { createContext, useState, useContext } from 'react';
 import { 
   collection, 
@@ -59,28 +58,14 @@ export const JobProvider = ({ children }) => {
     }
   };
 
- const fetchJobsByUserLocation = async (userLocation) => {
-  if (userLocation && userLocation.trim() !== '') {
-    await fetchJobs(userLocation);
-    setCurrentLocation(userLocation); // This sets the current location
-  } else {
-    await fetchJobs(); // Fetch all jobs if no user location
-    setCurrentLocation(''); // Clear current location
-  }
-};
-
-const autoSetUserLocation = async () => {
-  try {
-    if (userProfile?.location) {
-      await fetchJobsByUserLocation(userProfile.location);
+  const fetchJobsByUserLocation = async (userLocation) => {
+    console.log('📍 Setting user location:', userLocation);
+    if (userLocation && userLocation.trim() !== '') {
+      await fetchJobs(userLocation);
     } else {
-      await fetchJobs(); // Show all jobs if no location
+      await fetchJobs(); // Fetch all jobs if no user location
     }
-  } catch (error) {
-    console.error('Error auto-setting location:', error);
-    await fetchJobs(); // Fallback to all jobs
-  }
-};
+  };
 
   const applyForJob = async (jobId, userId, userProfile, jobData = null) => {
     try {

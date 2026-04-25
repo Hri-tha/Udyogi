@@ -1,12 +1,9 @@
 // src/services/firebase.js
-
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth'; // ✅ NOT 'firebase/auth/react-native'
 import { getFirestore } from 'firebase/firestore';
-import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth';
-import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ✅ Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBk9r57zRZuCgZag7lGNsIJW6_7IT6FkTg",
   authDomain: "udyogi-1ed9c.firebaseapp.com",
@@ -16,29 +13,28 @@ const firebaseConfig = {
   appId: "1:960400461165:android:e1d09e625a3df8196ede64",
 };
 
-// ✅ Initialize Firebase App (avoid re-initialization)
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+// Guard against hot-reload double-init
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// ✅ Initialize Auth (handles hot reload in React Native)
-let auth;
-try {
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
-} catch (error) {
-  auth = getAuth(app); // Fallback if already initialized
+// Lazy singleton — called inside useEffect in AuthContext, never at module load time
+let _auth = null;
+
+export function getFirebaseAuth() {
+  if (_auth) return _auth;
+  try {
+    _auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch (e) {
+    if (e.code === 'auth/already-initialized') {
+      // Fast Refresh called initializeAuth twice — grab the existing instance
+      _auth = getAuth(app);
+    } else {
+      console.error('Firebase Auth init error:', e.message);
+      return null;
+    }
+  }
+  return _auth;
 }
 
-// ✅ Initialize Firestore
-const db = getFirestore(app);
-
-// ✅ Initialize Cloud Functions
-const functions = getFunctions(app);
-
-// 🔧 OPTIONAL: Connect to Functions Emulator for local testing
-// Uncomment the line below if testing locally with Firebase Emulator
-// connectFunctionsEmulator(functions, 'localhost', 5001);
-
-// ✅ Export instances
-export { app, auth, db, functions };
-export default app;
+export const db = getFirestore(app);
