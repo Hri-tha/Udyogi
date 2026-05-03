@@ -1,5 +1,4 @@
 name: Build Android APK
-
 on:
   push:
     branches:
@@ -19,7 +18,6 @@ jobs:
   build:
     name: EAS Android Build
     runs-on: ubuntu-latest
-
     steps:
       # 🏗 Step 1: Checkout Repository
       - name: 🏗 Checkout repository
@@ -29,7 +27,7 @@ jobs:
       - name: 🏗 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20        # ✅ Fixed: was 18, now 20
           cache: 'npm'
 
       # 🏗 Step 3: Setup Expo CLI and EAS CLI
@@ -53,7 +51,7 @@ jobs:
           echo "🔗 Linking to EAS project..."
           eas init --id 2a608210-b737-4646-85a8-aab8d590cb03 --force
 
-      # ⚙️ Step 6: Prebuild check (optional but helps detect native issues early)
+      # ⚙️ Step 6: Prebuild check
       - name: ⚙️ Prebuild check
         run: |
           echo "🩺 Running Expo Doctor..."
