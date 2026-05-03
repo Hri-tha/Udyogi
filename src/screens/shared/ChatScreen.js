@@ -1,5 +1,5 @@
 // src/screens/shared/ChatScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,34 +12,58 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  sendMessage, 
-  fetchChatMessages, 
-  createChat 
+import {
+  sendMessage,
+  fetchChatMessages,
+  createChat,
 } from '../../services/database';
 import { colors } from '../../constants/colors';
 
 export default function ChatScreen({ route, navigation }) {
-  const { applicationId, otherUser, jobTitle, otherUserName } = route.params;
-  const { user, userProfile } = useAuth();
-  const [messages, setMessages] = useState([]);
+  const { applicationId, otherUser, jobTitle, otherUserName, currentUserId } = route.params;
+
+  // ── FIX: resolve UID from all available sources ──────────────────────────
+  const { user, userProfile, resolvedUid } = useAuth();
+  const myUid = currentUserId || resolvedUid || user?.uid || userProfile?.uid;
+
+  const [messages, setMessages]   = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
-  const [chatId, setChatId] = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [sending, setSending]     = useState(false);
+  const [chatId, setChatId]       = useState(null);
+
+  const flatListRef  = useRef(null);
+  const inputRef     = useRef(null);
+  const fadeAnim     = useRef(new Animated.Value(0)).current;
+  const slideAnim    = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    initializeChat(); // ADD THIS LINE - Call the initialization function
+    if (!myUid) {
+      Alert.alert('Error', 'Unable to initialize chat. Please log in again.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+      setLoading(false);
+      return;
+    }
+    initializeChat();
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      Animated.parallel([
+        Animated.timing(fadeAnim,  { toValue: 1, duration: 350, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 350, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [loading]);
 
   const initializeChat = async () => {
     try {
       console.log('Initializing chat for application:', applicationId);
-      // First, try to create or get the chat
-      const chatResult = await createChat(applicationId, [user.uid, otherUser]);
-      
+      const chatResult = await createChat(applicationId, [myUid, otherUser]);
       if (chatResult.success) {
         console.log('Chat created/found with ID:', chatResult.chatId);
         setChatId(chatResult.chatId);
@@ -58,18 +82,16 @@ export default function ChatScreen({ route, navigation }) {
 
   const loadMessages = async (targetChatId) => {
     try {
-      console.log('Loading messages for chat:', targetChatId);
       const result = await fetchChatMessages(targetChatId);
       if (result.success) {
-        console.log('Messages loaded:', result.messages.length);
-        // Convert Firestore timestamps to Date objects
-        const formattedMessages = result.messages.map(msg => ({
+        const formatted = result.messages.map(msg => ({
           ...msg,
-          timestamp: msg.timestamp?.toDate ? msg.timestamp.toDate() : new Date(msg.timestamp)
+          timestamp: msg.timestamp?.toDate
+            ? msg.timestamp.toDate()
+            : new Date(msg.timestamp),
         }));
-        setMessages(formattedMessages);
+        setMessages(formatted);
       } else {
-        console.error('Failed to load messages:', result.error);
         Alert.alert('Error', 'Failed to load messages');
       }
     } catch (error) {
@@ -81,300 +103,489 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   const sendNewMessage = async () => {
-    if (!newMessage.trim() || !chatId) return;
-
+    if (!newMessage.trim() || !chatId || !myUid) return;
     setSending(true);
-    
+    const msgText = newMessage.trim();
+    setNewMessage('');
     try {
       const messageData = {
-        senderId: user.uid,
+        senderId:   myUid,                           // ← FIX: was user.uid
         senderName: userProfile?.name || 'User',
-        message: newMessage.trim(),
+        message:    msgText,
       };
-
-      console.log('Sending message:', messageData);
       const result = await sendMessage(chatId, messageData);
-      
       if (result.success) {
-        console.log('Message sent successfully');
-        setNewMessage('');
-        // Reload messages to get the latest including the one we just sent
         await loadMessages(chatId);
       } else {
-        console.error('Failed to send message:', result.error);
         Alert.alert('Error', 'Failed to send message');
+        setNewMessage(msgText); // restore on failure
       }
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message');
+      setNewMessage(msgText);
     } finally {
       setSending(false);
     }
   };
 
-  const renderMessage = ({ item }) => {
-    const isMyMessage = item.senderId === user.uid;
-    
+  const formatTime = (ts) => {
+    if (!ts) return '';
+    try {
+      return ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
+
+  const formatDate = (ts) => {
+    if (!ts) return '';
+    const today     = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    try {
+      if (ts.toDateString() === today.toDateString())     return 'Today';
+      if (ts.toDateString() === yesterday.toDateString()) return 'Yesterday';
+      return ts.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    } catch {
+      return '';
+    }
+  };
+
+  // Group messages by date
+  const groupedMessages = () => {
+    const sorted = [...messages].sort(
+      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+    );
+    const groups = [];
+    let lastDate  = null;
+    sorted.forEach((msg) => {
+      const dateLabel = formatDate(msg.timestamp);
+      if (dateLabel !== lastDate) {
+        groups.push({ type: 'date', label: dateLabel, id: `date-${dateLabel}` });
+        lastDate = dateLabel;
+      }
+      groups.push({ ...msg, type: 'message' });
+    });
+    return groups;
+  };
+
+  const renderItem = ({ item }) => {
+    if (item.type === 'date') {
+      return (
+        <View style={styles.dateSeparator}>
+          <View style={styles.dateLine} />
+          <Text style={styles.dateLabel}>{item.label}</Text>
+          <View style={styles.dateLine} />
+        </View>
+      );
+    }
+
+    const isMe = item.senderId === myUid;            // ← FIX: was user.uid
+
     return (
-      <View style={[
-        styles.messageContainer,
-        isMyMessage ? styles.myMessage : styles.otherMessage
-      ]}>
-        {!isMyMessage && (
-          <Text style={styles.senderName}>{item.senderName}</Text>
+      <View style={[styles.bubbleWrapper, isMe ? styles.bubbleWrapperMe : styles.bubbleWrapperThem]}>
+        {!isMe && (
+          <View style={styles.avatarSmall}>
+            <Text style={styles.avatarSmallText}>
+              {(otherUserName || 'U').charAt(0).toUpperCase()}
+            </Text>
+          </View>
         )}
-        <Text style={[styles.messageText, isMyMessage && styles.myMessageText]}>
-          {item.message}
-        </Text>
-        <Text style={styles.messageTime}>
-          {item.timestamp?.toLocaleTimeString?.([], { hour: '2-digit', minute: '2-digit' }) || 'Just now'}
-        </Text>
+        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleThem]}>
+          <Text style={[styles.bubbleText, isMe ? styles.bubbleTextMe : styles.bubbleTextThem]}>
+            {item.message}
+          </Text>
+          <Text style={[styles.bubbleTime, isMe ? styles.bubbleTimeMe : styles.bubbleTimeThem]}>
+            {formatTime(item.timestamp)}
+          </Text>
+        </View>
       </View>
     );
   };
 
+  const getInitials = (name = '') =>
+    name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+  // ─── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="dark-content" />
+      <View style={styles.loadingContainer}>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← Back</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={styles.backBtnText}>‹</Text>
           </TouchableOpacity>
-          <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>{otherUserName}</Text>
-            <Text style={styles.headerSubtitle}>{jobTitle}</Text>
+          <View style={styles.headerCenter}>
+            <View style={styles.avatarSkeleton} />
+            <View>
+              <View style={styles.skeletonLine} />
+              <View style={[styles.skeletonLine, { width: 80, marginTop: 4 }]} />
+            </View>
           </View>
-          <View style={styles.headerRight} />
+          <View style={{ width: 40 }} />
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading chat...</Text>
+        <View style={styles.loadingBody}>
+          <ActivityIndicator size="large" color={ACCENT} />
+          <Text style={styles.loadingText}>Setting up your chat…</Text>
         </View>
       </View>
     );
   }
 
+  // ─── Main ───────────────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
+    <KeyboardAvoidingView
+      style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      <StatusBar barStyle="dark-content" />
-      
-      {/* Header */}
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+
+      {/* ── Header ── */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Text style={styles.backBtnText}>‹</Text>
         </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>{otherUserName}</Text>
-          <Text style={styles.headerSubtitle}>{jobTitle}</Text>
+
+        <View style={styles.headerCenter}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{getInitials(otherUserName)}</Text>
+          </View>
+          <View>
+            <Text style={styles.headerName} numberOfLines={1}>{otherUserName}</Text>
+            <Text style={styles.headerSub} numberOfLines={1}>{jobTitle}</Text>
+          </View>
         </View>
-        <View style={styles.headerRight} />
+
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* Messages List */}
-      <FlatList
-        data={messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))}
-        renderItem={renderMessage}
-        keyExtractor={item => item.id}
-        inverted={true}
-        style={styles.messagesList}
-        contentContainerStyle={styles.messagesContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>💬</Text>
-            <Text style={styles.emptyText}>No messages yet</Text>
-            <Text style={styles.emptySubtext}>
-              Start a conversation with {otherUserName}
-            </Text>
-          </View>
-        }
-      />
+      {/* ── Messages ── */}
+      <Animated.View style={[styles.listContainer, { opacity: fadeAnim }]}>
+        <FlatList
+          ref={flatListRef}
+          data={groupedMessages()}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id || item.id}
+          inverted
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Text style={styles.emptyIconText}>💬</Text>
+              </View>
+              <Text style={styles.emptyTitle}>No messages yet</Text>
+              <Text style={styles.emptyBody}>
+                Start a conversation with {otherUserName}
+              </Text>
+            </View>
+          }
+        />
+      </Animated.View>
 
-      {/* Message Input */}
-      <View style={styles.inputContainer}>
+      {/* ── Input bar ── */}
+      <Animated.View
+        style={[styles.inputBar, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+      >
         <TextInput
-          style={styles.textInput}
+          ref={inputRef}
+          style={styles.input}
           value={newMessage}
           onChangeText={setNewMessage}
-          placeholder="Type a message..."
+          placeholder="Type a message…"
+          placeholderTextColor="#aaa"
           multiline
           maxLength={500}
           editable={!sending}
+          returnKeyType="send"
+          onSubmitEditing={sendNewMessage}
         />
-        <TouchableOpacity 
-          style={[
-            styles.sendButton, 
-            (!newMessage.trim() || sending) && styles.sendButtonDisabled
-          ]}
+        <TouchableOpacity
+          style={[styles.sendBtn, (!newMessage.trim() || sending) && styles.sendBtnDisabled]}
           onPress={sendNewMessage}
           disabled={!newMessage.trim() || sending}
+          activeOpacity={0.8}
         >
           {sending ? (
-            <ActivityIndicator size="small" color={colors.white} />
+            <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={styles.sendButtonText}>Send</Text>
+            <Text style={styles.sendBtnIcon}>↑</Text>
           )}
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     </KeyboardAvoidingView>
   );
 }
 
+// ─── Theme ───────────────────────────────────────────────────────────────────
+const ACCENT   = '#4F63D2';
+const ACCENT_L = '#EEF0FB';
+const BG       = '#F7F8FC';
+const WHITE    = '#FFFFFF';
+const BORDER   = '#ECEEF5';
+const TEXT     = '#1A1D2E';
+const MUTED    = '#8A8FA8';
+
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: BG,
   },
+
+  // ── Header ──
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 50,
-    backgroundColor: colors.white,
+    flexDirection:    'row',
+    alignItems:       'center',
+    justifyContent:   'space-between',
+    paddingHorizontal: 12,
+    paddingTop:       Platform.OS === 'ios' ? 54 : 16,
+    paddingBottom:    12,
+    backgroundColor:  WHITE,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: BORDER,
   },
-  backButton: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '600',
+  backBtn: {
+    width:            40,
+    height:           40,
+    alignItems:       'center',
+    justifyContent:   'center',
+    borderRadius:     20,
+    backgroundColor:  BG,
   },
-  headerInfo: {
-    flex: 1,
-    alignItems: 'center',
+  backBtnText: {
+    fontSize:   26,
+    color:      ACCENT,
+    lineHeight: 30,
+    marginTop:  -2,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           10,
+    flex:          1,
+    marginHorizontal: 8,
   },
-  headerSubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
+  avatar: {
+    width:           40,
+    height:          40,
+    borderRadius:    20,
+    backgroundColor: ACCENT,
+    alignItems:      'center',
+    justifyContent:  'center',
   },
-  headerRight: {
-    width: 60,
+  avatarText: {
+    color:      WHITE,
+    fontSize:   15,
+    fontWeight: '700',
   },
+  avatarSmall: {
+    width:           30,
+    height:          30,
+    borderRadius:    15,
+    backgroundColor: ACCENT,
+    alignItems:      'center',
+    justifyContent:  'center',
+    marginRight:     6,
+    alignSelf:       'flex-end',
+    marginBottom:    4,
+  },
+  avatarSmallText: {
+    color:      WHITE,
+    fontSize:   12,
+    fontWeight: '700',
+  },
+  headerName: {
+    fontSize:   16,
+    fontWeight: '700',
+    color:      TEXT,
+  },
+  headerSub: {
+    fontSize:   12,
+    color:      MUTED,
+    marginTop:  1,
+  },
+
+  // ── Loading ──
   loadingContainer: {
-    flex: 1,
+    flex:            1,
+    backgroundColor: WHITE,
+  },
+  loadingBody: {
+    flex:           1,
+    alignItems:     'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    gap:            12,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: colors.textSecondary,
+    fontSize: 15,
+    color:    MUTED,
   },
-  messagesList: {
+  avatarSkeleton: {
+    width:           40,
+    height:          40,
+    borderRadius:    20,
+    backgroundColor: BORDER,
+  },
+  skeletonLine: {
+    width:           120,
+    height:          12,
+    borderRadius:    6,
+    backgroundColor: BORDER,
+  },
+
+  // ── Messages ──
+  listContainer: {
     flex: 1,
   },
-  messagesContent: {
-    padding: 15,
-    paddingBottom: 10,
+  listContent: {
+    paddingHorizontal: 16,
+    paddingVertical:   12,
   },
-  messageContainer: {
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 10,
+
+  // ── Date separator ──
+  dateSeparator: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    marginVertical: 16,
+    gap:            8,
   },
-  myMessage: {
-    alignSelf: 'flex-end',
-    backgroundColor: colors.primary,
+  dateLine: {
+    flex:            1,
+    height:          1,
+    backgroundColor: BORDER,
+  },
+  dateLabel: {
+    fontSize:   11,
+    color:      MUTED,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+
+  // ── Bubbles ──
+  bubbleWrapper: {
+    flexDirection:  'row',
+    marginBottom:   4,
+    maxWidth:       '80%',
+  },
+  bubbleWrapperMe: {
+    alignSelf:     'flex-end',
+    flexDirection: 'row-reverse',
+  },
+  bubbleWrapperThem: {
+    alignSelf: 'flex-start',
+  },
+  bubble: {
+    paddingHorizontal: 14,
+    paddingVertical:   9,
+    borderRadius:      18,
+    maxWidth:          '100%',
+  },
+  bubbleMe: {
+    backgroundColor: ACCENT,
     borderBottomRightRadius: 4,
   },
-  otherMessage: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.white,
+  bubbleThem: {
+    backgroundColor: WHITE,
     borderBottomLeftRadius: 4,
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    borderWidth:     1,
+    borderColor:     BORDER,
   },
-  senderName: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-    marginBottom: 4,
+  bubbleText: {
+    fontSize:   15,
+    lineHeight: 21,
   },
-  messageText: {
-    fontSize: 16,
-    color: colors.text,
-    marginBottom: 4,
+  bubbleTextMe: {
+    color: WHITE,
   },
-  myMessageText: {
-    color: colors.white,
+  bubbleTextThem: {
+    color: TEXT,
   },
-  messageTime: {
-    fontSize: 10,
-    color: colors.textSecondary,
+  bubbleTime: {
+    fontSize:  10,
+    marginTop: 4,
     alignSelf: 'flex-end',
   },
+  bubbleTimeMe: {
+    color: 'rgba(255,255,255,0.65)',
+  },
+  bubbleTimeThem: {
+    color: MUTED,
+  },
+
+  // ── Empty ──
   emptyState: {
-    alignItems: 'center',
+    alignItems:     'center',
     justifyContent: 'center',
-    padding: 40,
+    paddingVertical: 60,
+    paddingHorizontal: 32,
   },
   emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-    opacity: 0.5,
+    width:           72,
+    height:          72,
+    borderRadius:    36,
+    backgroundColor: ACCENT_L,
+    alignItems:      'center',
+    justifyContent:  'center',
+    marginBottom:    16,
   },
-  emptyText: {
-    fontSize: 18,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 8,
-    fontWeight: '600',
+  emptyIconText: {
+    fontSize: 32,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    opacity: 0.7,
+  emptyTitle: {
+    fontSize:   18,
+    fontWeight: '700',
+    color:      TEXT,
+    marginBottom: 6,
   },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 15,
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    alignItems: 'flex-end',
+  emptyBody: {
+    fontSize:   14,
+    color:      MUTED,
+    textAlign:  'center',
+    lineHeight: 20,
   },
-  textInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    maxHeight: 100,
-    marginRight: 10,
-    fontSize: 16,
-    backgroundColor: colors.background,
+
+  // ── Input bar ──
+  inputBar: {
+    flexDirection:   'row',
+    alignItems:      'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical:  10,
+    paddingBottom:   Platform.OS === 'ios' ? 28 : 12,
+    backgroundColor: WHITE,
+    borderTopWidth:  1,
+    borderTopColor:  BORDER,
+    gap:             8,
   },
-  sendButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    minWidth: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
+  input: {
+    flex:              1,
+    minHeight:         42,
+    maxHeight:         120,
+    backgroundColor:   BG,
+    borderRadius:      21,
+    paddingHorizontal: 16,
+    paddingVertical:   10,
+    fontSize:          15,
+    color:             TEXT,
+    borderWidth:       1,
+    borderColor:       BORDER,
   },
-  sendButtonDisabled: {
-    backgroundColor: colors.textSecondary,
+  sendBtn: {
+    width:           42,
+    height:          42,
+    borderRadius:    21,
+    backgroundColor: ACCENT,
+    alignItems:      'center',
+    justifyContent:  'center',
   },
-  sendButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
+  sendBtnDisabled: {
+    backgroundColor: BORDER,
+  },
+  sendBtnIcon: {
+    color:      WHITE,
+    fontSize:   20,
+    fontWeight: '700',
+    lineHeight: 24,
   },
 });

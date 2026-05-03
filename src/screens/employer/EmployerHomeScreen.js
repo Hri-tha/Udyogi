@@ -1,4 +1,4 @@
-// src/screens/employer/EmployerHomeScreen.js - FIXED VERSION (LinearGradient → GradientView)
+// src/screens/employer/EmployerHomeScreen.js - FIXED VERSION
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -20,7 +20,7 @@ import GradientView from '../../components/GradientView';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { Platform } from 'react-native';
-import { 
+import {
   fetchAllEmployerJobs,
   fetchJobApplications,
   deletePastJob,
@@ -32,7 +32,6 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 
 const { width, height } = Dimensions.get('window');
 
-// Mock user avatar if no image available
 const defaultAvatar = 'https://ui-avatars.com/api/?name=Employer&background=007AFF&color=fff&size=128';
 
 export default function EmployerHomeScreen({ navigation }) {
@@ -46,9 +45,13 @@ export default function EmployerHomeScreen({ navigation }) {
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [postingStats, setPostingStats] = useState(null);
-  const [showAllJobs, setShowAllJobs] = useState(false); // NEW: State to track if showing all jobs
+  const [showAllJobs, setShowAllJobs] = useState(false);
 
-  // Translations for this screen
+  // ── Resolve the real employer UID ──────────────────────────────────────────
+  // After OTP login, Firebase Auth may not be initialised, so user?.uid is null.
+  // The profile is persisted to AsyncStorage and loaded into userProfile instead.
+  const resolvedUid = user?.uid || userProfile?.uid || null;
+
   const translations = {
     en: {
       welcome: "Welcome back",
@@ -103,9 +106,6 @@ export default function EmployerHomeScreen({ navigation }) {
       tomorrow: "Tomorrow",
       dateNotSet: "Date not set",
       showAll: "Show All",
-      filter: "Filter",
-      sort: "Sort",
-      // Subscription related
       activeSubscription: "Active Subscription",
       unlimitedJobPosting: "Unlimited job posting",
       expires: "Expires",
@@ -125,26 +125,10 @@ export default function EmployerHomeScreen({ navigation }) {
       viewAllJobs: "View All Jobs",
       viewLessJobs: "Show Less",
       postNow: "Post Now",
-      featuredJobs: "Featured Jobs",
-      quickActions: "Quick Actions",
       analytics: "Analytics",
       notifications: "Notifications",
-      helpCenter: "Help Center",
-      earnings: "Earnings",
-      profile: "Profile",
-      // New additions
-      jobsThisMonth: "Jobs this month",
-      activeApplications: "Active applications",
       responseRate: "Response rate",
-      averageRating: "Average rating",
       viewInsights: "View Insights",
-      boostVisibility: "Boost Visibility",
-      featuredEmployer: "Featured Employer",
-      verifiedBadge: "Verified",
-      trending: "Trending",
-      newFeature: "New",
-      limitedTime: "Limited Time",
-      // Job details modal
       jobTitle: "Job Title",
       jobDescription: "Description",
       requirements: "Requirements",
@@ -153,8 +137,8 @@ export default function EmployerHomeScreen({ navigation }) {
       phone: "Phone",
       close: "Close",
       viewAllApplications: "View All Applications",
-      // Updated text for + button
       viewMoreJobs: "View More Jobs",
+      limitedTime: "Limited Time",
     },
     hi: {
       welcome: "वापसी पर स्वागत है",
@@ -209,9 +193,6 @@ export default function EmployerHomeScreen({ navigation }) {
       tomorrow: "कल",
       dateNotSet: "तारीख सेट नहीं है",
       showAll: "सभी दिखाएं",
-      filter: "फ़िल्टर",
-      sort: "क्रमबद्ध करें",
-      // Subscription related
       activeSubscription: "सक्रिय सदस्यता",
       unlimitedJobPosting: "असीमित नौकरी पोस्टिंग",
       expires: "समाप्ति",
@@ -231,26 +212,10 @@ export default function EmployerHomeScreen({ navigation }) {
       viewAllJobs: "सभी नौकरियां देखें",
       viewLessJobs: "कम दिखाएं",
       postNow: "अभी पोस्ट करें",
-      featuredJobs: "फीचर्ड नौकरियां",
-      quickActions: "त्वरित कार्रवाई",
       analytics: "विश्लेषण",
       notifications: "सूचनाएं",
-      helpCenter: "सहायता केंद्र",
-      earnings: "कमाई",
-      profile: "प्रोफ़ाइल",
-      // New additions
-      jobsThisMonth: "इस माह की नौकरियां",
-      activeApplications: "सक्रिय आवेदन",
       responseRate: "प्रतिक्रिया दर",
-      averageRating: "औसत रेटिंग",
       viewInsights: "इनसाइट्स देखें",
-      boostVisibility: "दृश्यता बढ़ाएं",
-      featuredEmployer: "फीचर्ड नियोक्ता",
-      verifiedBadge: "सत्यापित",
-      trending: "ट्रेंडिंग",
-      newFeature: "नया",
-      limitedTime: "सीमित समय",
-      // Job details modal
       jobTitle: "नौकरी शीर्षक",
       jobDescription: "विवरण",
       requirements: "आवश्यकताएं",
@@ -259,27 +224,25 @@ export default function EmployerHomeScreen({ navigation }) {
       phone: "फोन",
       close: "बंद करें",
       viewAllApplications: "सभी आवेदन देखें",
-      // Updated text for + button
       viewMoreJobs: "अधिक नौकरियां देखें",
+      limitedTime: "सीमित समय",
     }
   };
 
   const tr = translations[locale] || translations.en;
 
-  // Use useFocusEffect to refresh data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       console.log('EmployerHomeScreen focused, loading data...');
       loadData();
-    }, [user?.uid])
+    }, [resolvedUid])
   );
 
-  // Load posting stats
+  // ── Load posting stats — uses resolvedUid not user?.uid ───────────────────
   const loadPostingStats = async () => {
     try {
-      if (!user?.uid) return;
-      
-      const result = await getEmployerJobPostingStats(user.uid);
+      if (!resolvedUid) return;
+      const result = await getEmployerJobPostingStats(resolvedUid);
       if (result.success) {
         setPostingStats(result.stats);
       }
@@ -303,12 +266,11 @@ export default function EmployerHomeScreen({ navigation }) {
 
   const loadJobs = async () => {
     try {
-      if (!user?.uid) return;
+      if (!resolvedUid) return;
 
-      const result = await fetchAllEmployerJobs(user.uid);
-      
+      const result = await fetchAllEmployerJobs(resolvedUid);
+
       if (result.success) {
-        // Fetch applications for each future job
         const futureJobsWithApps = await Promise.all(
           result.futureJobs.map(async (job) => {
             const appsResult = await fetchJobApplications(job.id);
@@ -318,8 +280,7 @@ export default function EmployerHomeScreen({ navigation }) {
             };
           })
         );
-        
-        // Fetch applications for each past job
+
         const pastJobsWithApps = await Promise.all(
           result.pastJobs.map(async (job) => {
             const appsResult = await fetchJobApplications(job.id);
@@ -329,7 +290,7 @@ export default function EmployerHomeScreen({ navigation }) {
             };
           })
         );
-        
+
         setFutureJobs(futureJobsWithApps);
         setPastJobs(pastJobsWithApps);
       } else {
@@ -340,10 +301,6 @@ export default function EmployerHomeScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Exception loading jobs:', error);
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        locale === 'hi' ? 'नौकरियां लोड करते समय एक त्रुटि हुई' : 'An error occurred while loading jobs'
-      );
     }
   };
 
@@ -352,14 +309,13 @@ export default function EmployerHomeScreen({ navigation }) {
     loadData();
   };
 
-  // Helper functions
   const getGreetingName = () => {
     if (userProfile?.name) {
-      return locale === 'hi' 
+      return locale === 'hi'
         ? `${userProfile.name.split(' ')[0]} जी`
         : userProfile.name.split(' ')[0];
     }
-    return locale === 'hi' ? '' : '';
+    return '';
   };
 
   const getGreetingMessage = () => {
@@ -371,32 +327,29 @@ export default function EmployerHomeScreen({ navigation }) {
   };
 
   const isSubscriptionActive = () => {
-    const hasSubscription = userProfile?.subscriptionStatus === 'active' || 
-                           postingStats?.hasActiveSubscription;
-    return hasSubscription;
+    return userProfile?.subscriptionStatus === 'active' ||
+      postingStats?.hasActiveSubscription;
   };
 
   const getFreePostsUsed = () => {
-    return postingStats?.freePostsUsed || userProfile?.freePostsUsed || 0;
+    return postingStats?.freePostsUsed ?? userProfile?.freePostsUsed ?? 0;
   };
 
   const getFreePostsRemaining = () => {
     if (postingStats?.freePostsRemaining !== undefined) {
       return postingStats.freePostsRemaining;
     }
-    const freePostsUsed = userProfile?.freePostsUsed || 0;
-    const freePostsAvailable = userProfile?.freePostsAvailable || 3;
-    return Math.max(0, freePostsAvailable - freePostsUsed);
+    const used = userProfile?.freePostsUsed || 0;
+    const available = userProfile?.freePostsAvailable || 3;
+    return Math.max(0, available - used);
   };
 
   const formatJobDate = (jobDate, startTime) => {
     if (!jobDate) return locale === 'hi' ? 'तारीख सेट नहीं' : 'Date not set';
-    
     const date = new Date(jobDate);
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    
     if (date.toDateString() === today.toDateString()) {
       return `${locale === 'hi' ? 'आज' : 'Today'}${startTime ? `, ${startTime}` : ''}`;
     } else if (date.toDateString() === tomorrow.toDateString()) {
@@ -408,14 +361,14 @@ export default function EmployerHomeScreen({ navigation }) {
 
   const getStatusText = (status, completedCount = 0) => {
     if (locale === 'hi') {
-      switch(status) {
+      switch (status) {
         case 'open': return 'सक्रिय';
         case 'closed': return 'बंद';
         case 'cancelled': return 'रद्द';
         default: return completedCount > 0 ? 'पूर्ण' : 'समाप्त';
       }
     } else {
-      switch(status) {
+      switch (status) {
         case 'open': return 'Active';
         case 'closed': return 'Closed';
         case 'cancelled': return 'Cancelled';
@@ -435,7 +388,7 @@ export default function EmployerHomeScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const result = await deletePastJob(job.id, user.uid);
+              const result = await deletePastJob(job.id, resolvedUid);
               if (result.success) {
                 Alert.alert('✅ ' + (locale === 'hi' ? 'सफल' : 'Success'), result.message);
                 loadData();
@@ -444,10 +397,6 @@ export default function EmployerHomeScreen({ navigation }) {
               }
             } catch (error) {
               console.error('Error deleting past job:', error);
-              Alert.alert(
-                locale === 'hi' ? 'त्रुटि' : 'Error',
-                locale === 'hi' ? 'पिछली नौकरी हटाने में विफल' : 'Failed to delete past job'
-              );
             }
           }
         }
@@ -455,54 +404,50 @@ export default function EmployerHomeScreen({ navigation }) {
     );
   };
 
-  // Handle job card press - show job details modal
   const handleJobCardPress = (job) => {
     setSelectedJob(job);
     setShowJobDetails(true);
   };
 
-  // Handle view all jobs press - toggle showing all jobs
   const handleViewAllJobs = () => {
     setShowAllJobs(!showAllJobs);
   };
 
-  // Quick Actions Data
   const quickActions = [
-    { 
-      id: '1', 
-      title: tr.postNewJob, 
-      subtitle: tr.findWorkers, 
-      icon: 'add-business', 
+    {
+      id: '1',
+      title: tr.postNewJob,
+      subtitle: tr.findWorkers,
+      icon: 'add-business',
       color: colors.primary,
       action: () => navigation.navigate('PostJob')
     },
-    { 
-      id: '2', 
-      title: tr.viewApplications, 
-      subtitle: `${futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0)} ${locale === 'hi' ? 'नए' : 'new'}`, 
-      icon: 'people', 
+    {
+      id: '2',
+      title: tr.viewApplications,
+      subtitle: `${futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0)} ${locale === 'hi' ? 'नए' : 'new'}`,
+      icon: 'people',
       color: colors.success,
       action: () => navigation.navigate('Applications')
     },
-    { 
-      id: '3', 
-      title: tr.pastJobs, 
-      subtitle: `${pastJobs.length} ${locale === 'hi' ? 'पूर्ण' : 'completed'}`, 
-      icon: 'history', 
+    {
+      id: '3',
+      title: tr.pastJobs,
+      subtitle: `${pastJobs.length} ${locale === 'hi' ? 'पूर्ण' : 'completed'}`,
+      icon: 'history',
       color: colors.warning,
       action: () => setShowPastJobs(true)
     },
-    { 
-      id: '4', 
-      title: tr.settings, 
-      subtitle: tr.manageSubscription, 
-      icon: 'settings', 
+    {
+      id: '4',
+      title: tr.settings,
+      subtitle: tr.manageSubscription,
+      icon: 'settings',
       color: colors.info,
       action: () => navigation.navigate('EmployerProfile')
     },
   ];
 
-  // Stats Data
   const statsData = [
     {
       id: '1',
@@ -538,7 +483,6 @@ export default function EmployerHomeScreen({ navigation }) {
     },
   ];
 
-  // Determine which jobs to show based on showAllJobs state
   const jobsToShow = showAllJobs ? futureJobs : futureJobs.slice(0, 3);
 
   if (loading && !refreshing) {
@@ -553,8 +497,8 @@ export default function EmployerHomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
-      
-      {/* Fixed Header with Padding */}
+
+      {/* Fixed Header */}
       <View style={styles.fixedHeader}>
         <GradientView
           colors={[colors.primary, colors.primaryDark]}
@@ -567,14 +511,12 @@ export default function EmployerHomeScreen({ navigation }) {
               <Text style={styles.greeting}>{getGreetingMessage()}</Text>
               <Text style={styles.subGreeting}>{tr.subtitle} 👋</Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.profileButton}
               onPress={() => navigation.navigate('EmployerProfile')}
             >
-              <Image 
-                source={{ 
-                  uri: userProfile?.photoURL || defaultAvatar 
-                }}
+              <Image
+                source={{ uri: userProfile?.photoURL || defaultAvatar }}
                 style={styles.avatar}
               />
               {userProfile?.subscriptionStatus === 'active' && (
@@ -584,8 +526,8 @@ export default function EmployerHomeScreen({ navigation }) {
               )}
             </TouchableOpacity>
           </View>
-          
-          {/* Subscription/Free Posts Card */}
+
+          {/* Subscription / Free Posts Card */}
           <View style={styles.subscriptionCard}>
             {isSubscriptionActive() ? (
               <View style={styles.premiumCard}>
@@ -596,13 +538,13 @@ export default function EmployerHomeScreen({ navigation }) {
                   <View style={styles.premiumInfo}>
                     <Text style={styles.premiumTitle}>{tr.activeSubscription}</Text>
                     <Text style={styles.premiumSubtitle}>
-                      {tr.unlimitedJobPosting} • {tr.daysLeft}: {postingStats?.subscriptionExpiry ? 
+                      {tr.unlimitedJobPosting} • {tr.daysLeft}: {postingStats?.subscriptionExpiry ?
                         new Date(postingStats.subscriptionExpiry).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')
                         : tr.expiresNotSet}
                     </Text>
                   </View>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.managePremiumButton}
                   onPress={() => navigation.navigate('Subscription')}
                 >
@@ -618,7 +560,7 @@ export default function EmployerHomeScreen({ navigation }) {
                     <Text style={styles.newBadgeText}>{tr.limitedTime}</Text>
                   </View>
                 </View>
-                
+
                 <View style={styles.progressContainer}>
                   <View style={styles.progressLabels}>
                     <Text style={styles.progressText}>
@@ -629,16 +571,16 @@ export default function EmployerHomeScreen({ navigation }) {
                     </Text>
                   </View>
                   <View style={styles.progressBar}>
-                    <View 
+                    <View
                       style={[
                         styles.progressFill,
-                        { width: `${(getFreePostsUsed() / 3) * 100}%` }
+                        { width: `${Math.min((getFreePostsUsed() / 3) * 100, 100)}%` }
                       ]}
                     />
                   </View>
                 </View>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.upgradeButton}
                   onPress={() => navigation.navigate('Subscription')}
                 >
@@ -658,20 +600,19 @@ export default function EmployerHomeScreen({ navigation }) {
         </GradientView>
       </View>
 
-      {/* Main Content with proper spacing */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.primary}
           />
         }
       >
-        {/* Quick Stats Grid */}
+        {/* Stats Grid */}
         <View style={styles.statsSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{tr.overview}</Text>
@@ -679,7 +620,7 @@ export default function EmployerHomeScreen({ navigation }) {
               <Text style={styles.viewAllText}>{tr.viewInsights}</Text>
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.statsGrid}>
             {statsData.map((stat) => (
               <View key={stat.id} style={styles.statCard}>
@@ -697,13 +638,15 @@ export default function EmployerHomeScreen({ navigation }) {
         {/* Quick Actions */}
         <View style={styles.actionsSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{tr.quickActions}</Text>
+            <Text style={styles.sectionTitle}>
+              {locale === 'hi' ? 'त्वरित कार्रवाई' : 'Quick Actions'}
+            </Text>
           </View>
-          
+
           <View style={styles.actionsGrid}>
             {quickActions.map((action) => (
-              <TouchableOpacity 
-                key={action.id} 
+              <TouchableOpacity
+                key={action.id}
                 style={styles.actionCard}
                 onPress={action.action}
               >
@@ -717,9 +660,9 @@ export default function EmployerHomeScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Subscription Promotion (if no active subscription) */}
+        {/* Subscription Promo */}
         {!isSubscriptionActive() && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.subscriptionPromo}
             onPress={() => navigation.navigate('Subscription')}
           >
@@ -756,17 +699,17 @@ export default function EmployerHomeScreen({ navigation }) {
               </Text>
             </View>
             {futureJobs.length > 0 && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.viewAllButton}
                 onPress={handleViewAllJobs}
               >
                 <Text style={styles.viewAllButtonText}>
                   {showAllJobs ? tr.viewLessJobs : tr.viewAllJobs}
                 </Text>
-                <Icon 
-                  name={showAllJobs ? "expand-less" : "chevron-right"} 
-                  size={16} 
-                  color={colors.primary} 
+                <Icon
+                  name={showAllJobs ? "expand-less" : "chevron-right"}
+                  size={16}
+                  color={colors.primary}
                 />
               </TouchableOpacity>
             )}
@@ -776,10 +719,8 @@ export default function EmployerHomeScreen({ navigation }) {
             <View style={styles.emptyState}>
               <Icon name="work-outline" size={64} color={colors.textLight} />
               <Text style={styles.emptyStateTitle}>{tr.noUpcomingJobs}</Text>
-              <Text style={styles.emptyStateSubtitle}>
-                {tr.noJobsDesc}
-              </Text>
-              <TouchableOpacity 
+              <Text style={styles.emptyStateSubtitle}>{tr.noJobsDesc}</Text>
+              <TouchableOpacity
                 style={styles.emptyStateButton}
                 onPress={() => navigation.navigate('PostJob')}
               >
@@ -790,7 +731,7 @@ export default function EmployerHomeScreen({ navigation }) {
           ) : (
             <View style={styles.jobsList}>
               {jobsToShow.map((job) => (
-                <TouchableOpacity 
+                <TouchableOpacity
                   key={job.id}
                   style={styles.jobCard}
                   onPress={() => handleJobCardPress(job)}
@@ -810,7 +751,7 @@ export default function EmployerHomeScreen({ navigation }) {
                     </View>
                     <Text style={styles.jobSalary}>₹{job.rate}/hr</Text>
                   </View>
-                  
+
                   <View style={styles.jobDetails}>
                     <View style={styles.jobDetail}>
                       <Icon name="location-on" size={14} color={colors.textLight} />
@@ -823,7 +764,7 @@ export default function EmployerHomeScreen({ navigation }) {
                       </Text>
                     </View>
                   </View>
-                  
+
                   <View style={styles.jobFooter}>
                     <View style={styles.applicationsContainer}>
                       <Icon name="people" size={16} color={colors.primary} />
@@ -831,13 +772,13 @@ export default function EmployerHomeScreen({ navigation }) {
                         {job.applications?.length || 0} {tr.applicationsCount}
                       </Text>
                     </View>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.viewApplicationsButton}
                       onPress={() => {
                         setShowJobDetails(false);
-                        navigation.navigate('Applications', { 
+                        navigation.navigate('Applications', {
                           jobId: job.id,
-                          jobTitle: job.title 
+                          jobTitle: job.title
                         });
                       }}
                     >
@@ -848,10 +789,9 @@ export default function EmployerHomeScreen({ navigation }) {
                   </View>
                 </TouchableOpacity>
               ))}
-              
-              {/* View More Jobs Button - Always visible when there are more than 3 jobs and not showing all */}
+
               {futureJobs.length > 3 && !showAllJobs && (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.viewMoreJobs}
                   onPress={handleViewAllJobs}
                 >
@@ -859,8 +799,8 @@ export default function EmployerHomeScreen({ navigation }) {
                     <Icon name="add" size={20} color={colors.primary} />
                   </View>
                   <Text style={styles.viewMoreText}>
-                    {locale === 'hi' ? 
-                      `+ ${futureJobs.length - 3} और नौकरियां देखें` : 
+                    {locale === 'hi' ?
+                      `+ ${futureJobs.length - 3} और नौकरियां देखें` :
                       `+${futureJobs.length - 3} ${tr.viewMoreJobs}`
                     }
                   </Text>
@@ -870,12 +810,11 @@ export default function EmployerHomeScreen({ navigation }) {
           )}
         </View>
 
-        {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
       {/* Floating Post Job Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.floatingButton}
         onPress={() => navigation.navigate('PostJob')}
       >
@@ -887,7 +826,7 @@ export default function EmployerHomeScreen({ navigation }) {
         >
           <Icon name="add" size={24} color={colors.white} />
           <Text style={styles.floatingButtonText}>
-            {isSubscriptionActive() 
+            {isSubscriptionActive()
               ? (locale === 'hi' ? 'नौकरी पोस्ट करें' : 'Post Job')
               : getFreePostsRemaining() > 0
                 ? (locale === 'hi' ? 'मुफ्त नौकरी पोस्ट करें' : 'Post Free Job')
@@ -908,14 +847,14 @@ export default function EmployerHomeScreen({ navigation }) {
           <View style={styles.jobDetailsContent}>
             <View style={styles.jobDetailsHeader}>
               <Text style={styles.jobDetailsTitle}>{tr.jobDetails}</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.jobDetailsCloseButton}
                 onPress={() => setShowJobDetails(false)}
               >
                 <Icon name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
-            
+
             {selectedJob && (
               <ScrollView style={styles.jobDetailsScroll} showsVerticalScrollIndicator={false}>
                 <View style={styles.jobDetailsCard}>
@@ -923,12 +862,11 @@ export default function EmployerHomeScreen({ navigation }) {
                     <Text style={styles.jobDetailsJobTitle}>{selectedJob.title}</Text>
                     <Text style={styles.jobDetailsSalary}>₹{selectedJob.rate}/hr</Text>
                   </View>
-                  
+
                   <View style={styles.jobDetailsStatusContainer}>
                     <View style={[
                       styles.jobDetailsStatus,
                       selectedJob.status === 'open' && styles.jobDetailsStatusActive,
-                      selectedJob.status === 'closed' && styles.jobDetailsStatusCompleted,
                     ]}>
                       <Text style={styles.jobDetailsStatusText}>
                         {getStatusText(selectedJob.status)}
@@ -938,20 +876,12 @@ export default function EmployerHomeScreen({ navigation }) {
                       {formatJobDate(selectedJob.jobDate, selectedJob.startTime)}
                     </Text>
                   </View>
-                  
+
                   <View style={styles.jobDetailsSection}>
                     <View style={styles.jobDetailsRow}>
                       <Icon name="location-on" size={18} color={colors.textLight} />
                       <Text style={styles.jobDetailsLocation}>{selectedJob.location}</Text>
                     </View>
-                    
-                    {selectedJob.duration && (
-                      <View style={styles.jobDetailsRow}>
-                        <Icon name="access-time" size={18} color={colors.textLight} />
-                        <Text style={styles.jobDetailsDuration}>{selectedJob.duration} hours</Text>
-                      </View>
-                    )}
-                    
                     <View style={styles.jobDetailsRow}>
                       <Icon name="people" size={18} color={colors.textLight} />
                       <Text style={styles.jobDetailsApplications}>
@@ -959,54 +889,31 @@ export default function EmployerHomeScreen({ navigation }) {
                       </Text>
                     </View>
                   </View>
-                  
+
                   {selectedJob.description && (
                     <View style={styles.jobDetailsSection}>
                       <Text style={styles.jobDetailsSectionTitle}>{tr.jobDescription}</Text>
                       <Text style={styles.jobDetailsDescription}>{selectedJob.description}</Text>
                     </View>
                   )}
-                  
-                  {selectedJob.requirements && (
-                    <View style={styles.jobDetailsSection}>
-                      <Text style={styles.jobDetailsSectionTitle}>{tr.requirements}</Text>
-                      <Text style={styles.jobDetailsDescription}>{selectedJob.requirements}</Text>
-                    </View>
-                  )}
-                  
-                  <View style={styles.jobDetailsSection}>
-                    <Text style={styles.jobDetailsSectionTitle}>{tr.contactInfo}</Text>
-                    {userProfile?.email && (
-                      <View style={styles.jobDetailsRow}>
-                        <Icon name="email" size={18} color={colors.textLight} />
-                        <Text style={styles.jobDetailsContact}>{userProfile.email}</Text>
-                      </View>
-                    )}
-                    {userProfile?.phone && (
-                      <View style={styles.jobDetailsRow}>
-                        <Icon name="phone" size={18} color={colors.textLight} />
-                        <Text style={styles.jobDetailsContact}>{userProfile.phone}</Text>
-                      </View>
-                    )}
-                  </View>
                 </View>
               </ScrollView>
             )}
-            
+
             <View style={styles.jobDetailsActions}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.jobDetailsCloseBtn}
                 onPress={() => setShowJobDetails(false)}
               >
                 <Text style={styles.jobDetailsCloseBtnText}>{tr.close}</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.jobDetailsViewApplicationsBtn}
                 onPress={() => {
                   setShowJobDetails(false);
-                  navigation.navigate('Applications', { 
+                  navigation.navigate('Applications', {
                     jobId: selectedJob?.id,
-                    jobTitle: selectedJob?.title 
+                    jobTitle: selectedJob?.title
                   });
                 }}
               >
@@ -1030,7 +937,7 @@ export default function EmployerHomeScreen({ navigation }) {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{tr.pastJobs}</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={() => setShowPastJobs(false)}
             >
@@ -1046,9 +953,7 @@ export default function EmployerHomeScreen({ navigation }) {
               <View style={styles.modalEmptyState}>
                 <Icon name="history" size={64} color={colors.textLight} />
                 <Text style={styles.modalEmptyStateTitle}>{tr.noPastJobs}</Text>
-                <Text style={styles.modalEmptyStateSubtitle}>
-                  {tr.pastJobsDesc}
-                </Text>
+                <Text style={styles.modalEmptyStateSubtitle}>{tr.pastJobsDesc}</Text>
               </View>
             }
             renderItem={({ item: job }) => (
@@ -1062,29 +967,27 @@ export default function EmployerHomeScreen({ navigation }) {
                   </View>
                   <Text style={styles.modalJobSalary}>₹{job.rate}/hr</Text>
                 </View>
-                
                 <View style={styles.modalJobDetails}>
                   <Text style={styles.modalJobLocation}>{job.location}</Text>
                   <Text style={styles.modalJobApplications}>
                     {job.applications?.filter(app => app.status === 'completed').length || 0} {locale === 'hi' ? 'पूर्ण' : 'completed'}
                   </Text>
                 </View>
-                
                 <View style={styles.modalJobActions}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.modalDeleteButton}
                     onPress={() => handleDeletePastJob(job)}
                   >
                     <Icon name="delete-outline" size={18} color={colors.error} />
                     <Text style={styles.modalDeleteText}>{tr.deleteJob}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.modalViewButton}
                     onPress={() => {
                       setShowPastJobs(false);
-                      navigation.navigate('Applications', { 
+                      navigation.navigate('Applications', {
                         jobId: job.id,
-                        jobTitle: job.title 
+                        jobTitle: job.title
                       });
                     }}
                   >
@@ -1102,844 +1005,146 @@ export default function EmployerHomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingScreen: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  // Fixed Header (No Animation)
-  fixedHeader: {
-    backgroundColor: colors.primary,
-    paddingTop: Platform.OS === 'ios' ? 50 : 40,
-    zIndex: 1000,
-  },
-  headerGradient: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  greeting: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: colors.white,
-    marginBottom: 4,
-  },
-  subGreeting: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-  },
-  profileButton: {
-    position: 'relative',
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  premiumBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    backgroundColor: colors.warning,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  // Subscription Card
-  subscriptionCard: {
-    marginTop: 10,
-  },
-  premiumCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  premiumCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  premiumIcon: {
-    marginRight: 12,
-  },
-  premiumInfo: {
-    flex: 1,
-  },
-  premiumTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.white,
-    marginBottom: 2,
-  },
-  premiumSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  managePremiumButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  managePremiumText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.white,
-  },
-  freePostsCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  freePostsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  freePostsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.white,
-    marginLeft: 8,
-    flex: 1,
-  },
-  newBadge: {
-    backgroundColor: colors.success,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  newBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.white,
-  },
-  progressContainer: {
-    marginBottom: 16,
-  },
-  progressLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  progressText: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '500',
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.white,
-    borderRadius: 3,
-  },
-  upgradeButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  upgradeGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  upgradeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.white,
-    marginLeft: 8,
-  },
-  // Scroll View
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 20,
-    paddingBottom: 100,
-  },
-  // Stats Section
-  statsSection: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  viewAllText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  statCard: {
-    backgroundColor: colors.white,
-    padding: 16,
-    borderRadius: 16,
-    flex: 1,
-    minWidth: (width - 52) / 2,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 2,
-  },
-  statSubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  // Actions Section
-  actionsSection: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  actionCard: {
-    backgroundColor: colors.white,
-    padding: 16,
-    borderRadius: 16,
-    flex: 1,
-    minWidth: (width - 52) / 2,
-    alignItems: 'center',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  actionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  actionSubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  // Subscription Promotion
-  subscriptionPromo: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#764ba2',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  promoGradient: {
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  promoContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  promoTextContainer: {
-    flex: 1,
-  },
-  promoTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.white,
-    marginBottom: 4,
-  },
-  promoSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.9)',
-  },
-  promoPriceContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginLeft: 16,
-  },
-  promoPrice: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: colors.white,
-  },
-  promoDuration: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginLeft: 2,
-  },
-  promoArrow: {
-    marginLeft: 12,
-  },
-  // Jobs Section
-  jobsSection: {
-    paddingHorizontal: 20,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  viewAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  viewAllButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-    marginRight: 4,
-  },
-  emptyState: {
-    backgroundColor: colors.white,
-    padding: 40,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  emptyStateButton: {
-    backgroundColor: colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  emptyStateButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  jobsList: {
-    gap: 12,
-  },
-  jobCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  jobCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  jobTitleContainer: {
-    flex: 1,
-    marginRight: 12,
-  },
-  jobTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  jobStatus: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  jobStatusActive: {
-    backgroundColor: colors.success + '20',
-  },
-  jobStatusCompleted: {
-    backgroundColor: colors.warning + '20',
-  },
-  jobStatusText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  jobSalary: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  jobDetails: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 12,
-  },
-  jobDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  jobDetailText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  jobFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-  },
-  applicationsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  applicationsCount: {
-    fontSize: 14,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  viewApplicationsButton: {
-    backgroundColor: colors.primary + '10',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  viewApplicationsText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  viewMoreJobs: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    borderStyle: 'dashed',
-  },
-  viewMoreIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary + '10',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  viewMoreText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  // Floating Button
-  floatingButton: {
-    position: 'absolute',
-    bottom: 24,
-    right: 20,
-    borderRadius: 25,
-    overflow: 'hidden',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  floatingButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  floatingButtonText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  bottomSpacing: {
-    height: 40,
-  },
-  // Job Details Modal
-  jobDetailsModal: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  jobDetailsContent: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: height * 0.9,
-  },
-  jobDetailsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  jobDetailsTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  jobDetailsCloseButton: {
-    padding: 4,
-  },
-  jobDetailsScroll: {
-    padding: 20,
-  },
-  jobDetailsCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  jobDetailsHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  jobDetailsJobTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-    flex: 1,
-    marginRight: 12,
-  },
-  jobDetailsSalary: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  jobDetailsStatusContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  jobDetailsStatus: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: colors.success + '20',
-  },
-  jobDetailsStatusActive: {
-    backgroundColor: colors.success + '20',
-  },
-  jobDetailsStatusCompleted: {
-    backgroundColor: colors.warning + '20',
-  },
-  jobDetailsStatusText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  jobDetailsDate: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  jobDetailsSection: {
-    marginBottom: 24,
-  },
-  jobDetailsSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  jobDetailsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  jobDetailsLocation: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginLeft: 8,
-    flex: 1,
-  },
-  jobDetailsDuration: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginLeft: 8,
-  },
-  jobDetailsApplications: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginLeft: 8,
-  },
-  jobDetailsDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  jobDetailsContact: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginLeft: 8,
-  },
-  jobDetailsActions: {
-    flexDirection: 'row',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    gap: 12,
-  },
-  jobDetailsCloseBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: colors.borderLight,
-    alignItems: 'center',
-  },
-  jobDetailsCloseBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  jobDetailsViewApplicationsBtn: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    gap: 8,
-  },
-  jobDetailsViewApplicationsText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.white,
-  },
-  // Modal Styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    backgroundColor: colors.white,
-    paddingTop: 50,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  modalEmptyState: {
-    alignItems: 'center',
-    padding: 48,
-  },
-  modalEmptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  modalEmptyStateSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  modalJobCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  modalJobHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  modalJobTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  modalJobDate: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  modalJobSalary: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  modalJobDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  modalJobLocation: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  modalJobApplications: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.success,
-  },
-  modalJobActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  modalDeleteButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.error + '10',
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  modalDeleteText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.error,
-  },
-  modalViewButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary + '10',
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  modalViewText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  loadingScreen: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  loadingText: { marginTop: 16, fontSize: 16, color: colors.textSecondary, fontWeight: '500' },
+  fixedHeader: { backgroundColor: colors.primary, paddingTop: Platform.OS === 'ios' ? 50 : 40, zIndex: 1000 },
+  headerGradient: { paddingHorizontal: 20, paddingBottom: 20 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  greeting: { fontSize: 20, fontWeight: '600', color: colors.white, marginBottom: 4 },
+  subGreeting: { fontSize: 14, color: 'rgba(255, 255, 255, 0.9)' },
+  profileButton: { position: 'relative' },
+  avatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: colors.white },
+  premiumBadge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: colors.warning, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.white },
+  subscriptionCard: { marginTop: 10 },
+  premiumCard: { backgroundColor: 'rgba(255, 255, 255, 0.15)', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
+  premiumCardContent: { flexDirection: 'row', alignItems: 'center' },
+  premiumIcon: { marginRight: 12 },
+  premiumInfo: { flex: 1 },
+  premiumTitle: { fontSize: 16, fontWeight: '600', color: colors.white, marginBottom: 2 },
+  premiumSubtitle: { fontSize: 12, color: 'rgba(255, 255, 255, 0.8)' },
+  managePremiumButton: { backgroundColor: 'rgba(255, 255, 255, 0.2)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  managePremiumText: { fontSize: 12, fontWeight: '600', color: colors.white },
+  freePostsCard: { backgroundColor: 'rgba(255, 255, 255, 0.15)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
+  freePostsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  freePostsTitle: { fontSize: 16, fontWeight: '600', color: colors.white, marginLeft: 8, flex: 1 },
+  newBadge: { backgroundColor: colors.success, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  newBadgeText: { fontSize: 10, fontWeight: '700', color: colors.white },
+  progressContainer: { marginBottom: 16 },
+  progressLabels: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  progressText: { fontSize: 12, color: 'rgba(255, 255, 255, 0.9)', fontWeight: '500' },
+  progressBar: { height: 6, backgroundColor: 'rgba(255, 255, 255, 0.2)', borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: colors.white, borderRadius: 3 },
+  upgradeButton: { borderRadius: 12, overflow: 'hidden' },
+  upgradeGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 16 },
+  upgradeButtonText: { fontSize: 14, fontWeight: '600', color: colors.white, marginLeft: 8 },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingTop: 20, paddingBottom: 100 },
+  statsSection: { paddingHorizontal: 20, marginBottom: 24 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
+  viewAllText: { fontSize: 14, fontWeight: '600', color: colors.primary },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  statCard: { backgroundColor: colors.white, padding: 16, borderRadius: 16, flex: 1, minWidth: (width - 52) / 2, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 3 },
+  statIconContainer: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  statValue: { fontSize: 24, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  statLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 2 },
+  statSubtitle: { fontSize: 12, color: colors.textSecondary },
+  actionsSection: { paddingHorizontal: 20, marginBottom: 24 },
+  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  actionCard: { backgroundColor: colors.white, padding: 16, borderRadius: 16, flex: 1, minWidth: (width - 52) / 2, alignItems: 'center', shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 3 },
+  actionIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  actionTitle: { fontSize: 14, fontWeight: '600', color: colors.text, textAlign: 'center', marginBottom: 4 },
+  actionSubtitle: { fontSize: 12, color: colors.textSecondary, textAlign: 'center' },
+  subscriptionPromo: { marginHorizontal: 20, marginBottom: 24, borderRadius: 16, overflow: 'hidden', shadowColor: '#764ba2', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 5 },
+  promoGradient: { padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  promoContent: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  promoTextContainer: { flex: 1 },
+  promoTitle: { fontSize: 18, fontWeight: '700', color: colors.white, marginBottom: 4 },
+  promoSubtitle: { fontSize: 12, color: 'rgba(255, 255, 255, 0.9)' },
+  promoPriceContainer: { flexDirection: 'row', alignItems: 'baseline', marginLeft: 16 },
+  promoPrice: { fontSize: 28, fontWeight: '800', color: colors.white },
+  promoDuration: { fontSize: 14, color: 'rgba(255, 255, 255, 0.9)', marginLeft: 2 },
+  promoArrow: { marginLeft: 12 },
+  jobsSection: { paddingHorizontal: 20 },
+  sectionSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
+  viewAllButton: { flexDirection: 'row', alignItems: 'center' },
+  viewAllButtonText: { fontSize: 14, fontWeight: '600', color: colors.primary, marginRight: 4 },
+  emptyState: { backgroundColor: colors.white, padding: 40, borderRadius: 16, alignItems: 'center', shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
+  emptyStateTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginTop: 16, marginBottom: 8 },
+  emptyStateSubtitle: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  emptyStateButton: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  emptyStateButtonText: { color: colors.white, fontSize: 16, fontWeight: '600', marginLeft: 8 },
+  jobsList: { gap: 12 },
+  jobCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
+  jobCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  jobTitleContainer: { flex: 1, marginRight: 12 },
+  jobTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 8 },
+  jobStatus: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  jobStatusActive: { backgroundColor: colors.success + '20' },
+  jobStatusCompleted: { backgroundColor: colors.warning + '20' },
+  jobStatusText: { fontSize: 10, fontWeight: '700', color: colors.text },
+  jobSalary: { fontSize: 18, fontWeight: '700', color: colors.primary },
+  jobDetails: { flexDirection: 'row', gap: 16, marginBottom: 12 },
+  jobDetail: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  jobDetailText: { fontSize: 13, color: colors.textSecondary },
+  jobFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.borderLight },
+  applicationsContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  applicationsCount: { fontSize: 14, color: colors.primary, fontWeight: '600' },
+  viewApplicationsButton: { backgroundColor: colors.primary + '10', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  viewApplicationsText: { fontSize: 14, fontWeight: '600', color: colors.primary },
+  viewMoreJobs: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: colors.white, borderRadius: 16, borderWidth: 1, borderColor: colors.borderLight, borderStyle: 'dashed' },
+  viewMoreIconContainer: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary + '10', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  viewMoreText: { fontSize: 14, fontWeight: '600', color: colors.primary },
+  floatingButton: { position: 'absolute', bottom: 24, right: 20, borderRadius: 25, overflow: 'hidden', shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
+  floatingButtonGradient: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
+  floatingButtonText: { color: colors.white, fontSize: 14, fontWeight: '600', marginLeft: 8 },
+  bottomSpacing: { height: 40 },
+  jobDetailsModal: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+  jobDetailsContent: { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: height * 0.9 },
+  jobDetailsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
+  jobDetailsTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
+  jobDetailsCloseButton: { padding: 4 },
+  jobDetailsScroll: { padding: 20 },
+  jobDetailsCard: { backgroundColor: colors.white, borderRadius: 16, padding: 20, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
+  jobDetailsHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  jobDetailsJobTitle: { fontSize: 20, fontWeight: '700', color: colors.text, flex: 1, marginRight: 12 },
+  jobDetailsSalary: { fontSize: 22, fontWeight: '700', color: colors.primary },
+  jobDetailsStatusContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  jobDetailsStatus: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.success + '20' },
+  jobDetailsStatusActive: { backgroundColor: colors.success + '20' },
+  jobDetailsStatusText: { fontSize: 12, fontWeight: '700', color: colors.text },
+  jobDetailsDate: { fontSize: 14, color: colors.textSecondary, fontWeight: '500' },
+  jobDetailsSection: { marginBottom: 24 },
+  jobDetailsSectionTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 12 },
+  jobDetailsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  jobDetailsLocation: { fontSize: 14, color: colors.textSecondary, marginLeft: 8, flex: 1 },
+  jobDetailsApplications: { fontSize: 14, color: colors.textSecondary, marginLeft: 8 },
+  jobDetailsDescription: { fontSize: 14, color: colors.textSecondary, lineHeight: 20 },
+  jobDetailsActions: { flexDirection: 'row', padding: 20, borderTopWidth: 1, borderTopColor: colors.borderLight, gap: 12 },
+  jobDetailsCloseBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.borderLight, alignItems: 'center' },
+  jobDetailsCloseBtnText: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
+  jobDetailsViewApplicationsBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12, backgroundColor: colors.primary, gap: 8 },
+  jobDetailsViewApplicationsText: { fontSize: 16, fontWeight: '600', color: colors.white },
+  modalContainer: { flex: 1, backgroundColor: colors.background },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.borderLight, backgroundColor: colors.white, paddingTop: 50 },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
+  modalCloseButton: { padding: 4 },
+  modalContent: { padding: 20, paddingBottom: 40 },
+  modalEmptyState: { alignItems: 'center', padding: 48 },
+  modalEmptyStateTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginTop: 16, marginBottom: 8 },
+  modalEmptyStateSubtitle: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  modalJobCard: { backgroundColor: colors.white, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
+  modalJobHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
+  modalJobTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 4 },
+  modalJobDate: { fontSize: 12, color: colors.textSecondary },
+  modalJobSalary: { fontSize: 18, fontWeight: '700', color: colors.primary },
+  modalJobDetails: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  modalJobLocation: { fontSize: 14, color: colors.textSecondary },
+  modalJobApplications: { fontSize: 14, fontWeight: '600', color: colors.success },
+  modalJobActions: { flexDirection: 'row', gap: 12 },
+  modalDeleteButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.error + '10', padding: 12, borderRadius: 8, gap: 8 },
+  modalDeleteText: { fontSize: 14, fontWeight: '600', color: colors.error },
+  modalViewButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary + '10', padding: 12, borderRadius: 8, gap: 8 },
+  modalViewText: { fontSize: 14, fontWeight: '600', color: colors.primary },
 });

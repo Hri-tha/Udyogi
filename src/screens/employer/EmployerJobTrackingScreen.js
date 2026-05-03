@@ -1,5 +1,5 @@
-// src/screens/employer/EmployerJobTrackingScreen.js - HINDI VERSION
-import React, { useState, useEffect } from 'react';
+// src/screens/employer/EmployerJobTrackingScreen.js
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,435 +8,252 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
+  Animated,
 } from 'react-native';
-import { colors } from '../../constants/colors';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import { onApplicationUpdate } from '../../services/database';
 import { db } from '../../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import RatingModal from '../../components/RatingModal';
 
+// ─── Theme ─────────────────────────────────────────────────────────────────
+const ACCENT   = '#4F63D2';
+const SUCCESS  = '#22C55E';
+const WARNING  = '#F59E0B';
+const INFO     = '#3B82F6';
+const DANGER   = '#EF4444';
+const BG       = '#F7F8FC';
+const WHITE    = '#FFFFFF';
+const BORDER   = '#ECEEF5';
+const TEXT     = '#1A1D2E';
+const MUTED    = '#8A8FA8';
+const CARD_SH  = { shadowColor: '#1A1D2E', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 };
+
+const JOURNEY_STEPS = [
+  { key: 'accepted',  icon: '✓',  label: 'Accepted',         color: ACCENT },
+  { key: 'onTheWay',  icon: '🚗', label: 'On the way',       color: WARNING },
+  { key: 'reached',   icon: '📍', label: 'Arrived',          color: INFO },
+  { key: 'started',   icon: '⚡', label: 'Working',          color: ACCENT },
+  { key: 'completed', icon: '✅', label: 'Work done',        color: SUCCESS },
+];
+const STEP_INDEX = Object.fromEntries(JOURNEY_STEPS.map((s, i) => [s.key, i]));
+
 const EmployerJobTrackingScreen = ({ route, navigation }) => {
   const { applicationId } = route.params;
-  const { locale, t } = useLanguage();
-  const [application, setApplication] = useState(null);
-  const [job, setJob] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [workDuration, setWorkDuration] = useState(0);
-  const [showRatingModal, setShowRatingModal] = useState(false);
-  const [actualPayment, setActualPayment] = useState(0);
+  const { locale } = useLanguage();
 
-  // Translations for this screen
-  const translations = {
-    en: {
-      back: "Back",
-      jobTracking: "Job Tracking",
-      loadingTracking: "Loading tracking details...",
-      jobTrackingNotAvailable: "Job tracking not available",
-      jobCompleted: "Job Completed",
-      jobCompletedDesc: "The job has been successfully completed.",
-      rateWorkerPerformance: "Rate Worker Performance",
-      rateWorkerDesc: "Please rate the worker to complete the job process.",
-      paymentRequired: "Payment Required",
-      applicationAccepted: "Application Accepted",
-      applicationAcceptedDesc: "Worker has accepted the job. Waiting for them to start journey.",
-      workerOnTheWay: "Worker On The Way",
-      workerOnTheWayDesc: "Worker is traveling to your location.",
-      workerHasArrived: "Worker Has Arrived",
-      workerHasArrivedDesc: "Worker has reached the location and will start work soon.",
-      workInProgress: "Work In Progress",
-      workInProgressDesc: "Worker is currently working on the job.",
-      workCompleted: "Work Completed",
-      workCompletedDesc: "Worker has completed the job. Payment due:",
-      jobStatus: "Job Status",
-      jobStatusDesc: "Tracking worker progress...",
-      jobDetails: "Job Details",
-      workerInformation: "Worker Information",
-      name: "Name",
-      phone: "Phone",
-      schedule: "Schedule",
-      date: "Date",
-      time: "Time",
-      notSpecified: "Not specified",
-      workDuration: "Work Duration",
-      timeSpentWorking: "Time spent working",
-      actualWorkDuration: "Actual Work Duration",
-      workStarted: "Work started",
-      workCompleted: "Work completed",
-      paymentDetails: "Payment Details",
-      hourlyRate: "Hourly Rate",
-      actualDuration: "Actual Duration",
-      calculatedPayment: "Calculated Payment",
-      originalEstimate: "Original Estimate",
-      calculation: "Calculation",
-      hours: "hours",
-      status: "Status",
-      paid: "Paid",
-      pending: "Pending",
-      amountPaid: "Amount Paid",
-      yourRating: "Your Rating",
-      stars: "stars",
-      processPayment: "Process Payment",
-      completeRateJob: "Complete & Rate Job",
-      viewJobHistory: "View Job History",
-      viewLocation: "View Location",
-      chatWithWorker: "Chat with Worker",
-      cannotProcessPayment: "Cannot Process Payment",
-      waitForCompletion: "Please wait for the worker to complete the job first.",
-      paymentRequiredAlert: "Payment Required",
-      processPaymentBefore: "Please process the payment before completing the job.",
-      thankYou: "Thank You! 🙏",
-      ratingSubmitted: "Your rating has been submitted successfully.",
-      ok: "OK",
-      error: "Error",
-      applicationNotFound: "Application not found",
-      failedToLoad: "Failed to load job tracking details",
-      paymentCalculation: "Payment Calculation",
-      jobTitle: "Job Title",
-      location: "Location",
-      rate: "Rate",
-      perHour: "/hour",
-      minutes: "minutes",
-      hour: "hour",
-      hours: "hours",
-      na: "N/A",
-      expectedPayment: "Expected Payment",
-      expected: "Expected",
-    },
-    hi: {
-      back: "पीछे",
-      jobTracking: "नौकरी ट्रैकिंग",
-      loadingTracking: "ट्रैकिंग विवरण लोड हो रहे हैं...",
-      jobTrackingNotAvailable: "नौकरी ट्रैकिंग उपलब्ध नहीं",
-      jobCompleted: "नौकरी पूर्ण",
-      jobCompletedDesc: "नौकरी सफलतापूर्वक पूर्ण हुई है।",
-      rateWorkerPerformance: "कर्मचारी प्रदर्शन रेट करें",
-      rateWorkerDesc: "कृपया नौकरी प्रक्रिया को पूर्ण करने के लिए कर्मचारी को रेट करें।",
-      paymentRequired: "भुगतान आवश्यक",
-      applicationAccepted: "आवेदन स्वीकृत",
-      applicationAcceptedDesc: "कर्मचारी ने नौकरी स्वीकार कर ली है। उनके यात्रा शुरू करने की प्रतीक्षा है।",
-      workerOnTheWay: "कर्मचारी रास्ते में",
-      workerOnTheWayDesc: "कर्मचारी आपके स्थान की ओर यात्रा कर रहा है।",
-      workerHasArrived: "कर्मचारी पहुंच गया",
-      workerHasArrivedDesc: "कर्मचारी स्थान पर पहुंच गया है और जल्द ही काम शुरू करेगा।",
-      workInProgress: "कार्य प्रगति पर",
-      workInProgressDesc: "कर्मचारी वर्तमान में नौकरी पर काम कर रहा है।",
-      workCompleted: "कार्य पूर्ण",
-      workCompletedDesc: "कर्मचारी ने नौकरी पूरी कर ली है। भुगतान देय:",
-      jobStatus: "नौकरी स्थिति",
-      jobStatusDesc: "कर्मचारी प्रगति ट्रैक की जा रही है...",
-      jobDetails: "नौकरी विवरण",
-      workerInformation: "कर्मचारी जानकारी",
-      name: "नाम",
-      phone: "फोन",
-      schedule: "समयसारणी",
-      date: "तारीख",
-      time: "समय",
-      notSpecified: "निर्दिष्ट नहीं",
-      workDuration: "कार्य अवधि",
-      timeSpentWorking: "कार्य में बिताया समय",
-      actualWorkDuration: "वास्तविक कार्य अवधि",
-      workStarted: "कार्य शुरू",
-      workCompleted: "कार्य पूर्ण",
-      paymentDetails: "भुगतान विवरण",
-      hourlyRate: "प्रति घंटा दर",
-      actualDuration: "वास्तविक अवधि",
-      calculatedPayment: "गणना किया गया भुगतान",
-      originalEstimate: "मूल अनुमान",
-      calculation: "गणना",
-      hours: "घंटे",
-      status: "स्थिति",
-      paid: "भुगतान हुआ",
-      pending: "लंबित",
-      amountPaid: "भुगतान राशि",
-      yourRating: "आपकी रेटिंग",
-      stars: "स्टार",
-      processPayment: "भुगतान प्रक्रिया करें",
-      completeRateJob: "पूर्ण और रेट करें",
-      viewJobHistory: "नौकरी इतिहास देखें",
-      viewLocation: "स्थान देखें",
-      chatWithWorker: "कर्मचारी से चैट करें",
-      cannotProcessPayment: "भुगतान प्रक्रिया नहीं कर सकते",
-      waitForCompletion: "कृपया पहले कर्मचारी के काम पूरा करने की प्रतीक्षा करें।",
-      paymentRequiredAlert: "भुगतान आवश्यक",
-      processPaymentBefore: "कृपया नौकरी पूर्ण करने से पहले भुगतान प्रक्रिया करें।",
-      thankYou: "धन्यवाद! 🙏",
-      ratingSubmitted: "आपकी रेटिंग सफलतापूर्वक सबमिट हो गई है।",
-      ok: "ठीक है",
-      error: "त्रुटि",
-      applicationNotFound: "आवेदन नहीं मिला",
-      failedToLoad: "नौकरी ट्रैकिंग विवरण लोड करने में विफल",
-      paymentCalculation: "भुगतान गणना",
-      jobTitle: "नौकरी शीर्षक",
-      location: "स्थान",
-      rate: "दर",
-      perHour: "/घंटा",
-      minutes: "मिनट",
-      hour: "घंटा",
-      hours: "घंटे",
-      na: "उपलब्ध नहीं",
-      expectedPayment: "अनुमानित भुगतान",
-      expected: "अनुमानित",
-    }
+  // ── FIX: resolve UID from all available sources ────────────────────────
+  const { user, userProfile, resolvedUid } = useAuth();
+
+  const [application,     setApplication]     = useState(null);
+  const [job,             setJob]             = useState(null);
+  const [loading,         setLoading]         = useState(true);
+  const [workDuration,    setWorkDuration]    = useState(0);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [actualPayment,   setActualPayment]   = useState(0);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const tr = {
+    back: '‹',
+    jobTracking: 'Job Tracking',
+    loadingTracking: 'Loading details…',
+    noTracking: 'Tracking not available',
+    jobCompleted: 'Job Completed',
+    rateWorker: 'Rate Worker',
+    paymentRequired: 'Payment Required',
+    accepted: 'Waiting for worker to start journey',
+    onTheWay: 'Worker is heading to you',
+    arrived: 'Worker has arrived',
+    working: 'Work is in progress',
+    workDone: 'Work completed',
+    jobDetails: 'Job Details',
+    workerInfo: 'Worker',
+    schedule: 'Schedule',
+    date: 'Date',
+    time: 'Time',
+    notSpecified: 'Not specified',
+    liveTimer: 'Live Work Timer',
+    timeSpent: 'Time spent working',
+    actualDuration: 'Actual Duration',
+    started: 'Started',
+    completed: 'Completed',
+    paymentDetails: 'Payment Summary',
+    hourlyRate: 'Hourly rate',
+    duration: 'Duration worked',
+    calculated: 'Amount due',
+    estimate: 'Original estimate',
+    calculation: 'Calculation',
+    hours: 'hrs',
+    statusLabel: 'Status',
+    paid: 'Paid',
+    pending: 'Pending',
+    amountPaid: 'Amount paid',
+    yourRating: 'Your Rating',
+    stars: 'stars',
+    processPayment: 'Process Payment',
+    ratePerformance: 'Rate Worker Performance',
+    viewHistory: 'View Job History',
+    viewLocation: 'View Location',
+    chatWorker: 'Chat with Worker',
+    waitForWorker: 'Please wait for the worker to complete the job first.',
+    processFirst: 'Please process the payment before completing the job.',
+    thankYou: 'Thank You! 🙏',
+    ratingDone: 'Rating submitted successfully.',
+    ok: 'OK',
+    error: 'Error',
+    notFound: 'Application not found',
+    failedLoad: 'Failed to load job tracking',
+    perHour: '/hr',
+    minutes: 'min',
+    na: 'N/A',
+    expectedPayment: 'Expected Payment',
+    name: 'Name',
+    phone: 'Phone',
   };
 
-  const tr = translations[locale] || translations.en;
-
-  // Load initial data
   useEffect(() => {
     loadInitialData();
-
-    // Real-time listener for application updates
-    const unsubscribe = onApplicationUpdate(applicationId, (updatedApp) => {
+    const unsub = onApplicationUpdate(applicationId, (updatedApp) => {
       setApplication(updatedApp);
-      calculateActualPayment(updatedApp);
+      calcPayment(updatedApp);
     });
-
-    return () => {
-      unsubscribe();
-    };
+    return () => unsub();
   }, [applicationId]);
 
-  // Timer for work duration
+  useEffect(() => {
+    if (!loading) {
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    }
+  }, [loading]);
+
   useEffect(() => {
     let interval;
     if (application?.journeyStatus === 'started' && application?.workStartedTimestamp) {
       interval = setInterval(() => {
-        const now = Date.now();
-        const start = application.workStartedTimestamp;
-        setWorkDuration((now - start) / 1000);
+        setWorkDuration((Date.now() - application.workStartedTimestamp) / 1000);
       }, 1000);
     }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    return () => { if (interval) clearInterval(interval); };
   }, [application?.journeyStatus, application?.workStartedTimestamp]);
 
-  const calculateActualPayment = (appData) => {
+  const calcPayment = (appData) => {
     try {
-      // If we have calculated payment from database, use that
-      if (appData.calculatedPayment) {
+      if (appData.calculatedPayment > 0) {
         setActualPayment(appData.calculatedPayment);
         return;
       }
-      
-      // Calculate based on actual work timestamps
       if (appData.workStartedTimestamp && appData.workCompletedTimestamp) {
-        const durationMs = appData.workCompletedTimestamp - appData.workStartedTimestamp;
-        const durationHours = durationMs / (1000 * 60 * 60);
-        const hourlyRate = appData.hourlyRate || 0;
-        const calculatedPayment = Math.round(durationHours * hourlyRate);
-        setActualPayment(calculatedPayment);
-        
-        console.log('Payment Calculation in Tracking:', {
-          durationHours: durationHours.toFixed(2),
-          hourlyRate: hourlyRate,
-          calculatedPayment: calculatedPayment
-        });
+        const mins  = (appData.workCompletedTimestamp - appData.workStartedTimestamp) / (1000 * 60);
+        const rate  = appData.hourlyRate || 0;
+        setActualPayment(Math.max(1, Math.round(mins * (rate / 60))));
       } else {
-        // Fallback to expected payment
         setActualPayment(appData.expectedPayment || 0);
       }
-    } catch (error) {
-      console.error('Payment calculation error in tracking:', error);
+    } catch {
       setActualPayment(appData.expectedPayment || 0);
     }
   };
 
   const loadInitialData = async () => {
     try {
-      const appRef = doc(db, 'applications', applicationId);
+      const appRef  = doc(db, 'applications', applicationId);
       const appSnap = await getDoc(appRef);
-
       if (!appSnap.exists()) {
-        Alert.alert(tr.error, tr.applicationNotFound);
+        Alert.alert(tr.error, tr.notFound);
         setLoading(false);
         return;
       }
-
       const appData = { id: appSnap.id, ...appSnap.data() };
       setApplication(appData);
-      calculateActualPayment(appData);
-
+      calcPayment(appData);
       if (appData.jobId) {
-        const jobRef = doc(db, 'jobs', appData.jobId);
-        const jobSnap = await getDoc(jobRef);
-        if (jobSnap.exists()) {
-          setJob({ id: jobSnap.id, ...jobSnap.data() });
-        }
+        const jobSnap = await getDoc(doc(db, 'jobs', appData.jobId));
+        if (jobSnap.exists()) setJob({ id: jobSnap.id, ...jobSnap.data() });
       }
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert(tr.error, tr.failedToLoad);
+      Alert.alert(tr.error, tr.failedLoad);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDuration = (seconds) => {
+  const formatClock = (seconds) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  const formatWorkDuration = (hours) => {
-    if (!hours) return locale === 'hi' ? '0 घंटे' : '0 hours';
-    const wholeHours = Math.floor(hours);
-    const minutes = Math.round((hours - wholeHours) * 60);
-    
-    if (locale === 'hi') {
-      if (wholeHours === 0) {
-        return `${minutes} मिनट`;
-      } else if (minutes === 0) {
-        return `${wholeHours} घंटे`;
-      } else {
-        return `${wholeHours} घंटे ${minutes} मिनट`;
-      }
-    } else {
-      if (wholeHours === 0) {
-        return `${minutes} minutes`;
-      } else if (minutes === 0) {
-        return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''}`;
-      } else {
-        return `${wholeHours} hour${wholeHours !== 1 ? 's' : ''} ${minutes} minutes`;
-      }
-    }
+  const formatHours = (ms) => {
+    if (!ms) return '0 min';
+    const mins = Math.round(ms / (1000 * 60));
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
   };
 
   const getStatusInfo = () => {
-    const status = application?.status;
-    const journeyStatus = application?.journeyStatus;
-
-    // Handle completed job status
-    if (status === 'completed') {
-      return {
-        icon: '✅',
-        color: colors.success,
-        title: tr.jobCompleted,
-        message: tr.jobCompletedDesc,
-      };
-    }
-
-    // Handle awaiting rating status
-    if (status === 'awaiting_rating') {
-      return {
-        icon: '⭐',
-        color: colors.warning,
-        title: tr.rateWorkerPerformance,
-        message: tr.rateWorkerDesc,
-      };
-    }
-
-    // Handle awaiting payment status
-    if (status === 'awaiting_payment') {
-      return {
-        icon: '💰',
-        color: colors.warning,
-        title: tr.paymentRequired,
-        message: `${tr.workCompletedDesc} ₹${actualPayment}`,
-      };
-    }
-
-    // Handle journey status for active jobs
+    const { status, journeyStatus, paymentStatus } = application || {};
+    if (status === 'completed')                 return { icon: '✅', color: SUCCESS, text: tr.jobCompleted };
+    if (status === 'awaiting_payment' || (journeyStatus === 'completed' && paymentStatus !== 'paid'))
+                                                return { icon: '💰', color: WARNING, text: `${tr.paymentRequired} — ₹${actualPayment}` };
     switch (journeyStatus) {
-      case 'accepted':
-        return {
-          icon: '✓',
-          color: colors.info,
-          title: tr.applicationAccepted,
-          message: tr.applicationAcceptedDesc,
-        };
-      case 'onTheWay':
-        return {
-          icon: '🚗',
-          color: colors.warning,
-          title: tr.workerOnTheWay,
-          message: tr.workerOnTheWayDesc,
-        };
-      case 'reached':
-        return {
-          icon: '📍',
-          color: colors.success,
-          title: tr.workerHasArrived,
-          message: tr.workerHasArrivedDesc,
-        };
-      case 'started':
-        return {
-          icon: '⚡',
-          color: colors.primary,
-          title: tr.workInProgress,
-          message: tr.workInProgressDesc,
-        };
-      case 'completed':
-        return {
-          icon: '✅',
-          color: colors.success,
-          title: tr.workCompleted,
-          message: `${tr.workCompletedDesc} ₹${actualPayment}`,
-        };
-      default:
-        return {
-          icon: 'ℹ️',
-          color: colors.textSecondary,
-          title: tr.jobStatus,
-          message: tr.jobStatusDesc,
-        };
+      case 'accepted':  return { icon: '✓',  color: ACCENT,  text: tr.accepted };
+      case 'onTheWay':  return { icon: '🚗', color: WARNING,  text: tr.onTheWay };
+      case 'reached':   return { icon: '📍', color: INFO,     text: tr.arrived };
+      case 'started':   return { icon: '⚡', color: ACCENT,   text: tr.working };
+      case 'completed': return { icon: '✅', color: SUCCESS,  text: tr.workDone };
+      default:          return { icon: 'ℹ️', color: MUTED,   text: 'Tracking…' };
     }
   };
 
   const handleProcessPayment = () => {
     if (application?.journeyStatus !== 'completed' && application?.status !== 'awaiting_payment') {
-      Alert.alert(tr.cannotProcessPayment, tr.waitForCompletion);
+      Alert.alert(tr.error, tr.waitForWorker);
       return;
     }
-
-    navigation.navigate('PaymentProcessing', {
-      applicationId: application.id,
-    });
+    navigation.navigate('PaymentProcessing', { applicationId: application.id });
   };
 
   const handleCompleteJob = () => {
     if (application?.paymentStatus !== 'paid') {
-      Alert.alert(tr.paymentRequiredAlert, tr.processPaymentBefore);
+      Alert.alert(tr.error, tr.processFirst);
       return;
     }
-
     navigation.navigate('CompleteJob', {
       applicationId: application.id,
-      jobId: application.jobId,
-      workerId: application.workerId,
-      workerName: application.workerName,
+      jobId:         application.jobId,
+      workerId:      application.workerId,
+      workerName:    application.workerName,
     });
   };
 
-  const handleRateWorker = () => {
-    setShowRatingModal(true);
+  // ── FIX: resolve UID before navigating to chat ────────────────────────
+  const handleChatWithWorker = () => {
+    const currentUserId = resolvedUid || user?.uid || userProfile?.uid;
+    if (!currentUserId) {
+      Alert.alert(tr.error, 'Unable to open chat. Please log in again.');
+      return;
+    }
+    navigation.navigate('ChatScreen', {
+      applicationId,
+      otherUser:     application.workerId,
+      jobTitle:      job?.title,
+      otherUserName: application.workerName,
+      currentUserId,
+    });
   };
 
-  const handleRatingSubmitted = () => {
-    Alert.alert(
-      tr.thankYou,
-      tr.ratingSubmitted,
-      [{ 
-        text: tr.ok, 
-        onPress: () => {
-          setShowRatingModal(false);
-          navigation.navigate('EmployerHome');
-        }
-      }]
-    );
-  };
-
-  const handleViewJobHistory = () => {
-    navigation.navigate('ApplicationsScreen');
-  };
-
+  // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={styles.fullCenter}>
+        <ActivityIndicator size="large" color={ACCENT} />
         <Text style={styles.loadingText}>{tr.loadingTracking}</Text>
       </View>
     );
@@ -444,164 +261,176 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
 
   if (!application || !job) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← {tr.back}</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{tr.jobTracking}</Text>
-          <View style={{ width: 50 }} />
-        </View>
-        <View style={styles.centerContent}>
-          <Text style={styles.errorText}>{tr.jobTrackingNotAvailable}</Text>
+      <View style={styles.screen}>
+        <Header title={tr.jobTracking} back={tr.back} onBack={() => navigation.goBack()} />
+        <View style={styles.fullCenter}>
+          <Text style={styles.errorText}>{tr.noTracking}</Text>
         </View>
       </View>
     );
   }
 
-  const statusInfo = getStatusInfo();
-  const isJobCompleted = application.status === 'completed';
+  const journeyStatus    = application.journeyStatus || 'accepted';
+  const stepIdx          = STEP_INDEX[journeyStatus] ?? 0;
+  const statusInfo       = getStatusInfo();
+  const isCompleted      = application.status === 'completed';
   const isAwaitingRating = application.status === 'awaiting_rating';
-  const isAwaitingPayment = application.status === 'awaiting_payment';
-  const hasActualWorkData = application.workStartedTimestamp && application.workCompletedTimestamp;
-  const hourlyRate = application.hourlyRate || job.rate || 0;
+  const isAwaitingPay    = application.status === 'awaiting_payment';
+  const hasPaid          = application.paymentStatus === 'paid';
+  const hasWorkData      = application.workStartedTimestamp && application.workCompletedTimestamp;
+  const hourlyRate       = application.hourlyRate || job.rate || 0;
+  const workMs           = hasWorkData
+    ? application.workCompletedTimestamp - application.workStartedTimestamp
+    : 0;
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← {tr.back}</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{tr.jobTracking}</Text>
-        <View style={{ width: 50 }} />
-      </View>
+    <View style={styles.screen}>
+      <Header title={tr.jobTracking} back={tr.back} onBack={() => navigation.goBack()} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Status Banner */}
-        <View style={[styles.statusBanner, { backgroundColor: statusInfo.color + '20', borderLeftColor: statusInfo.color }]}>
-          <Text style={styles.statusIcon}>{statusInfo.icon}</Text>
-          <View style={styles.statusContent}>
-            <Text style={styles.statusTitle}>{statusInfo.title}</Text>
-            <Text style={styles.statusMessage}>{statusInfo.message}</Text>
+      <Animated.ScrollView
+        style={[styles.scroll, { opacity: fadeAnim }]}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Status banner ── */}
+        <View style={[styles.statusBanner, { borderLeftColor: statusInfo.color }]}>
+          <View style={[styles.statusIconWrap, { backgroundColor: statusInfo.color + '20' }]}>
+            <Text style={styles.statusIconText}>{statusInfo.icon}</Text>
+          </View>
+          <Text style={[styles.statusText, { color: statusInfo.color }]}>{statusInfo.text}</Text>
+        </View>
+
+        {/* ── Journey stepper ── */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Journey</Text>
+          <View style={styles.stepper}>
+            {JOURNEY_STEPS.map((step, i) => {
+              const done    = i <= stepIdx;
+              const current = i === stepIdx;
+              return (
+                <View key={step.key} style={styles.stepRow}>
+                  <View style={styles.stepLeft}>
+                    <View style={[
+                      styles.stepDot,
+                      done ? { backgroundColor: step.color, borderColor: step.color } : styles.stepDotEmpty,
+                      current && styles.stepDotCurrent,
+                    ]}>
+                      {done && <Text style={styles.stepDotIcon}>{i < stepIdx ? '✓' : step.icon}</Text>}
+                    </View>
+                    {i < JOURNEY_STEPS.length - 1 && (
+                      <View style={[styles.stepLine, { backgroundColor: i < stepIdx ? step.color : BORDER }]} />
+                    )}
+                  </View>
+                  <Text style={[styles.stepLabel, { color: done ? TEXT : MUTED, fontWeight: current ? '700' : '400' }]}>
+                    {step.label}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         </View>
 
-        {/* Job Information */}
+        {/* ── Live timer ── */}
+        {journeyStatus === 'started' && (
+          <View style={[styles.timerCard, { backgroundColor: ACCENT }]}>
+            <Text style={styles.timerLabel}>{tr.liveTimer}</Text>
+            <Text style={styles.timerValue}>{formatClock(workDuration)}</Text>
+            <Text style={styles.timerSub}>{tr.timeSpent}</Text>
+          </View>
+        )}
+
+        {/* ── Actual work duration ── */}
+        {hasWorkData && (
+          <View style={[styles.card, { borderLeftWidth: 3, borderLeftColor: SUCCESS }]}>
+            <Text style={styles.cardTitle}>{tr.actualDuration}</Text>
+            <Text style={styles.durationValue}>{formatHours(workMs)}</Text>
+            <View style={styles.durationTimes}>
+              <View style={styles.durationTimeItem}>
+                <Text style={styles.durationTimeLabel}>{tr.started}</Text>
+                <Text style={styles.durationTimeValue}>
+                  {new Date(application.workStartedTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+              <View style={styles.durationSep} />
+              <View style={styles.durationTimeItem}>
+                <Text style={styles.durationTimeLabel}>{tr.completed}</Text>
+                <Text style={styles.durationTimeValue}>
+                  {new Date(application.workCompletedTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── Job details ── */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{tr.jobDetails}</Text>
-          <Text style={styles.infoValue}>{job.title}</Text>
-          <Text style={styles.infoValue}>{job.location}</Text>
-          <Text style={styles.infoValue}>{tr.rate}: ₹{hourlyRate}{tr.perHour}</Text>
+          <InfoRow label="Title"    value={job.title    || '—'} />
+          <InfoRow label="Location" value={job.location || '—'} />
+          <InfoRow label="Rate"     value={`₹${hourlyRate}${tr.perHour}`} accent />
         </View>
 
-        {/* Worker Information */}
+        {/* ── Worker info ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{tr.workerInformation}</Text>
-          <Text style={styles.infoLabel}>{tr.name}: <Text style={styles.infoValue}>{application.workerName}</Text></Text>
-          <Text style={styles.infoLabel}>{tr.phone}: <Text style={styles.infoValue}>{application.workerPhone}</Text></Text>
+          <Text style={styles.cardTitle}>{tr.workerInfo}</Text>
+          <InfoRow label={tr.name}  value={application.workerName  || '—'} />
+          <InfoRow label={tr.phone} value={application.workerPhone || '—'} />
         </View>
 
-        {/* Schedule */}
+        {/* ── Schedule ── */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{tr.schedule}</Text>
-          <Text style={styles.infoLabel}>{tr.date}: <Text style={styles.infoValue}>{job.jobDate || tr.notSpecified}</Text></Text>
-          <Text style={styles.infoLabel}>{tr.time}: <Text style={styles.infoValue}>{job.startTime || tr.na} - {job.endTime || tr.na}</Text></Text>
+          <InfoRow label={tr.date} value={job.jobDate || tr.notSpecified} />
+          <InfoRow label={tr.time} value={
+            job.startTime && job.endTime
+              ? `${job.startTime} – ${job.endTime}`
+              : tr.notSpecified
+          } />
         </View>
 
-        {/* Work Timer (if started) */}
-        {application.journeyStatus === 'started' && (
-          <View style={styles.timerCard}>
-            <Text style={styles.timerTitle}>{tr.workDuration}</Text>
-            <Text style={styles.timerValue}>{formatDuration(workDuration)}</Text>
-            <Text style={styles.timerSubtitle}>{tr.timeSpentWorking}</Text>
-          </View>
-        )}
-
-        {/* Actual Work Duration (if completed) */}
-        {hasActualWorkData && (
-          <View style={[styles.card, styles.workDurationCard]}>
-            <Text style={styles.cardTitle}>{tr.actualWorkDuration}</Text>
-            <Text style={styles.workDurationValue}>
-              {formatWorkDuration((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60))}
-            </Text>
-            <Text style={styles.workDurationNote}>
-              {tr.workStarted}: {new Date(application.workStartedTimestamp).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN')}
-              {'\n'}
-              {tr.workCompleted}: {new Date(application.workCompletedTimestamp).toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN')}
-            </Text>
-          </View>
-        )}
-
-        {/* Payment Information - UPDATED WITH ACTUAL CALCULATION */}
-        {(application.paymentStatus || isAwaitingPayment || isJobCompleted) && (
+        {/* ── Payment summary ── */}
+        {(hasPaid || isAwaitingPay || isCompleted || journeyStatus === 'completed') && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{tr.paymentDetails}</Text>
-            
-            {/* Hourly Rate */}
-            <Text style={styles.infoLabel}>{tr.hourlyRate}: <Text style={styles.infoValue}>₹{hourlyRate}{tr.perHour}</Text></Text>
-            
-            {/* Actual Work Duration */}
-            {hasActualWorkData && (
-              <Text style={styles.infoLabel}>
-                {tr.actualDuration}: <Text style={styles.infoValue}>
-                  {formatWorkDuration((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60))}
-                </Text>
+            <InfoRow label={tr.hourlyRate} value={`₹${hourlyRate}${tr.perHour}`} />
+            {hasWorkData && <InfoRow label={tr.duration} value={formatHours(workMs)} />}
+            <View style={styles.paymentHighlight}>
+              <Text style={styles.paymentHighlightLabel}>
+                {hasWorkData ? tr.calculated : tr.expectedPayment}
               </Text>
+              <Text style={styles.paymentHighlightValue}>₹{actualPayment}</Text>
+            </View>
+            {hasWorkData && application.expectedPayment && application.expectedPayment !== actualPayment && (
+              <InfoRow label={tr.estimate} value={`₹${application.expectedPayment}`} strikethrough />
             )}
-            
-            {/* Payment Amount */}
-            <Text style={styles.infoLabel}>
-              {hasActualWorkData ? tr.calculatedPayment : tr.expectedPayment}: 
-              <Text style={[styles.infoValue, styles.highlight]}> ₹{actualPayment}</Text>
-            </Text>
-            
-            {/* Show original estimate for comparison */}
-            {hasActualWorkData && application.expectedPayment && application.expectedPayment !== actualPayment && (
-              <Text style={styles.infoLabel}>
-                {tr.originalEstimate}: <Text style={[styles.infoValue, styles.originalEstimate]}>
-                  ₹{application.expectedPayment}
-                </Text>
-              </Text>
-            )}
-            
-            {/* Payment Calculation Details */}
-            {hasActualWorkData && (
-              <View style={styles.calculationBox}>
-                <Text style={styles.calculationText}>
-                  {tr.calculation}: {((application.workCompletedTimestamp - application.workStartedTimestamp) / (1000 * 60 * 60)).toFixed(2)} {tr.hours} × ₹{hourlyRate}{tr.perHour}
+            {hasWorkData && (
+              <View style={styles.calcBox}>
+                <Text style={styles.calcText}>
+                  {formatHours(workMs)} × ₹{hourlyRate}{tr.perHour}
                 </Text>
               </View>
             )}
-            
-            {/* Payment Status */}
-            {application.paymentStatus && (
-              <View style={[
-                styles.paymentStatus,
-                application.paymentStatus === 'paid' ? styles.paymentStatusPaid : styles.paymentStatusPending
-              ]}>
-                <Text style={styles.paymentStatusText}>
-                  {tr.status}: {application.paymentStatus === 'paid' ? '✅ ' + tr.paid : '⏳ ' + tr.pending}
-                </Text>
-              </View>
-            )}
-            
-            {/* Amount Paid */}
-            {application.paymentAmount && (
-              <Text style={styles.infoLabel}>{tr.amountPaid}: <Text style={[styles.infoValue, styles.highlight]}>₹{application.paymentAmount}</Text></Text>
+            {/* Payment status pill */}
+            <View style={[styles.statusPill, hasPaid ? styles.statusPillPaid : styles.statusPillPending]}>
+              <Text style={[styles.statusPillText, { color: hasPaid ? SUCCESS : WARNING }]}>
+                {hasPaid ? `✅  ${tr.paid}` : `⏳  ${tr.pending}`}
+              </Text>
+            </View>
+            {application.paymentAmount && hasPaid && (
+              <InfoRow label={tr.amountPaid} value={`₹${application.paymentAmount}`} accent />
             )}
           </View>
         )}
 
-        {/* Rating Information (for completed jobs) */}
-        {isJobCompleted && application.hasRating && (
+        {/* ── Rating received ── */}
+        {isCompleted && application.hasRating && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{tr.yourRating}</Text>
             <View style={styles.ratingDisplay}>
               <Text style={styles.ratingStars}>
-                {'⭐'.repeat(application.employerRating)}{'☆'.repeat(5 - application.employerRating)}
+                {'★'.repeat(application.employerRating)}{'☆'.repeat(5 - application.employerRating)}
               </Text>
-              <Text style={styles.ratingValue}>{application.employerRating}/5 {tr.stars}</Text>
+              <Text style={styles.ratingScore}>{application.employerRating}/5 {tr.stars}</Text>
               {application.employerComment && (
                 <Text style={styles.ratingComment}>"{application.employerComment}"</Text>
               )}
@@ -609,92 +438,59 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
-          {/* Payment Button - Show for completed work awaiting payment */}
-          {(application.journeyStatus === 'completed' || isAwaitingPayment) && application.paymentStatus !== 'paid' && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.success }]}
+        {/* ── Primary actions ── */}
+        <View style={styles.ctaBlock}>
+          {(journeyStatus === 'completed' || isAwaitingPay) && !hasPaid && (
+            <PrimaryBtn
+              icon="💰"
+              label={`${tr.processPayment} — ₹${actualPayment}`}
+              color={SUCCESS}
               onPress={handleProcessPayment}
-            >
-              <Text style={styles.actionButtonIcon}>💰</Text>
-              <Text style={styles.actionButtonText}>{tr.processPayment} - ₹{actualPayment}</Text>
-            </TouchableOpacity>
+            />
           )}
-
-          {/* Complete Job Button - Show after payment */}
-          {application.paymentStatus === 'paid' && application.status !== 'completed' && !isAwaitingRating && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.primary }]}
-              onPress={handleCompleteJob}
-            >
-              <Text style={styles.actionButtonIcon}>✓</Text>
-              <Text style={styles.actionButtonText}>{tr.completeRateJob}</Text>
-            </TouchableOpacity>
+          {hasPaid && !isCompleted && !isAwaitingRating && (
+            <PrimaryBtn icon="✓" label={tr.ratePerformance} color={ACCENT} onPress={handleCompleteJob} />
           )}
-
-          {/* Rate Worker Button - Show for awaiting rating or completed jobs without rating */}
-          {(isAwaitingRating || (isJobCompleted && !application.hasRating)) && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.warning }]}
-              onPress={handleRateWorker}
-            >
-              <Text style={styles.actionButtonIcon}>⭐</Text>
-              <Text style={styles.actionButtonText}>{tr.rateWorkerPerformance}</Text>
-            </TouchableOpacity>
+          {(isAwaitingRating || (isCompleted && !application.hasRating)) && (
+            <PrimaryBtn icon="⭐" label={tr.ratePerformance} color={WARNING} onPress={() => setShowRatingModal(true)} />
           )}
-
-          {/* View Job History Button - For completed jobs */}
-          {isJobCompleted && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: colors.info }]}
-              onPress={handleViewJobHistory}
-            >
-              <Text style={styles.actionButtonIcon}>📋</Text>
-              <Text style={styles.actionButtonText}>{tr.viewJobHistory}</Text>
-            </TouchableOpacity>
+          {isCompleted && (
+            <PrimaryBtn icon="📋" label={tr.viewHistory} color={INFO} onPress={() => navigation.navigate('ApplicationsScreen')} />
           )}
         </View>
 
-        {/* Secondary Actions */}
-        <View style={styles.secondaryActions}>
-          <TouchableOpacity
-            style={styles.secondaryButton}
+        {/* ── Secondary actions ── */}
+        <View style={styles.secondaryRow}>
+          <SecondaryBtn
+            label={tr.viewLocation}
+            icon="📍"
             onPress={() => navigation.navigate('JobLocation', { application, isEmployer: true })}
-          >
-            <Text style={styles.secondaryButtonText}>📍 {tr.viewLocation}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() =>
-              navigation.navigate('ChatScreen', {
-                applicationId: application.id,
-                otherUser: application.workerId,
-                jobTitle: job.title,
-                otherUserName: application.workerName,
-              })
-            }
-          >
-            <Text style={styles.secondaryButtonText}>💬 {tr.chatWithWorker}</Text>
-          </TouchableOpacity>
+          />
+          <SecondaryBtn
+            label={tr.chatWorker}
+            icon="💬"
+            onPress={handleChatWithWorker}
+          />
         </View>
 
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </Animated.ScrollView>
 
-      {/* Rating Modal */}
       <RatingModal
         visible={showRatingModal}
         onClose={() => setShowRatingModal(false)}
-        onSubmit={handleRatingSubmitted}
+        onSubmit={() => {
+          Alert.alert(tr.thankYou, tr.ratingDone, [
+            { text: tr.ok, onPress: () => { setShowRatingModal(false); navigation.navigate('EmployerHome'); } },
+          ]);
+        }}
         ratingType="worker"
         ratingData={{
-          jobId: job.id,
-          jobTitle: job.title,
-          workerId: application.workerId,
-          workerName: application.workerName,
-          employerId: application.employerId,
+          jobId:        job.id,
+          jobTitle:     job.title,
+          workerId:     application.workerId,
+          workerName:   application.workerName,
+          employerId:   application.employerId,
           employerName: job.companyName,
           applicationId: application.id,
         }}
@@ -703,263 +499,181 @@ const EmployerJobTrackingScreen = ({ route, navigation }) => {
   );
 };
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+const Header = ({ title, back, onBack }) => (
+  <View style={styles.header}>
+    <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+      <Text style={styles.backBtnText}>{back}</Text>
+    </TouchableOpacity>
+    <Text style={styles.headerTitle}>{title}</Text>
+    <View style={{ width: 44 }} />
+  </View>
+);
+
+const InfoRow = ({ label, value, accent, strikethrough }) => (
+  <View style={styles.infoRow}>
+    <Text style={styles.infoLabel}>{label}</Text>
+    <Text style={[
+      styles.infoValue,
+      accent       && { color: ACCENT, fontWeight: '700' },
+      strikethrough && { textDecorationLine: 'line-through', color: MUTED },
+    ]}>
+      {value}
+    </Text>
+  </View>
+);
+
+const PrimaryBtn = ({ icon, label, color, onPress }) => (
+  <TouchableOpacity
+    style={[styles.primaryBtn, { backgroundColor: color }]}
+    onPress={onPress}
+    activeOpacity={0.85}
+  >
+    <Text style={styles.primaryBtnIcon}>{icon}</Text>
+    <Text style={styles.primaryBtnText}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const SecondaryBtn = ({ label, icon, onPress }) => (
+  <TouchableOpacity style={styles.secondaryBtn} onPress={onPress} activeOpacity={0.8}>
+    <Text style={styles.secondaryBtnIcon}>{icon}</Text>
+    <Text style={styles.secondaryBtnText}>{label}</Text>
+  </TouchableOpacity>
+);
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingText: {
-    marginTop: 10,
-    color: colors.textSecondary,
-    fontSize: 16,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
+  screen:       { flex: 1, backgroundColor: BG },
+  scroll:       { flex: 1 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
+  fullCenter:   { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loadingText:  { marginTop: 12, fontSize: 15, color: MUTED },
+  errorText:    { fontSize: 16, color: MUTED, textAlign: 'center' },
+
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 50,
-    backgroundColor: colors.white,
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: 12,
+    paddingTop:        Platform.OS === 'ios' ? 54 : 16,
+    paddingBottom:     12,
+    backgroundColor:   WHITE,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: BORDER,
   },
-  backButton: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
+  backBtn:      { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: BG },
+  backBtnText:  { fontSize: 26, color: ACCENT, lineHeight: 30, marginTop: -2 },
+  headerTitle:  { fontSize: 17, fontWeight: '700', color: TEXT },
+
+  // Status banner
   statusBanner: {
-    flexDirection: 'row',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    flexDirection:   'row',
+    alignItems:      'center',
+    backgroundColor: WHITE,
+    borderRadius:    14,
+    padding:         16,
+    marginBottom:    14,
     borderLeftWidth: 4,
+    ...CARD_SH,
   },
-  statusIcon: {
-    fontSize: 32,
-    marginRight: 12,
-  },
-  statusContent: {
-    flex: 1,
-  },
-  statusTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  statusMessage: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
+  statusIconWrap: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  statusIconText: { fontSize: 20 },
+  statusText:     { fontSize: 15, fontWeight: '700', flex: 1 },
+
+  // Cards
   card: {
-    backgroundColor: colors.white,
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  workDurationCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: colors.success,
+    backgroundColor: WHITE,
+    borderRadius:    16,
+    padding:         18,
+    marginBottom:    14,
+    ...CARD_SH,
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    color: colors.text,
+    fontSize: 11, fontWeight: '700', color: MUTED,
+    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 14,
   },
-  infoLabel: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    marginBottom: 8,
+
+  // Stepper
+  stepper:      { marginTop: 4 },
+  stepRow:      { flexDirection: 'row', alignItems: 'flex-start' },
+  stepLeft:     { alignItems: 'center', width: 28, marginRight: 12 },
+  stepDot: {
+    width: 24, height: 24, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: BORDER, backgroundColor: WHITE,
   },
-  infoValue: {
-    fontSize: 16,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  highlight: {
-    color: colors.primary,
-    fontWeight: 'bold',
-  },
-  originalEstimate: {
-    color: colors.textSecondary,
-    textDecorationLine: 'line-through',
-  },
+  stepDotEmpty:   {},
+  stepDotCurrent: { borderWidth: 2.5 },
+  stepDotIcon:    { fontSize: 11, color: WHITE },
+  stepLine:       { width: 2, height: 24, borderRadius: 1, marginVertical: 2 },
+  stepLabel:      { fontSize: 14, paddingTop: 3, paddingBottom: 24, flex: 1 },
+
+  // Timer
   timerCard: {
-    backgroundColor: colors.primary,
-    padding: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+    borderRadius: 16, padding: 22, alignItems: 'center', marginBottom: 14, ...CARD_SH,
   },
-  timerTitle: {
-    color: '#fff',
-    marginBottom: 8,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  timerLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 6 },
   timerValue: {
-    fontSize: 48,
-    color: '#fff',
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
-    letterSpacing: 2,
+    fontSize: 46, color: WHITE, fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    letterSpacing: 3,
   },
-  timerSubtitle: {
-    color: '#fff',
-    fontSize: 14,
-    opacity: 0.9,
-    marginTop: 4,
+  timerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 6 },
+
+  // Actual duration card
+  durationValue:    { fontSize: 28, fontWeight: '800', color: SUCCESS, marginBottom: 12 },
+  durationTimes:    { flexDirection: 'row', alignItems: 'center' },
+  durationTimeItem: { flex: 1, alignItems: 'center' },
+  durationTimeLabel:{ fontSize: 11, color: MUTED, marginBottom: 2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  durationTimeValue:{ fontSize: 16, fontWeight: '700', color: TEXT },
+  durationSep:      { width: 1, height: 32, backgroundColor: BORDER, marginHorizontal: 16 },
+
+  // Info rows
+  infoRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  infoLabel: { fontSize: 14, color: MUTED, flex: 1 },
+  infoValue: { fontSize: 14, color: TEXT, fontWeight: '500', textAlign: 'right', flex: 2 },
+
+  // Payment
+  paymentHighlight: {
+    flexDirection:   'row',
+    justifyContent:  'space-between',
+    alignItems:      'center',
+    backgroundColor: ACCENT + '10',
+    borderRadius:    10,
+    padding:         14,
+    marginVertical:  8,
   },
-  workDurationValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.success,
-    textAlign: 'center',
-    marginBottom: 8,
+  paymentHighlightLabel: { fontSize: 14, fontWeight: '600', color: ACCENT },
+  paymentHighlightValue: { fontSize: 22, fontWeight: '800', color: ACCENT },
+  calcBox:   { backgroundColor: INFO + '10', borderRadius: 8, padding: 10, alignItems: 'center', marginBottom: 8 },
+  calcText:  { fontSize: 12, color: INFO, fontStyle: 'italic' },
+  statusPill: { borderRadius: 8, paddingVertical: 8, alignItems: 'center', marginTop: 6 },
+  statusPillPaid:    { backgroundColor: SUCCESS + '15' },
+  statusPillPending: { backgroundColor: WARNING + '15' },
+  statusPillText:    { fontSize: 14, fontWeight: '700' },
+
+  // Rating
+  ratingDisplay: { alignItems: 'center', paddingVertical: 8 },
+  ratingStars:   { fontSize: 28, color: WARNING, letterSpacing: 2, marginBottom: 6 },
+  ratingScore:   { fontSize: 16, fontWeight: '700', color: TEXT, marginBottom: 6 },
+  ratingComment: { fontSize: 13, color: MUTED, fontStyle: 'italic', textAlign: 'center', lineHeight: 18 },
+
+  // CTAs
+  ctaBlock:    { marginBottom: 12 },
+  primaryBtn:  {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderRadius: 16, paddingVertical: 18, marginBottom: 10, ...CARD_SH,
   },
-  workDurationNote: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 16,
+  primaryBtnIcon: { fontSize: 18, marginRight: 8 },
+  primaryBtnText: { color: WHITE, fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
+
+  secondaryRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  secondaryBtn: {
+    flex: 1, backgroundColor: WHITE, borderRadius: 14, paddingVertical: 14,
+    alignItems: 'center', justifyContent: 'center', ...CARD_SH,
   },
-  calculationBox: {
-    backgroundColor: colors.info + '10',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  calculationText: {
-    fontSize: 12,
-    color: colors.info,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  paymentStatus: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  paymentStatusPaid: {
-    backgroundColor: colors.success + '20',
-  },
-  paymentStatusPending: {
-    backgroundColor: colors.warning + '20',
-  },
-  paymentStatusText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  ratingDisplay: {
-    alignItems: 'center',
-    padding: 16,
-  },
-  ratingStars: {
-    fontSize: 24,
-    marginBottom: 8,
-  },
-  ratingValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  ratingComment: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  actionsContainer: {
-    marginTop: 10,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    padding: 18,
-    borderRadius: 12,
-    marginBottom: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  actionButtonIcon: {
-    fontSize: 20,
-    marginRight: 8,
-    color: colors.white,
-  },
-  actionButtonText: {
-    color: colors.white,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  secondaryActions: {
-    flexDirection: 'row',
-    marginTop: 10,
-    marginBottom: 30,
-  },
-  secondaryButton: {
-    flex: 1,
-    backgroundColor: colors.white,
-    padding: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginHorizontal: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  secondaryButtonText: {
-    fontWeight: '600',
-    color: colors.text,
-    fontSize: 14,
-  },
+  secondaryBtnIcon: { fontSize: 20, marginBottom: 4 },
+  secondaryBtnText: { fontSize: 12, fontWeight: '600', color: TEXT },
 });
 
 export default EmployerJobTrackingScreen;

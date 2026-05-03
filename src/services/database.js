@@ -13,10 +13,20 @@ import {
   arrayRemove,
   Timestamp // ADD THIS IMPORT
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { getFirebaseDb } from './firebase';
 import { updateFeeOnJobCompletion } from './platformFeeService';
 // Add to your existing database.js file - USER FUNCTIONS
 import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+
+// ── getDb: resolves Firestore instance lazily inside each function ────────────
+// Calling getFirebaseDb() here (at module top level) would fail because
+// Firestore hasn't registered yet. Calling it inside getDb() is safe because
+// getDb() is only ever called from within running async functions.
+const getDb = () => {
+  const instance = getFirebaseDb();
+  if (!instance) throw new Error('Firestore not available — check firebase.js');
+  return instance;
+};
 
 // ========== USER FUNCTIONS ==========
 
@@ -24,7 +34,7 @@ import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from 'firebase/firest
 
 export const createJob = async (jobData) => {
   try {
-    const docRef = await addDoc(collection(db, 'jobs'), {
+    const docRef = await addDoc(collection(getDb(), 'jobs'), {
       ...jobData,
       status: 'open',
       createdAt: serverTimestamp(),
@@ -41,7 +51,7 @@ export const createJob = async (jobData) => {
 
 export const fetchJobs = async (filters = {}) => {
   try {
-    let q = query(collection(db, 'jobs'), where('status', '==', 'open'));
+    let q = query(collection(getDb(), 'jobs'), where('status', '==', 'open'));
     
     if (filters.location && filters.location.trim() !== '') {
       q = query(q, where('location', '==', filters.location.trim()));
@@ -72,7 +82,7 @@ export const fetchJobs = async (filters = {}) => {
 
 export const updateEmployerProfile = async (employerId, profileData) => {
   try {
-    const employerRef = doc(db, 'users', employerId);
+    const employerRef = doc(getDb(), 'users', employerId);
     await updateDoc(employerRef, {
       ...profileData,
       updatedAt: serverTimestamp(),
@@ -87,7 +97,7 @@ export const updateEmployerProfile = async (employerId, profileData) => {
 export const fetchEmployerStats = async (employerId) => {
   try {
     const jobsSnapshot = await getDocs(
-      query(collection(db, 'jobs'), where('employerId', '==', employerId))
+      query(collection(getDb(), 'jobs'), where('employerId', '==', employerId))
     );
     
     const jobs = jobsSnapshot.docs.map(doc => ({
@@ -122,7 +132,7 @@ export const fetchEmployerStats = async (employerId) => {
 
 export const closeJob = async (jobId) => {
   try {
-    const jobRef = doc(db, 'jobs', jobId);
+    const jobRef = doc(getDb(), 'jobs', jobId);
     await updateDoc(jobRef, {
       status: 'closed',
       closedAt: serverTimestamp()
@@ -136,7 +146,7 @@ export const closeJob = async (jobId) => {
 
 export const reopenJob = async (jobId) => {
   try {
-    const jobRef = doc(db, 'jobs', jobId);
+    const jobRef = doc(getDb(), 'jobs', jobId);
     await updateDoc(jobRef, {
       status: 'open',
       reopenedAt: serverTimestamp()
@@ -150,7 +160,7 @@ export const reopenJob = async (jobId) => {
 
 export const fetchJobById = async (jobId) => {
   try {
-    const docRef = doc(db, 'jobs', jobId);
+    const docRef = doc(getDb(), 'jobs', jobId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -171,7 +181,7 @@ export const fetchJobById = async (jobId) => {
 export const fetchEmployerJobs = async (employerId) => {
   try {
     const q = query(
-      collection(db, 'jobs'),
+      collection(getDb(), 'jobs'),
       where('employerId', '==', employerId)
       // REMOVED: where('status', '==', 'open') - Fetch all jobs
     );
@@ -197,7 +207,7 @@ export const fetchEmployerJobs = async (employerId) => {
 
 export const updateJob = async (jobId, updates) => {
   try {
-    const jobRef = doc(db, 'jobs', jobId);
+    const jobRef = doc(getDb(), 'jobs', jobId);
     await updateDoc(jobRef, updates);
     return { success: true };
   } catch (error) {
@@ -208,7 +218,7 @@ export const updateJob = async (jobId, updates) => {
 
 // export const deleteJob = async (jobId) => {
 //   try {
-//     await deleteDoc(doc(db, 'jobs', jobId));
+//     await deleteDoc(doc(getDb(), 'jobs', jobId));
 //     return { success: true };
 //   } catch (error) {
 //     console.error('Delete Job Error:', error);
@@ -222,23 +232,37 @@ export const createApplication = async (applicationData) => {
   try {
     // Validate required fields
     if (!applicationData.jobId || !applicationData.workerId) {
-      return { 
-        success: false, 
-        error: 'Missing required fields: jobId or workerId' 
+      return {
+        success: false,
+        error: 'Missing required fields: jobId or workerId',
       };
     }
-
+ 
     // Get job details to include in application
-    const jobRef = doc(db, 'jobs', applicationData.jobId);
+    const jobRef = doc(getDb(), 'jobs', applicationData.jobId);
     const jobSnap = await getDoc(jobRef);
-    
+ 
     if (!jobSnap.exists()) {
       return { success: false, error: 'Job not found' };
     }
-
+ 
     const job = jobSnap.data();
-
-    const docRef = await addDoc(collection(db, 'applications'), {
+ 
+    // FIX: guard against duplicate applications (idempotent check)
+    const dupQuery = query(
+      collection(getDb(), 'applications'),
+      where('jobId', '==', applicationData.jobId),
+      where('workerId', '==', applicationData.workerId)
+    );
+    const dupSnap = await getDocs(dupQuery);
+    if (!dupSnap.empty) {
+      return {
+        success: false,
+        error: 'You have already applied for this job',
+      };
+    }
+ 
+    const docRef = await addDoc(collection(getDb(), 'applications'), {
       ...applicationData,
       status: 'pending',
       appliedAt: serverTimestamp(),
@@ -247,19 +271,22 @@ export const createApplication = async (applicationData) => {
       hourlyRate: Number(job.rate || job.salary || 0),
       jobDate: job.jobDate || '',
       jobStartTime: job.startTime || '',
-      jobEndTime: job.endTime || ''
+      jobEndTime: job.endTime || '',
     });
-    
-    // Update job applications array
+ 
+    // FIX: update BOTH the applications array AND applicationsCount counter
+    // so the worker home screen can show the correct applicant count without
+    // loading the full applications sub-collection.
     await updateDoc(jobRef, {
-      applications: arrayUnion(applicationData.workerId)
+      applications: arrayUnion(applicationData.workerId),
+      applicationsCount: increment(1),          // ← NEW
     });
-
+ 
     // Send notification to employer
     try {
       await createNotification(job.employerId, {
         title: '📥 New Application Received',
-        message: `${applicationData.workerName} has applied for your ${job.title} position.`,
+        message: `${applicationData.workerName || 'A worker'} has applied for your ${job.title} position.`,
         type: 'new_application',
         actionType: 'view_applications',
         actionId: applicationData.jobId,
@@ -268,7 +295,7 @@ export const createApplication = async (applicationData) => {
       console.error('Error sending application notification:', notifError);
       // Don't fail application creation if notification fails
     }
-    
+ 
     return { success: true, applicationId: docRef.id };
   } catch (error) {
     console.error('Create Application Error:', error);
@@ -279,7 +306,7 @@ export const createApplication = async (applicationData) => {
 export const fetchWorkerApplications = async (workerId) => {
   try {
     const q = query(
-      collection(db, 'applications'),
+      collection(getDb(), 'applications'),
       where('workerId', '==', workerId)
     );
     
@@ -305,7 +332,7 @@ export const fetchWorkerApplications = async (workerId) => {
 export const fetchJobApplications = async (jobId) => {
   try {
     const q = query(
-      collection(db, 'applications'),
+      collection(getDb(), 'applications'),
       where('jobId', '==', jobId)
     );
     
@@ -337,7 +364,7 @@ export const fetchJobApplications = async (jobId) => {
  */
 export const updateApplicationStatus = async (applicationId, status, locationData = null) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     const updates = {
       status,
       respondedAt: serverTimestamp()
@@ -358,7 +385,7 @@ export const updateApplicationStatus = async (applicationId, status, locationDat
       const appSnap = await getDoc(appRef);
       const application = appSnap.data();
       
-      const jobRef = doc(db, 'jobs', application.jobId);
+      const jobRef = doc(getDb(), 'jobs', application.jobId);
       const jobSnap = await getDoc(jobRef);
       
       if (jobSnap.exists()) {
@@ -482,7 +509,7 @@ export const updateApplicationStatus = async (applicationId, status, locationDat
  * @returns {function} - Unsubscribe function
  */
 export const onApplicationUpdate = (applicationId, callback) => {
-  const appRef = doc(db, 'applications', applicationId);
+  const appRef = doc(getDb(), 'applications', applicationId);
   
   return onSnapshot(appRef, (docSnap) => {
     if (docSnap.exists()) {
@@ -499,7 +526,7 @@ export const onApplicationUpdate = (applicationId, callback) => {
  * @returns {function} - Unsubscribe function
  */
 export const onJobUpdate = (jobId, callback) => {
-  const jobRef = doc(db, 'jobs', jobId);
+  const jobRef = doc(getDb(), 'jobs', jobId);
   
   return onSnapshot(jobRef, (docSnap) => {
     if (docSnap.exists()) {
@@ -524,7 +551,7 @@ export const createNotification = async (userId, notificationData) => {
       return { success: false, error: 'Title and message are required' };
     }
 
-    const notificationRef = await addDoc(collection(db, 'notifications'), {
+    const notificationRef = await addDoc(collection(getDb(), 'notifications'), {
       userId: String(userId),
       title: String(notificationData.title),
       message: String(notificationData.message),
@@ -548,7 +575,7 @@ export const createNotification = async (userId, notificationData) => {
 export const fetchUserNotifications = async (userId) => {
   try {
     const notificationsQuery = query(
-      collection(db, 'notifications'),
+      collection(getDb(), 'notifications'),
       where('userId', '==', userId),
       orderBy('createdAt', 'desc')
     );
@@ -568,7 +595,7 @@ export const fetchUserNotifications = async (userId) => {
 
 export const markNotificationAsRead = async (notificationId) => {
   try {
-    const notificationRef = doc(db, 'notifications', notificationId);
+    const notificationRef = doc(getDb(), 'notifications', notificationId);
     await updateDoc(notificationRef, {
       read: true,
       readAt: new Date(),
@@ -632,7 +659,7 @@ export const fetchUserProfile = async (userId) => {
   try {
     console.log('📥 Fetching user profile for:', userId);
     
-    const docRef = doc(db, 'users', userId);
+    const docRef = doc(getDb(), 'users', userId);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -680,7 +707,7 @@ export const updateUserProfile = async (userId, profileData) => {
   try {
     console.log('📝 Updating user profile for:', userId, profileData);
     
-    const userRef = doc(db, 'users', userId);
+    const userRef = doc(getDb(), 'users', userId);
     const userSnap = await getDoc(userRef);
     
     const updateData = {
@@ -715,7 +742,7 @@ export const updateUserProfile = async (userId, profileData) => {
 export const checkIfApplied = async (jobId, workerId) => {
   try {
     const q = query(
-      collection(db, 'applications'),
+      collection(getDb(), 'applications'),
       where('jobId', '==', jobId),
       where('workerId', '==', workerId)
     );
@@ -736,7 +763,7 @@ export const createUserProfile = async (userId, userData) => {
   try {
     console.log('👤 Creating new user profile:', userId);
     
-    const userRef = doc(db, 'users', userId);
+    const userRef = doc(getDb(), 'users', userId);
     
     const profileData = {
       uid: userId,
@@ -775,7 +802,7 @@ export const createUserProfile = async (userId, userData) => {
 
 export const shareEmployerLocation = async (applicationId, locationData) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     await updateDoc(appRef, {
       employerLocation: locationData,
       locationShared: true,
@@ -790,7 +817,7 @@ export const shareEmployerLocation = async (applicationId, locationData) => {
 
 export const updateMeetingLocation = async (applicationId, locationData) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     await updateDoc(appRef, {
       meetingLocation: locationData,
       meetingLocationUpdatedAt: serverTimestamp()
@@ -807,7 +834,7 @@ export const updateMeetingLocation = async (applicationId, locationData) => {
 export const createChat = async (applicationId, participants) => {
   try {
     const q = query(
-      collection(db, 'chats'),
+      collection(getDb(), 'chats'),
       where('applicationId', '==', applicationId)
     );
     
@@ -818,7 +845,7 @@ export const createChat = async (applicationId, participants) => {
       return { success: true, chatId: existingChat.id };
     }
     
-    const chatRef = await addDoc(collection(db, 'chats'), {
+    const chatRef = await addDoc(collection(getDb(), 'chats'), {
       applicationId,
       participants,
       createdAt: serverTimestamp(),
@@ -835,14 +862,14 @@ export const createChat = async (applicationId, participants) => {
 
 export const sendMessage = async (chatId, messageData) => {
   try {
-    const messageRef = await addDoc(collection(db, 'messages'), {
+    const messageRef = await addDoc(collection(getDb(), 'messages'), {
       chatId,
       ...messageData,
       timestamp: serverTimestamp(),
       read: false
     });
 
-    const chatRef = doc(db, 'chats', chatId);
+    const chatRef = doc(getDb(), 'chats', chatId);
     await updateDoc(chatRef, {
       lastMessage: messageData.message,
       lastMessageAt: serverTimestamp()
@@ -858,7 +885,7 @@ export const sendMessage = async (chatId, messageData) => {
 export const fetchChatMessages = async (chatId) => {
   try {
     const q = query(
-      collection(db, 'messages'),
+      collection(getDb(), 'messages'),
       where('chatId', '==', chatId),
       orderBy('timestamp', 'asc')
     );
@@ -889,7 +916,7 @@ export const createRating = async (ratingData) => {
   try {
     // Check if rating already exists
     const existingRatingQuery = query(
-      collection(db, 'ratings'),
+      collection(getDb(), 'ratings'),
       where('jobId', '==', ratingData.jobId),
       where('workerId', '==', ratingData.workerId),
       where('employerId', '==', ratingData.employerId)
@@ -905,7 +932,7 @@ export const createRating = async (ratingData) => {
     }
 
     // Create the rating
-    const ratingRef = await addDoc(collection(db, 'ratings'), {
+    const ratingRef = await addDoc(collection(getDb(), 'ratings'), {
       ...ratingData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -913,7 +940,7 @@ export const createRating = async (ratingData) => {
 
     // CRITICAL: Update application status to completed and set hasRating flag
     if (ratingData.applicationId) {
-      const appRef = doc(db, 'applications', ratingData.applicationId);
+      const appRef = doc(getDb(), 'applications', ratingData.applicationId);
       await updateDoc(appRef, {
         status: 'completed',
         hasRating: true,
@@ -950,7 +977,7 @@ export const createEmployerRating = async (ratingData) => {
   try {
     // Check if rating already exists
     const existingRatingQuery = query(
-      collection(db, 'employerRatings'),
+      collection(getDb(), 'employerRatings'),
       where('jobId', '==', ratingData.jobId),
       where('workerId', '==', ratingData.workerId),
       where('employerId', '==', ratingData.employerId)
@@ -966,7 +993,7 @@ export const createEmployerRating = async (ratingData) => {
     }
 
     // Create the rating
-    const ratingRef = await addDoc(collection(db, 'employerRatings'), {
+    const ratingRef = await addDoc(collection(getDb(), 'employerRatings'), {
       ...ratingData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -998,7 +1025,7 @@ export const createEmployerRating = async (ratingData) => {
 export const fetchWorkerRatings = async (workerId) => {
   try {
     const q = query(
-      collection(db, 'ratings'),
+      collection(getDb(), 'ratings'),
       where('workerId', '==', workerId),
       orderBy('createdAt', 'desc')
     );
@@ -1024,7 +1051,7 @@ export const fetchWorkerRatings = async (workerId) => {
 export const fetchEmployerRatings = async (employerId) => {
   try {
     const q = query(
-      collection(db, 'employerRatings'),
+      collection(getDb(), 'employerRatings'),
       where('employerId', '==', employerId),
       orderBy('createdAt', 'desc')
     );
@@ -1050,7 +1077,7 @@ export const fetchEmployerRatings = async (employerId) => {
 const updateWorkerRating = async (workerId) => {
   try {
     const ratingsQuery = query(
-      collection(db, 'ratings'),
+      collection(getDb(), 'ratings'),
       where('workerId', '==', workerId)
     );
     
@@ -1061,7 +1088,7 @@ const updateWorkerRating = async (workerId) => {
       const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
       const average = sum / ratings.length;
       
-      const userRef = doc(db, 'users', workerId);
+      const userRef = doc(getDb(), 'users', workerId);
       await updateDoc(userRef, {
         rating: parseFloat(average.toFixed(2)),
         totalRatings: ratings.length,
@@ -1090,7 +1117,7 @@ const updateEmployerRating = async (employerId) => {
       const sum = ratingsResult.ratings.reduce((acc, r) => acc + r.rating, 0);
       const average = sum / ratingsResult.ratings.length;
       
-      const userRef = doc(db, 'users', employerId);
+      const userRef = doc(getDb(), 'users', employerId);
       await updateDoc(userRef, {
         rating: parseFloat(average.toFixed(2)),
         totalRatings: ratingsResult.ratings.length,
@@ -1116,7 +1143,7 @@ export const checkCanRate = async (jobId, workerId, employerId) => {
   try {
     // Find the application
     const q = query(
-      collection(db, 'applications'),
+      collection(getDb(), 'applications'),
       where('jobId', '==', jobId),
       where('workerId', '==', workerId),
       where('employerId', '==', employerId)
@@ -1161,7 +1188,7 @@ export const checkCanRate = async (jobId, workerId, employerId) => {
  */
 export const completeJob = async (applicationId) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     await updateDoc(appRef, {
       status: 'completed',
       completedAt: serverTimestamp()
@@ -1172,14 +1199,14 @@ export const completeJob = async (applicationId) => {
     const application = appSnap.data();
     
     // Update job status if needed
-    const jobRef = doc(db, 'jobs', application.jobId);
+    const jobRef = doc(getDb(), 'jobs', application.jobId);
     await updateDoc(jobRef, {
       status: 'closed',
       closedAt: serverTimestamp()
     });
     
     // Update worker stats
-    const workerRef = doc(db, 'users', application.workerId);
+    const workerRef = doc(getDb(), 'users', application.workerId);
     const workerSnap = await getDoc(workerRef);
     const workerData = workerSnap.data();
     
@@ -1189,7 +1216,7 @@ export const completeJob = async (applicationId) => {
     });
     
     // Update employer stats
-    const employerRef = doc(db, 'users', application.employerId);
+    const employerRef = doc(getDb(), 'users', application.employerId);
     const employerSnap = await getDoc(employerRef);
     const employerData = employerSnap.data();
     
@@ -1329,7 +1356,7 @@ export const getEmployerRatingStats = async (employerId) => {
 // In src/services/database.js - FIX THE PAYMENT CALCULATION
 export const updateWorkerJourneyStatus = async (applicationId, status) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     const timestamp = serverTimestamp();
     const currentTime = new Date().getTime();
     
@@ -1491,7 +1518,7 @@ export const updateWorkerJourneyStatus = async (applicationId, status) => {
 // src/services/database.js - FIXED processPayment function
 export const processPayment = async (applicationId, paymentData) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     const appSnap = await getDoc(appRef);
     const application = appSnap.data();
     
@@ -1520,14 +1547,14 @@ export const processPayment = async (applicationId, paymentData) => {
     });
 
     // Update job status to completed
-    const jobRef = doc(db, 'jobs', application.jobId);
+    const jobRef = doc(getDb(), 'jobs', application.jobId);
     await updateDoc(jobRef, {
       status: 'completed',
       completedAt: serverTimestamp()
     });
 
     // Update worker's earnings
-    const workerRef = doc(db, 'users', application.workerId);
+    const workerRef = doc(getDb(), 'users', application.workerId);
     const workerSnap = await getDoc(workerRef);
     const workerData = workerSnap.data();
 
@@ -1537,7 +1564,7 @@ export const processPayment = async (applicationId, paymentData) => {
     });
 
     // Update employer stats
-    const employerRef = doc(db, 'users', application.employerId);
+    const employerRef = doc(getDb(), 'users', application.employerId);
     const employerSnap = await getDoc(employerRef);
     const employerData = employerSnap.data();
 
@@ -1561,7 +1588,7 @@ export const processPayment = async (applicationId, paymentData) => {
       createdAt: serverTimestamp()
     };
     
-    await addDoc(collection(db, 'earnings'), earningsData);
+    await addDoc(collection(getDb(), 'earnings'), earningsData);
 
     // 🆕 UPDATE PLATFORM FEE STATUS - Mark as due for payment
     try {
@@ -1614,7 +1641,7 @@ export const processPayment = async (applicationId, paymentData) => {
  */
 export const markPaymentPending = async (applicationId) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     
     await updateDoc(appRef, {
       paymentStatus: 'pending',
@@ -1631,7 +1658,7 @@ export const markPaymentPending = async (applicationId) => {
 
 export const getApplicationWithJob = async (applicationId) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     const appSnap = await getDoc(appRef);
     
     if (!appSnap.exists()) {
@@ -1641,7 +1668,7 @@ export const getApplicationWithJob = async (applicationId) => {
     const application = { id: appSnap.id, ...appSnap.data() };
     
     // Get job details
-    const jobRef = doc(db, 'jobs', application.jobId);
+    const jobRef = doc(getDb(), 'jobs', application.jobId);
     const jobSnap = await getDoc(jobRef);
     
     if (!jobSnap.exists()) {
@@ -1668,7 +1695,7 @@ export const getApplicationWithJob = async (applicationId) => {
  */
 export const getJobTiming = async (jobId) => {
   try {
-    const jobRef = doc(db, 'jobs', jobId);
+    const jobRef = doc(getDb(), 'jobs', jobId);
     const jobSnap = await getDoc(jobRef);
     
     if (!jobSnap.exists()) {
@@ -1698,7 +1725,7 @@ export const getJobTiming = async (jobId) => {
  */
 export const checkCanStartWork = async (applicationId) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     const appSnap = await getDoc(appRef);
     
     if (!appSnap.exists()) {
@@ -1717,7 +1744,7 @@ export const checkCanStartWork = async (applicationId) => {
     }
 
     // Get job timing
-    const jobRef = doc(db, 'jobs', application.jobId);
+    const jobRef = doc(getDb(), 'jobs', application.jobId);
     const jobSnap = await getDoc(jobRef);
     const job = jobSnap.data();
 
@@ -1772,7 +1799,7 @@ export const createJobWithTiming = async (jobData) => {
     const end = new Date(`${jobData.jobDate} ${jobData.endTime}`);
     const durationHours = (end - start) / (1000 * 60 * 60);
 
-    const docRef = await addDoc(collection(db, 'jobs'), {
+    const docRef = await addDoc(collection(getDb(), 'jobs'), {
       ...jobData,
       status: 'open',
       createdAt: serverTimestamp(),
@@ -1796,7 +1823,7 @@ export const createJobWithTiming = async (jobData) => {
 export const getWorkerCurrentJob = async (workerId) => {
   try {
     const q = query(
-      collection(db, 'applications'),
+      collection(getDb(), 'applications'),
       where('workerId', '==', workerId),
       where('status', '==', 'accepted'),
       where('journeyStatus', 'in', ['accepted', 'onTheWay', 'reached', 'started']),
@@ -1812,7 +1839,7 @@ export const getWorkerCurrentJob = async (workerId) => {
     const application = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
     
     // Get job details
-    const jobRef = doc(db, 'jobs', application.jobId);
+    const jobRef = doc(getDb(), 'jobs', application.jobId);
     const jobSnap = await getDoc(jobRef);
     const job = jobSnap.exists() ? { id: jobSnap.id, ...jobSnap.data() } : null;
 
@@ -1831,7 +1858,7 @@ export const getWorkerCurrentJob = async (workerId) => {
 
 export const updateApplicationStatusWithTiming = async (applicationId, status, locationData = null) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     const updates = {
       status,
       respondedAt: serverTimestamp()
@@ -1853,7 +1880,7 @@ export const updateApplicationStatusWithTiming = async (applicationId, status, l
       const application = appSnap.data();
       
       // Get job details for timing info
-      const jobRef = doc(db, 'jobs', application.jobId);
+      const jobRef = doc(getDb(), 'jobs', application.jobId);
       const jobSnap = await getDoc(jobRef);
       const job = jobSnap.data();
       
@@ -1891,7 +1918,7 @@ export const updateApplicationStatusWithTiming = async (applicationId, status, l
 export const markMessagesAsRead = async (chatId, userId) => {
   try {
     const q = query(
-      collection(db, 'messages'),
+      collection(getDb(), 'messages'),
       where('chatId', '==', chatId),
       where('senderId', '!=', userId),
       where('read', '==', false)
@@ -1914,7 +1941,7 @@ export const markMessagesAsRead = async (chatId, userId) => {
 export const fetchUserChats = async (userId) => {
   try {
     const q = query(
-      collection(db, 'chats'),
+      collection(getDb(), 'chats'),
       where('participants', 'array-contains', userId),
       orderBy('lastMessageAt', 'desc')
     );
@@ -1943,7 +1970,7 @@ export const fetchUserChats = async (userId) => {
 export const deleteJob = async (jobId, employerId) => {
   try {
     // Verify job belongs to employer
-    const jobRef = doc(db, 'jobs', jobId);
+    const jobRef = doc(getDb(), 'jobs', jobId);
     const jobSnap = await getDoc(jobRef);
     
     if (!jobSnap.exists()) {
@@ -1958,7 +1985,7 @@ export const deleteJob = async (jobId, employerId) => {
 
     // Check for accepted applications
     const applicationsQuery = query(
-      collection(db, 'applications'),
+      collection(getDb(), 'applications'),
       where('jobId', '==', jobId),
       where('status', '==', 'accepted')
     );
@@ -1974,7 +2001,7 @@ export const deleteJob = async (jobId, employerId) => {
 
     // Get all pending applications to notify workers
     const allApplicationsQuery = query(
-      collection(db, 'applications'),
+      collection(getDb(), 'applications'),
       where('jobId', '==', jobId)
     );
     
@@ -1994,7 +2021,7 @@ export const deleteJob = async (jobId, employerId) => {
       }
       
       // Delete application
-      await deleteDoc(doc(db, 'applications', appDoc.id));
+      await deleteDoc(doc(getDb(), 'applications', appDoc.id));
     }
 
     // Delete the job
@@ -2018,7 +2045,7 @@ export const deleteJob = async (jobId, employerId) => {
 // src/services/database.js - FIXED processOnlinePayment function
 export const processOnlinePayment = async (applicationId, paymentData) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     const appSnap = await getDoc(appRef);
     const application = appSnap.data();
     
@@ -2059,14 +2086,14 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
     });
 
     // Update job status to completed
-    const jobRef = doc(db, 'jobs', application.jobId);
+    const jobRef = doc(getDb(), 'jobs', application.jobId);
     await updateDoc(jobRef, {
       status: 'completed',
       completedAt: serverTimestamp()
     });
 
     // Update worker's earnings
-    const workerRef = doc(db, 'users', application.workerId);
+    const workerRef = doc(getDb(), 'users', application.workerId);
     const workerSnap = await getDoc(workerRef);
     const workerData = workerSnap.data();
 
@@ -2078,7 +2105,7 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
     });
 
     // Update employer stats
-    const employerRef = doc(db, 'users', application.employerId);
+    const employerRef = doc(getDb(), 'users', application.employerId);
     const employerSnap = await getDoc(employerRef);
     const employerData = employerSnap.data();
 
@@ -2105,7 +2132,7 @@ export const processOnlinePayment = async (applicationId, paymentData) => {
       createdAt: serverTimestamp()
     };
     
-    await addDoc(collection(db, 'earnings'), earningsData);
+    await addDoc(collection(getDb(), 'earnings'), earningsData);
 
     // 🆕 UPDATE PLATFORM FEE STATUS - Mark as due for payment
     try {
@@ -2228,7 +2255,7 @@ const calculateActualPayment = (appData) => {
 export const fetchWorkerEarnings = async (workerId) => {
   try {
     const q = query(
-      collection(db, 'earnings'),
+      collection(getDb(), 'earnings'),
       where('workerId', '==', workerId),
       orderBy('paidAt', 'desc')
     );
@@ -2293,7 +2320,7 @@ export const getWorkerEarningsStats = async (workerId) => {
 // Add this function to your Database.js
 export const completeJobAndRemoveTracking = async (applicationId) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     
     // Update application status to completed
     await updateDoc(appRef, {
@@ -2308,7 +2335,7 @@ export const completeJobAndRemoveTracking = async (applicationId) => {
     const application = appSnap.data();
     
     // Update job status
-    const jobRef = doc(db, 'jobs', application.jobId);
+    const jobRef = doc(getDb(), 'jobs', application.jobId);
     await updateDoc(jobRef, {
       status: 'completed',
       completedAt: serverTimestamp()
@@ -2341,7 +2368,7 @@ export const completeJobAndRemoveTracking = async (applicationId) => {
 // Add this to your Database.js for real-time current job monitoring
 export const onWorkerCurrentJobUpdate = (workerId, callback) => {
   const applicationsQuery = query(
-    collection(db, 'applications'),
+    collection(getDb(), 'applications'),
     where('workerId', '==', workerId),
     where('status', '==', 'accepted'),
     where('journeyStatus', 'in', ['accepted', 'onTheWay', 'reached', 'started'])
@@ -2356,7 +2383,7 @@ export const onWorkerCurrentJobUpdate = (workerId, callback) => {
       };
       
       // Get job details
-      const jobRef = doc(db, 'jobs', application.jobId);
+      const jobRef = doc(getDb(), 'jobs', application.jobId);
       getDoc(jobRef).then(jobSnap => {
         if (jobSnap.exists()) {
           const job = { id: jobSnap.id, ...jobSnap.data() };
@@ -2376,7 +2403,7 @@ export const onWorkerCurrentJobUpdate = (workerId, callback) => {
  */
 export const fixCompletedJobPayment = async (applicationId) => {
   try {
-    const appRef = doc(db, 'applications', applicationId);
+    const appRef = doc(getDb(), 'applications', applicationId);
     const appSnap = await getDoc(appRef);
     
     if (!appSnap.exists()) {
@@ -2505,34 +2532,44 @@ export const isJobInFuture = (jobDate, jobTime = null) => {
  */
 export const fetchFutureJobs = async (filters = {}) => {
   try {
-    let q = query(collection(db, 'jobs'), where('status', '==', 'open'));
-    
-    if (filters.location && filters.location.trim() !== '') {
-      q = query(q, where('location', '==', filters.location.trim()));
-    }
-    
-    if (filters.category && filters.category.trim() !== '' && filters.category !== 'all') {
+    // FIX: Only filter by `status` in Firestore.
+    // Do NOT add a `location` where-clause here — it would require a Firestore
+    // composite index (status + location) and causes an exact-string match that
+    // breaks when the worker's location string differs slightly from the job's.
+    // Location soft-filtering is handled client-side in WorkerHomeScreen.js.
+    let q = query(collection(getDb(), 'jobs'), where('status', '==', 'open'));
+ 
+    // Category filter is safe as a standalone inequality-free where clause
+    if (
+      filters.category &&
+      filters.category.trim() !== '' &&
+      filters.category !== 'all'
+    ) {
       q = query(q, where('category', '==', filters.category.trim()));
     }
-    
+ 
     const snapshot = await getDocs(q);
-    const allJobs = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
+    const allJobs = snapshot.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...docSnap.data(),
     }));
-    
-    // Filter only future jobs
-    const futureJobs = allJobs.filter(job => 
+ 
+    // Filter only future jobs (reuses the existing isJobInFuture helper)
+    const futureJobs = allJobs.filter(job =>
       isJobInFuture(job.jobDate, job.startTime)
     );
-    
-    // Sort by date (closest first)
+ 
+    // Sort by date — closest first
     futureJobs.sort((a, b) => {
-      const aDate = new Date(a.jobDate + ' ' + (a.startTime || '00:00'));
-      const bDate = new Date(b.jobDate + ' ' + (b.startTime || '00:00'));
+      const aDate = new Date(
+        (a.jobDate || '') + ' ' + (a.startTime || '00:00')
+      );
+      const bDate = new Date(
+        (b.jobDate || '') + ' ' + (b.startTime || '00:00')
+      );
       return aDate - bDate;
     });
-    
+ 
     return { success: true, jobs: futureJobs };
   } catch (error) {
     console.error('Fetch Future Jobs Error:', error);
@@ -2553,7 +2590,7 @@ export const fetchFutureJobs = async (filters = {}) => {
 export const fetchAllEmployerJobs = async (employerId) => {
   try {
     const q = query(
-      collection(db, 'jobs'),
+      collection(getDb(), 'jobs'),
       where('employerId', '==', employerId)
     );
     
@@ -2635,7 +2672,7 @@ export const fetchAllEmployerJobs = async (employerId) => {
 export const deletePastJob = async (jobId, employerId) => {
   try {
     // Verify job belongs to employer and is in the past
-    const jobRef = doc(db, 'jobs', jobId);
+    const jobRef = doc(getDb(), 'jobs', jobId);
     const jobSnap = await getDoc(jobRef);
     
     if (!jobSnap.exists()) {
@@ -2661,7 +2698,7 @@ export const deletePastJob = async (jobId, employerId) => {
 
     // Check for completed applications
     const applicationsQuery = query(
-      collection(db, 'applications'),
+      collection(getDb(), 'applications'),
       where('jobId', '==', jobId),
       where('status', '==', 'completed')
     );
@@ -2677,7 +2714,7 @@ export const deletePastJob = async (jobId, employerId) => {
 
     // Get all applications to notify workers and delete them
     const allApplicationsQuery = query(
-      collection(db, 'applications'),
+      collection(getDb(), 'applications'),
       where('jobId', '==', jobId)
     );
     
@@ -2698,7 +2735,7 @@ export const deletePastJob = async (jobId, employerId) => {
       }
       
       // Delete application
-      await deleteDoc(doc(db, 'applications', appDoc.id));
+      await deleteDoc(doc(getDb(), 'applications', appDoc.id));
     }
 
     // Delete the job
@@ -2718,7 +2755,7 @@ export const deletePastJob = async (jobId, employerId) => {
  */
 export const getEmployerJobPostingStats = async (employerId) => {
   try {
-    const employerRef = doc(db, 'users', employerId);
+    const employerRef = doc(getDb(), 'users', employerId);
     const employerSnap = await getDoc(employerRef);
     
     if (!employerSnap.exists()) {
@@ -2737,7 +2774,7 @@ export const getEmployerJobPostingStats = async (employerId) => {
     const endOfMonth = new Date(currentYear, currentMonth, 0, 23, 59, 59);
     
     const jobsQuery = query(
-      collection(db, 'jobs'),
+      collection(getDb(), 'jobs'),
       where('employerId', '==', employerId),
       where('createdAt', '>=', Timestamp.fromDate(startOfMonth)),
       where('createdAt', '<=', Timestamp.fromDate(endOfMonth))
@@ -2797,7 +2834,7 @@ export const getEmployerJobPostingStats = async (employerId) => {
  */
 export const updateFreeJobPostCount = async (employerId) => {
   try {
-    const employerRef = doc(db, 'users', employerId);
+    const employerRef = doc(getDb(), 'users', employerId);
     const employerSnap = await getDoc(employerRef);
     
     if (!employerSnap.exists()) {
@@ -2850,7 +2887,7 @@ export const updateFreeJobPostCount = async (employerId) => {
  */
 export const activateMonthlySubscription = async (employerId, subscriptionData) => {
   try {
-    const employerRef = doc(db, 'users', employerId);
+    const employerRef = doc(getDb(), 'users', employerId);
     
     // Calculate subscription expiry (1 month from now)
     const currentDate = new Date();
@@ -2869,7 +2906,7 @@ export const activateMonthlySubscription = async (employerId, subscriptionData) 
       transactionId: subscriptionData.transactionId
     };
     
-    await addDoc(collection(db, 'subscriptions'), subscriptionRecord);
+    await addDoc(collection(getDb(), 'subscriptions'), subscriptionRecord);
     
     // Update employer profile
     await updateDoc(employerRef, {
@@ -2893,7 +2930,7 @@ export const activateMonthlySubscription = async (employerId, subscriptionData) 
  */
 export const checkSubscriptionStatus = async (employerId) => {
   try {
-    const employerRef = doc(db, 'users', employerId);
+    const employerRef = doc(getDb(), 'users', employerId);
     const employerSnap = await getDoc(employerRef);
     
     if (!employerSnap.exists()) {
@@ -2988,7 +3025,7 @@ export const canPostJobForFree = async (employerId) => {
 
 export const resetMonthlyFreePosts = async (employerId) => {
   try {
-    const employerRef = doc(db, 'users', employerId);
+    const employerRef = doc(getDb(), 'users', employerId);
     const employerSnap = await getDoc(employerRef);
     
     if (!employerSnap.exists()) {

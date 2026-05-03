@@ -1,64 +1,54 @@
-// src/services/authService.js - UPDATED
+// src/services/authService.js
 import { httpsCallable } from 'firebase/functions';
-import { functions } from './firebase';
+import { getFirebaseFunctions } from './firebase';
 
-class AuthService {
-  constructor() {
-    console.log('🔥 [AuthService] Initializing...');
-    
-    // Cloud Functions
-    this.sendOTPFunction = httpsCallable(functions, 'sendEmailOTP');
-    this.verifyOTPFunction = httpsCallable(functions, 'verifyEmailOTP');
-    this.googleSignInFunction = httpsCallable(functions, 'handleGoogleSignIn');
+// ─── Helper: safely call a Cloud Function ─────────────────────────────────────
+const safeCall = async (fnName, data) => {
+  const fns = getFirebaseFunctions();
+  if (!fns) {
+    return { success: false, error: 'Firebase Functions not available' };
   }
-
-  // Send OTP via Email
-  async sendOTP(email) {
-    try {
-      console.log('📧 Sending OTP to:', email);
-      
-      const result = await this.sendOTPFunction({ email });
-      
-      console.log('✅ Send OTP result:', result.data);
-      return {
-        success: true,
-        ...result.data
-      };
-    } catch (error) {
-      console.error('❌ Send OTP error:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to send OTP'
-      };
-    }
+  try {
+    const callable = httpsCallable(fns, fnName);
+    const result   = await callable(data);
+    return { success: true, ...(result.data || {}) };
+  } catch (error) {
+    // Firebase HttpsError has error.message and error.code
+    console.error(`❌ [authService] ${fnName} error:`, error.message);
+    return { success: false, error: error.message || `${fnName} failed` };
   }
+};
 
-  // Verify OTP
-  async verifyOTP(email, otp, userType = 'worker') {
-    try {
-      console.log('🔐 Verifying OTP:', { email, userType });
-      
-      const result = await this.verifyOTPFunction({
-        email: email,
-        otp: otp,
-        userType: userType
-      });
-      
-      console.log('✅ Verify OTP result:', result.data);
-      return {
-        success: true,
-        ...result.data
-      };
-    } catch (error) {
-      console.error('❌ Verify OTP error:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to verify OTP'
-      };
-    }
-  }
-}
+const sendOTP = async (email) => {
+  console.log('📧 Sending OTP to:', email);
+  return safeCall('sendEmailOTP', { email });
+};
 
-// Create singleton instance
-const authService = new AuthService();
+const verifyOTP = async (email, otp, userType = 'worker') => {
+  console.log('🔐 Verifying OTP for:', email);
+  return safeCall('verifyEmailOTP', { email, otp, userType });
+};
+
+const resendOTP = async (email) => {
+  console.log('🔄 Resending OTP to:', email);
+  return safeCall('resendEmailOTP', { email });
+};
+
+const checkEmailStatus = async (email) => {
+  return safeCall('checkEmailStatus', { email });
+};
+
+const signInWithGoogle = async (idToken, userType = 'worker') => {
+  console.log('🔑 Google sign-in for userType:', userType);
+  return safeCall('googleSignIn', { idToken, userType });
+};
+
+const authService = {
+  sendOTP,
+  verifyOTP,
+  resendOTP,
+  checkEmailStatus,
+  signInWithGoogle,
+};
+
 export default authService;

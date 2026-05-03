@@ -23,6 +23,8 @@ import authService from '../../services/authService';
 import { useLanguage } from '../../context/LanguageContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Animatable from 'react-native-animatable';
+import { getFirebaseDb } from '../../services/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -50,7 +52,7 @@ const C = {
 export default function LoginScreen({ navigation, route }) {
   const { userType = 'worker' } = route.params || {};
   const { locale } = useLanguage();
-  const { signInWithCustomToken, bypassLogin } = useAuth();
+  const { signInWithCustomToken, bypassLogin, setUserProfile, refreshUserProfile } = useAuth();
 
   const [email, setEmail]               = useState('');
   const [otp, setOtp]                   = useState('');
@@ -137,6 +139,24 @@ export default function LoginScreen({ navigation, route }) {
     };
   }, []);
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /**
+   * Fetch the full Firestore profile for a UID.
+   * Falls back gracefully if Firestore is unavailable.
+   */
+  const fetchFirestoreProfile = async (uid) => {
+    try {
+      const db = getFirebaseDb();
+      if (!db) return null;
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (snap.exists()) return snap.data();
+    } catch (e) {
+      console.warn('fetchFirestoreProfile error (non-fatal):', e.message);
+    }
+    return null;
+  };
+
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleDevBypass = async () => {
     try {
@@ -185,17 +205,51 @@ export default function LoginScreen({ navigation, route }) {
     try {
       const result = await authService.verifyOTP(email, otp, userType);
       if (result.success && result.customToken) {
+        // Sign in with Firebase (or AsyncStorage fallback)
         const signInResult = await signInWithCustomToken(result.customToken);
+
         if (signInResult.success) {
-          await AsyncStorage.setItem('current_user', JSON.stringify({
-            uid: result.uid, email: result.email,
-            userType: result.userType, isNewUser: result.isNewUser,
-            needsProfile: result.needsProfile, emailVerified: true,
-          }));
-          if (result.needsProfile || result.isNewUser) {
-            navigation.replace('ProfileSetup', { userType: result.userType, email: result.email });
+          const uid = result.uid;
+
+          // ── KEY FIX: fetch FULL Firestore profile rather than trusting the
+          // slim object returned by verifyEmailOTP cloud function.
+          // This ensures name, location, skills, etc. are all present.
+          let firestoreProfile = await fetchFirestoreProfile(uid);
+
+          const profileData = {
+            uid,
+            email:           result.email,
+            userType:        result.userType || userType,
+            isNewUser:       result.isNewUser,
+            needsProfile:    result.needsProfile,
+            emailVerified:   true,
+            // Merge Firestore data on top so we get the complete profile
+            ...(firestoreProfile || {}),
+            // Always override profileComplete based on needsProfile flag
+            profileComplete: firestoreProfile?.profileComplete === true
+                              ? true
+                              : !(result.needsProfile || result.isNewUser),
+          };
+
+          // Persist to AsyncStorage AND update context state
+          await AsyncStorage.setItem('current_user', JSON.stringify(profileData));
+          setUserProfile(profileData);
+
+          const isProfileSetupNeeded =
+            result.needsProfile ||
+            result.isNewUser    ||
+            !profileData.profileComplete ||
+            !profileData.name;
+
+          if (isProfileSetupNeeded) {
+            navigation.replace('ProfileSetup', {
+              userType: profileData.userType,
+              email:    profileData.email,
+            });
           } else {
-            navigation.replace(result.userType === 'worker' ? 'WorkerMain' : 'EmployerMain');
+            navigation.replace(
+              profileData.userType === 'worker' ? 'WorkerMain' : 'EmployerMain'
+            );
           }
         } else {
           setErrorMessage('Failed to sign in');
@@ -276,10 +330,7 @@ export default function LoginScreen({ navigation, route }) {
 
   const renderEmailStep = () => (
     <Animatable.View animation="fadeInUp" duration={500} delay={100}>
-      {/* Label */}
       <Text style={styles.fieldLabel}>Email address</Text>
-
-      {/* Input */}
       <View style={[styles.inputWrapper, emailFocused && styles.inputWrapperFocused, !!errorMessage && styles.inputWrapperError]}>
         <Text style={styles.inputIcon}>✉️</Text>
         <TextInput
@@ -309,7 +360,6 @@ export default function LoginScreen({ navigation, route }) {
         )}
       </View>
 
-      {/* Error */}
       {!!errorMessage && (
         <Animatable.View animation="fadeInDown" duration={250} style={styles.errorRow}>
           <Text style={styles.errorIcon}>⚠️</Text>
@@ -317,7 +367,6 @@ export default function LoginScreen({ navigation, route }) {
         </Animatable.View>
       )}
 
-      {/* CTA */}
       <TouchableOpacity
         style={[styles.primaryBtn, (!email || loading) && styles.primaryBtnDisabled]}
         onPress={handleSendOTP}
@@ -335,13 +384,11 @@ export default function LoginScreen({ navigation, route }) {
 
   const renderOtpStep = () => (
     <Animatable.View animation="fadeInUp" duration={500}>
-      {/* Destination label */}
       <View style={styles.otpDestinationRow}>
         <Text style={styles.otpDestinationText}>{tr.subtitle}</Text>
         <Text style={styles.otpEmail}>{email}</Text>
       </View>
 
-      {/* OTP boxes */}
       <Text style={styles.fieldLabel}>{tr.enterOtp}</Text>
       <View style={styles.otpBoxRow}>
         {[0,1,2,3,4,5].map(i => (
@@ -364,7 +411,6 @@ export default function LoginScreen({ navigation, route }) {
         ))}
       </View>
 
-      {/* Error */}
       {!!errorMessage && (
         <Animatable.View animation="fadeInDown" duration={250} style={styles.errorRow}>
           <Text style={styles.errorIcon}>⚠️</Text>
@@ -372,7 +418,6 @@ export default function LoginScreen({ navigation, route }) {
         </Animatable.View>
       )}
 
-      {/* Verify CTA */}
       <TouchableOpacity
         style={[styles.primaryBtn, (otp.length !== 6 || loading) && styles.primaryBtnDisabled]}
         onPress={handleVerifyOTP}
@@ -389,7 +434,6 @@ export default function LoginScreen({ navigation, route }) {
         )}
       </TouchableOpacity>
 
-      {/* Resend / change email */}
       <View style={styles.otpFooterRow}>
         {resendTimer > 0 ? (
           <Text style={styles.resendCountdown}>
@@ -416,17 +460,14 @@ export default function LoginScreen({ navigation, route }) {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.brandDark} />
 
-      {/* ── Header gradient ──────────────────────────────────────────────── */}
       <GradientView
         colors={[C.brandDark, C.brand]}
         style={[styles.header, keyboardVisible && styles.headerCollapsed]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
-        {/* Decorative circles */}
         <View style={styles.decorCircle1} />
         <View style={styles.decorCircle2} />
-
         <View style={styles.headerInner}>
           <Image
             source={require('../../assets/images/UdyogiLogo.png')}
@@ -439,9 +480,6 @@ export default function LoginScreen({ navigation, route }) {
         </View>
       </GradientView>
 
-      {/* ── Scrollable card body ──────────────────────────────────────────── */}
-      {/* On Android, behavior="height" collapses the view and blocks input taps.
-          We use undefined behavior on Android and let ScrollView handle it. */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -464,27 +502,19 @@ export default function LoginScreen({ navigation, route }) {
               },
             ]}
           >
-            {/* Role badge */}
             {renderRoleBadge()}
-
-            {/* Page heading */}
             <Text style={styles.cardTitle}>{tr.title}</Text>
             {!otpSent && (
               <Text style={styles.cardSubtitle}>{tr.subtitle}</Text>
             )}
 
-            {/* ── DEV BYPASS section ──────────────────────────────────── */}
             {renderDevBypass()}
             {renderDivider()}
-
-            {/* ── Auth form ───────────────────────────────────────────── */}
             {otpSent ? renderOtpStep() : renderEmailStep()}
 
-            {/* Terms */}
             <Text style={styles.terms}>{tr.terms}</Text>
           </Animated.View>
 
-          {/* ── Help footer ─────────────────────────────────────────────── */}
           {!keyboardVisible && (
             <TouchableOpacity
               style={styles.helpRow}
@@ -508,12 +538,9 @@ export default function LoginScreen({ navigation, route }) {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   root:  { flex: 1, backgroundColor: C.bg },
   flex:  { flex: 1 },
-
-  // ── Header ────────────────────────────────────────────────────────────────
   header: {
     height: height * 0.26,
     paddingTop: Platform.OS === 'ios' ? 54 : 36,
@@ -521,345 +548,140 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  headerCollapsed: {
-    height: height * 0.14,
-  },
-  headerInner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logo: {
-    width: width * 0.52,
-    height: 52,
-    tintColor: '#FFFFFF',
-  },
+  headerCollapsed: { height: height * 0.14 },
+  headerInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  logo: { width: width * 0.52, height: 52, tintColor: '#FFFFFF' },
   tagline: {
-    marginTop: 8,
-    fontSize: 13,
+    marginTop: 8, fontSize: 13,
     color: 'rgba(255,255,255,0.75)',
-    letterSpacing: 0.3,
-    fontStyle: 'italic',
+    letterSpacing: 0.3, fontStyle: 'italic',
   },
-  // Decorative background circles
   decorCircle1: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    top: -40,
-    right: -40,
+    position: 'absolute', width: 180, height: 180, borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.06)', top: -40, right: -40,
   },
   decorCircle2: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    bottom: -30,
-    left: 20,
+    position: 'absolute', width: 120, height: 120, borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.05)', bottom: -30, left: 20,
   },
-
-  // ── Card ──────────────────────────────────────────────────────────────────
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 120, // extra space so inputs scroll above keyboard on Android
-  },
+  scrollContent: { paddingHorizontal: 16, paddingBottom: 120 },
   card: {
-    backgroundColor: C.surface,
-    borderRadius: 24,
-    padding: 24,
-    marginTop: -24,              // pull up over header gradient
-    shadowColor: C.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 24,
-    elevation: 12,
-    zIndex: 10,                  // ensure card sits above gradient on Android
+    backgroundColor: C.surface, borderRadius: 24, padding: 24, marginTop: -24,
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1, shadowRadius: 24, elevation: 12, zIndex: 10,
   },
-
-  // ── Role badge ────────────────────────────────────────────────────────────
   roleBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: C.brandLight,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    marginBottom: 20,
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'center',
+    backgroundColor: C.brandLight, borderRadius: 20,
+    paddingHorizontal: 16, paddingVertical: 7, marginBottom: 20,
   },
   roleBadgeIcon: { fontSize: 16, marginRight: 6 },
   roleBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: C.brand,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontSize: 13, fontWeight: '700', color: C.brand,
+    letterSpacing: 0.5, textTransform: 'uppercase',
   },
-
-  // Card heading
   cardTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: C.text,
-    textAlign: 'center',
-    letterSpacing: -0.3,
-    marginBottom: 6,
+    fontSize: 26, fontWeight: '800', color: C.text,
+    textAlign: 'center', letterSpacing: -0.3, marginBottom: 6,
   },
   cardSubtitle: {
-    fontSize: 15,
-    color: C.textSub,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
+    fontSize: 15, color: C.textSub,
+    textAlign: 'center', marginBottom: 24, lineHeight: 22,
   },
-
-  // ── DEV Bypass card ───────────────────────────────────────────────────────
   devCard: {
-    backgroundColor: '#FFF8F0',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#FFD599',
-    padding: 16,
-    marginBottom: 20,
+    backgroundColor: '#FFF8F0', borderRadius: 16,
+    borderWidth: 1.5, borderColor: '#FFD599', padding: 16, marginBottom: 20,
   },
-  devCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
+  devCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   devBadge: {
-    backgroundColor: C.devOrange,
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    marginRight: 8,
+    backgroundColor: C.devOrange, borderRadius: 6,
+    paddingHorizontal: 7, paddingVertical: 2, marginRight: 8,
   },
-  devBadgeText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: C.white,
-    letterSpacing: 1,
-  },
-  devCardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: C.devOrangeDark,
-  },
-  devCardSub: {
-    fontSize: 12,
-    color: '#A0622A',
-    marginBottom: 12,
-    lineHeight: 18,
-  },
+  devBadgeText: { fontSize: 10, fontWeight: '900', color: C.white, letterSpacing: 1 },
+  devCardTitle: { fontSize: 14, fontWeight: '700', color: C.devOrangeDark },
+  devCardSub: { fontSize: 12, color: '#A0622A', marginBottom: 12, lineHeight: 18 },
   devButton: {
-    backgroundColor: C.devOrange,
-    borderRadius: 12,
-    paddingVertical: 13,
-    paddingHorizontal: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: C.devOrange, borderRadius: 12,
+    paddingVertical: 13, paddingHorizontal: 18,
+    flexDirection: 'row', alignItems: 'center',
   },
   devButtonIcon:  { fontSize: 18, marginRight: 10 },
   devButtonText:  { flex: 1, fontSize: 15, fontWeight: '700', color: C.white },
   devButtonArrow: { fontSize: 18, color: C.white, opacity: 0.8 },
-
-  // ── Divider ───────────────────────────────────────────────────────────────
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 22,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: C.border,
-  },
-  dividerText: {
-    marginHorizontal: 12,
-    fontSize: 12,
-    color: C.textMuted,
-    fontWeight: '500',
-  },
-
-  // ── Form fields ───────────────────────────────────────────────────────────
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 22 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
+  dividerText: { marginHorizontal: 12, fontSize: 12, color: C.textMuted, fontWeight: '500' },
   fieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: C.textSub,
-    marginBottom: 8,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
+    fontSize: 13, fontWeight: '700', color: C.textSub,
+    marginBottom: 8, letterSpacing: 0.3, textTransform: 'uppercase',
   },
   inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: C.border,
-    borderRadius: 14,
-    backgroundColor: C.bg,
-    paddingHorizontal: 14,
-    height: 56,
-    marginBottom: 6,
-    overflow: 'hidden',
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderColor: C.border, borderRadius: 14,
+    backgroundColor: C.bg, paddingHorizontal: 14,
+    height: 56, marginBottom: 6, overflow: 'hidden',
   },
   inputWrapperFocused: {
-    borderColor: C.borderFocus,
-    backgroundColor: '#F0F5FF',
-    shadowColor: C.shadow,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderColor: C.borderFocus, backgroundColor: '#F0F5FF',
+    shadowColor: C.shadow, shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1, shadowRadius: 8, elevation: 4,
   },
-  inputWrapperError: {
-    borderColor: C.error,
-    backgroundColor: C.errorBg,
-  },
-  inputIcon: {
-    fontSize: 18,
-    marginRight: 10,
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 16,
-    color: C.text,
-    fontWeight: '500',
-    paddingVertical: 0,
-  },
-  clearBtn: {
-    paddingLeft: 10,
-    paddingVertical: 6,
-  },
-  clearBtnText: {
-    fontSize: 13,
-    color: C.textMuted,
-    fontWeight: '700',
-  },
-
-  // ── Error ─────────────────────────────────────────────────────────────────
+  inputWrapperError: { borderColor: C.error, backgroundColor: C.errorBg },
+  inputIcon: { fontSize: 18, marginRight: 10 },
+  textInput: { flex: 1, fontSize: 16, color: C.text, fontWeight: '500', paddingVertical: 0 },
+  clearBtn: { paddingLeft: 10, paddingVertical: 6 },
+  clearBtnText: { fontSize: 13, color: C.textMuted, fontWeight: '700' },
   errorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: C.errorBg,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FFCDD2',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: C.errorBg, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 16,
+    borderWidth: 1, borderColor: '#FFCDD2',
   },
   errorIcon: { fontSize: 14, marginRight: 8 },
-  errorText: {
-    flex: 1,
-    fontSize: 13,
-    color: C.error,
-    fontWeight: '500',
-    lineHeight: 18,
-  },
-
-  // ── Primary button ────────────────────────────────────────────────────────
+  errorText: { flex: 1, fontSize: 13, color: C.error, fontWeight: '500', lineHeight: 18 },
   primaryBtn: {
-    backgroundColor: C.brand,
-    borderRadius: 14,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    marginTop: 10,
-    marginBottom: 6,
-    shadowColor: C.brand,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
+    backgroundColor: C.brand, borderRadius: 14, height: 56,
+    alignItems: 'center', justifyContent: 'center', flexDirection: 'row',
+    marginTop: 10, marginBottom: 6,
+    shadowColor: C.brand, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 10, elevation: 6,
   },
-  primaryBtnDisabled: {
-    backgroundColor: '#C0CCDD',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  primaryBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: C.white,
-    letterSpacing: 0.3,
-  },
-
-  // ── OTP step ──────────────────────────────────────────────────────────────
+  primaryBtnDisabled: { backgroundColor: '#C0CCDD', shadowOpacity: 0, elevation: 0 },
+  primaryBtnText: { fontSize: 16, fontWeight: '700', color: C.white, letterSpacing: 0.3 },
   otpDestinationRow: {
-    alignItems: 'center',
-    marginBottom: 22,
-    backgroundColor: C.brandLight,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    alignItems: 'center', marginBottom: 22,
+    backgroundColor: C.brandLight, borderRadius: 12,
+    paddingVertical: 12, paddingHorizontal: 16,
   },
-  otpDestinationText: {
-    fontSize: 13,
-    color: C.textSub,
-    marginBottom: 3,
-  },
-  otpEmail: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: C.brand,
-  },
+  otpDestinationText: { fontSize: 13, color: C.textSub, marginBottom: 3 },
+  otpEmail: { fontSize: 15, fontWeight: '700', color: C.brand },
   otpBoxRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    marginTop: 4,
+    flexDirection: 'row', justifyContent: 'space-between',
+    marginBottom: 8, marginTop: 4,
   },
   otpBox: {
-    width: (width - 32 - 48 - 10 * 5) / 6,   // full width minus card padding minus gaps
-    aspectRatio: 0.9,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: C.border,
-    backgroundColor: C.bg,
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-    color: C.text,
+    width: (width - 32 - 48 - 10 * 5) / 6,
+    aspectRatio: 0.9, borderRadius: 12, borderWidth: 2,
+    borderColor: C.border, backgroundColor: C.bg,
+    fontSize: 24, fontWeight: '800', textAlign: 'center', color: C.text,
   },
-  otpBoxFilled: {
-    borderColor: C.brand,
-    backgroundColor: C.brandLight,
-    color: C.brand,
-  },
-  otpBoxError: {
-    borderColor: C.error,
-    backgroundColor: C.errorBg,
-  },
+  otpBoxFilled: { borderColor: C.brand, backgroundColor: C.brandLight, color: C.brand },
+  otpBoxError:  { borderColor: C.error, backgroundColor: C.errorBg },
   otpFooterRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
-    gap: 8,
+    flexDirection: 'row', justifyContent: 'center',
+    alignItems: 'center', marginTop: 16, gap: 8,
   },
   otpFooterDot:        { color: C.textMuted, fontSize: 16 },
   resendCountdown:     { fontSize: 14, color: C.textSub },
   resendCountdownBold: { fontWeight: '700', color: C.brand },
   resendLink:          { fontSize: 14, color: C.brand, fontWeight: '700' },
   changeEmailLink:     { fontSize: 14, color: C.textSub, fontWeight: '600' },
-
-  // ── Terms & help ──────────────────────────────────────────────────────────
   terms: {
-    fontSize: 12,
-    color: C.textMuted,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginTop: 20,
-    paddingHorizontal: 8,
+    fontSize: 12, color: C.textMuted,
+    textAlign: 'center', lineHeight: 18,
+    marginTop: 20, paddingHorizontal: 8,
   },
-  helpRow: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  helpText:  { fontSize: 14, color: C.textSub },
-  helpLink:  { color: C.brand, fontWeight: '700' },
+  helpRow: { alignItems: 'center', paddingVertical: 20 },
+  helpText: { fontSize: 14, color: C.textSub },
+  helpLink: { color: C.brand, fontWeight: '700' },
 });

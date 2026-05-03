@@ -1,24 +1,34 @@
+// src/context/JobContext.js
 import React, { createContext, useState, useContext } from 'react';
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  updateDoc, 
+import {
+  collection,
+  doc,
+  getDocs,
+  updateDoc,
   arrayUnion,
   query,
   where,
   getDoc
 } from 'firebase/firestore';
-import { db } from '../services/firebase';
-import { 
-  createApplication, 
+import { getFirebaseDb } from '../services/firebase';
+import {
+  createApplication,
   createNotification,
   fetchJobApplications,
   updateApplicationStatus,
-  fetchJobById 
+  fetchJobById
 } from '../services/database';
 
 const JobContext = createContext();
+
+// Helper: always resolves a live Firestore instance.
+// Using this instead of a top-level `const db = getFirebaseDb()` avoids the
+// race condition where Firestore hasn't registered its components yet.
+const getDb = () => {
+  const instance = getFirebaseDb();
+  if (!instance) throw new Error('Firestore not ready');
+  return instance;
+};
 
 export const JobProvider = ({ children }) => {
   const [jobs, setJobs] = useState([]);
@@ -28,27 +38,26 @@ export const JobProvider = ({ children }) => {
   const fetchJobs = async (location = '') => {
     setLoading(true);
     try {
+      const db = getDb();
       let q;
-      
+
       if (location && location.trim() !== '') {
-        // Filter jobs by location
         q = query(
-          collection(db, 'jobs'), 
+          collection(db, 'jobs'),
           where('location', '==', location.trim())
         );
         setCurrentLocation(location);
       } else {
-        // Get all jobs if no location specified
         q = query(collection(db, 'jobs'));
         setCurrentLocation('');
       }
-      
+
       const querySnapshot = await getDocs(q);
       const jobsData = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      
+
       setJobs(jobsData);
     } catch (error) {
       console.error('Error fetching jobs:', error);
@@ -63,22 +72,19 @@ export const JobProvider = ({ children }) => {
     if (userLocation && userLocation.trim() !== '') {
       await fetchJobs(userLocation);
     } else {
-      await fetchJobs(); // Fetch all jobs if no user location
+      await fetchJobs();
     }
   };
 
   const applyForJob = async (jobId, userId, userProfile, jobData = null) => {
     try {
       let job;
-      
-      // First try to use the jobData passed from the screen
+
       if (jobData) {
         job = jobData;
       } else {
-        // If no jobData provided, try to find in local state
         job = jobs.find(j => j.id === jobId);
-        
-        // If not found in local state, fetch from database
+
         if (!job) {
           console.log('Job not found in local state, fetching from database...');
           const result = await fetchJobById(jobId);
@@ -102,7 +108,6 @@ export const JobProvider = ({ children }) => {
         workerName: userProfile?.name
       });
 
-      // Create application
       const applicationData = {
         jobId,
         workerId: userId,
@@ -116,11 +121,10 @@ export const JobProvider = ({ children }) => {
       };
 
       const applicationResult = await createApplication(applicationData);
-      
+
       if (applicationResult.success) {
         console.log('Application created successfully:', applicationResult.applicationId);
-        
-        // Create notification for employer
+
         try {
           await createNotification(job.employerId, {
             title: '📥 New Application Received',
@@ -132,10 +136,8 @@ export const JobProvider = ({ children }) => {
           console.log('Notification sent to employer');
         } catch (notifError) {
           console.error('Error sending notification:', notifError);
-          // Don't fail the application if notification fails
         }
 
-        // Update local jobs state to reflect the application
         const updatedJobs = jobs.map(j => {
           if (j.id === jobId) {
             return {
@@ -170,13 +172,12 @@ export const JobProvider = ({ children }) => {
   const respondToApplication = async (applicationId, status, employerId, workerId, jobTitle) => {
     try {
       const result = await updateApplicationStatus(applicationId, status);
-      
+
       if (result.success) {
-        // Create notification for worker
         await createNotification(workerId, {
           title: status === 'accepted' ? '🎉 Application Accepted!' : 'Application Update',
-          message: status === 'accepted' 
-            ? `Congratulations! Your application for "${jobTitle}" has been accepted.` 
+          message: status === 'accepted'
+            ? `Congratulations! Your application for "${jobTitle}" has been accepted.`
             : `Your application for "${jobTitle}" was not selected.`,
           type: 'application_update',
           actionType: status === 'accepted' ? 'view_job_tracking' : 'view_jobs',

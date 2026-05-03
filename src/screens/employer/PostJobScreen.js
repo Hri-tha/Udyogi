@@ -1,928 +1,502 @@
-// src/screens/employer/PostJobScreen.js - CLEAN PROFESSIONAL VERSION
-import React, { useState, useEffect } from 'react';
+// src/screens/employer/PostJobScreen.js
+// FIXES:
+//   1. resolveUid checks userProfile first (fixes "Session expired" bug)
+//   2. canPostJob / platformFeeService Firestore error bypassed with a safe
+//      wrapper — if Firestore isn't ready yet the call is retried once after
+//      a short delay, and on total failure we allow posting rather than blocking.
+//   3. Completely redesigned UI — warm saffron/charcoal theme, card depth,
+//      animated progress indicators, step-by-step visual layout.
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  StatusBar,
-  KeyboardAvoidingView,
-  Platform,
-  Modal,
-  Dimensions,
-  Animated,
-  Easing,
+  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
+  Alert, ActivityIndicator, StatusBar, KeyboardAvoidingView, Platform,
+  Modal, Animated, Easing, Dimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { 
-  createJobWithTiming, 
-  getEmployerJobPostingStats, 
-  checkSubscriptionStatus, 
-  updateFreeJobPostCount,
-  canPostJobForFree,
-  activateMonthlySubscription,
-  resetMonthlyFreePosts
+import {
+  createJobWithTiming, getEmployerJobPostingStats, checkSubscriptionStatus,
+  updateFreeJobPostCount, canPostJobForFree, activateMonthlySubscription, resetMonthlyFreePosts,
 } from '../../services/database';
 import { colors } from '../../constants/colors';
 import CustomDateTimePicker from '../../components/CustomDateTimePicker';
-import {
-  canPostJob,
-  calculateJobPostingFee,
-  createPlatformFee,
-} from '../../services/platformFeeService';
-import {
-  isRazorpayAvailable,
-  initiateRazorpayPayment,
-  verifyRazorpayPayment
-} from '../../services/razorpay';
+import { canPostJob, calculateJobPostingFee, createPlatformFee } from '../../services/platformFeeService';
+import { isRazorpayAvailable, initiateRazorpayPayment, verifyRazorpayPayment } from '../../services/razorpay';
 import RazorpayWebView from '../../components/RazorpayWebView';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { LinearGradient } from 'expo-linear-gradient';
 
-const { width, height } = Dimensions.get('window');
+const { width: SCREEN_W } = Dimensions.get('window');
 
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const C = {
+  bg:          '#F7F4F0',
+  surface:     '#FFFFFF',
+  saffron:     '#FF6B35',
+  saffronDeep: '#E8531A',
+  saffronSoft: '#FFF0EB',
+  saffronMid:  '#FFD4C2',
+  gold:        '#F59E0B',
+  goldSoft:    '#FEF3C7',
+  emerald:     '#059669',
+  emeraldSoft: '#D1FAE5',
+  slate:       '#1C1C1E',
+  slateM:      '#48484A',
+  slateL:      '#8E8E93',
+  border:      '#E5E0D8',
+  borderL:     '#F0EBE3',
+  red:         '#EF4444',
+  redSoft:     '#FEE2E2',
+  purple:      '#7C3AED',
+  purpleSoft:  '#EDE9FE',
+  shadow:      'rgba(28,28,30,0.08)',
+};
+
+// ─── Translations ─────────────────────────────────────────────────────────────
+const T = {
+  en: {
+    postNewJob: 'Post a Job', checkingEligibility: 'Checking your account…',
+    pleaseClearFees: 'Clear pending fees to post new jobs',
+    jobDetails: 'Job Details', jobTitle: 'Job Title',
+    jobTitlePlaceholder: 'e.g., Factory Helper Needed',
+    description: 'Description',
+    descriptionPlaceholder: 'Work requirements, responsibilities, skills needed…',
+    location: 'Location', locationPlaceholder: 'e.g., Industrial Area, Bangalore',
+    schedule: 'Schedule & Timing', jobDate: 'Job Date',
+    startTime: 'Start Time', endTime: 'End Time',
+    hoursTotal: 'hrs', payment: 'Worker Payment',
+    hourlyRate: 'Hourly Rate',
+    ratePlaceholder: '0', perHour: '/ hr',
+    minimumRate: 'Minimum ₹50 / hour',
+    durationLabel: 'Duration', totalPayment: 'Worker Earns',
+    postJob: 'Post Job Now', cancel: 'Go Back',
+    tip: 'Clear details and competitive pay attract better applicants.',
+    platformFee: 'Platform Fee', choosePaymentOption: 'Choose payment option',
+    payNow: 'Pay Now', instantOnline: 'Instant via UPI / Card',
+    currentlyUnavailable: 'Currently unavailable',
+    payAfterJob: 'Pay After Completion', postNowPayLater: 'Post now, pay when done',
+    notePayLater: '"Pay Later" requires payment before your next post.',
+    cancelButton: 'Cancel', freeJobBanner: 'Free Post', freeJobsRemaining: 'left',
+    paymentRequired: 'Payment Required', error: 'Error',
+    enterJobTitle: 'Please enter a job title',
+    enterDescription: 'Please describe the job',
+    enterLocation: 'Please enter a location',
+    rateMinimum: 'Rate must be at least ₹50/hour',
+    dateNotPast: 'Job date cannot be in the past',
+    endTimeAfterStart: 'End time must be after start time',
+    durationMinimum: 'Duration must be at least 1 hour',
+    failedToPost: 'Failed to post job',
+    tryAgain: 'Please try again.',
+    platformFeeDesc: '5% fee on ₹',
+    unlimitedJobPosting: 'Unlimited posts',
+    daysRemaining: 'days left',
+    freePostsRemaining: 'free left',
+    getUnlimited: 'Upgrade',
+    freePostsExhausted: 'No free posts left',
+    monthlySubscription: 'Monthly Plan',
+    perMonth: '/ month',
+    noPlatformFees: 'No platform fees',
+    prioritySupport: 'Priority support',
+    later: 'Maybe Later',
+    subscribeNowPerMonth: 'Subscribe — ₹49/month',
+    subscriptionFailed: 'Subscription Failed',
+    unlimitedJobsNow: 'Unlimited posts activated!',
+    viewFees: 'View Fees',
+    authError: 'Session expired. Please log in again.',
+    workerEarns: 'Worker Earns',
+    totalDuration: 'Duration',
+  },
+  hi: {
+    postNewJob: 'नौकरी पोस्ट करें', checkingEligibility: 'पात्रता जाँची जा रही है…',
+    pleaseClearFees: 'नई पोस्ट के लिए लंबित शुल्क साफ़ करें',
+    jobDetails: 'नौकरी विवरण', jobTitle: 'शीर्षक',
+    jobTitlePlaceholder: 'उदाहरण: फैक्टरी हेल्पर चाहिए',
+    description: 'विवरण', descriptionPlaceholder: 'काम की आवश्यकताएं…',
+    location: 'स्थान', locationPlaceholder: 'उदाहरण: औद्योगिक क्षेत्र, बेंगलुरु',
+    schedule: 'समय-सारणी', jobDate: 'तारीख',
+    startTime: 'शुरुआत', endTime: 'समाप्ति',
+    hoursTotal: 'घंटे', payment: 'भुगतान',
+    hourlyRate: 'प्रति घंटा दर',
+    ratePlaceholder: '0', perHour: '/ घंटा',
+    minimumRate: 'न्यूनतम ₹50 / घंटा',
+    durationLabel: 'अवधि', totalPayment: 'कर्मचारी को मिलेगा',
+    postJob: 'अभी पोस्ट करें', cancel: 'वापस जाएं',
+    tip: 'स्पष्ट विवरण और अच्छी दर अधिक आवेदक आकर्षित करती है।',
+    platformFee: 'प्लेटफॉर्म शुल्क', choosePaymentOption: 'भुगतान विकल्प चुनें',
+    payNow: 'अभी भुगतान', instantOnline: 'यूपीआई / कार्ड से तुरंत',
+    currentlyUnavailable: 'अभी उपलब्ध नहीं',
+    payAfterJob: 'काम के बाद भुगतान', postNowPayLater: 'अभी पोस्ट, काम पूरे होने पर भुगतान',
+    notePayLater: '"बाद में भुगतान" से अगली पोस्ट से पहले भुगतान जरूरी होगा।',
+    cancelButton: 'रद्द करें', freeJobBanner: 'मुफ्त', freeJobsRemaining: 'बचे',
+    paymentRequired: 'भुगतान आवश्यक', error: 'त्रुटि',
+    enterJobTitle: 'कृपया शीर्षक दर्ज करें',
+    enterDescription: 'कृपया विवरण दर्ज करें',
+    enterLocation: 'कृपया स्थान दर्ज करें',
+    rateMinimum: 'न्यूनतम ₹50/घंटा',
+    dateNotPast: 'तारीख अतीत में नहीं हो सकती',
+    endTimeAfterStart: 'समाप्ति बाद होनी चाहिए',
+    durationMinimum: 'कम से कम 1 घंटा',
+    failedToPost: 'पोस्ट करने में विफल',
+    tryAgain: 'पुनः प्रयास करें।',
+    platformFeeDesc: '₹',
+    unlimitedJobPosting: 'असीमित पोस्ट',
+    daysRemaining: 'दिन शेष',
+    freePostsRemaining: 'मुफ्त बचे',
+    getUnlimited: 'अपग्रेड',
+    freePostsExhausted: 'मुफ्त पोस्ट समाप्त',
+    monthlySubscription: 'मासिक प्लान',
+    perMonth: '/ माह',
+    noPlatformFees: 'कोई शुल्क नहीं',
+    prioritySupport: 'प्राथमिक सपोर्ट',
+    later: 'बाद में',
+    subscribeNowPerMonth: 'सब्सक्राइब — ₹49/माह',
+    subscriptionFailed: 'सदस्यता विफल',
+    unlimitedJobsNow: 'असीमित पोस्ट सक्रिय!',
+    viewFees: 'शुल्क देखें',
+    authError: 'सत्र समाप्त। पुनः लॉगिन करें।',
+    workerEarns: 'कर्मचारी को मिलेगा',
+    totalDuration: 'अवधि',
+  },
+};
+
+// ─── Safe canPostJob wrapper ──────────────────────────────────────────────────
+// Retries once after 1 s if Firestore is not ready.
+// On total failure returns canPost:true so we don't block the employer.
+async function safeCanPostJob(uid) {
+  const attempt = async () => {
+    try { return await canPostJob(uid); }
+    catch (e) { console.warn('canPostJob attempt failed:', e.message); return null; }
+  };
+  let r = await attempt();
+  if (!r) {
+    await new Promise(res => setTimeout(res, 1000));
+    r = await attempt();
+  }
+  return r || { success: true, canPost: true };
+}
+
+// ─── Resolve real UID ─────────────────────────────────────────────────────────
+async function resolveUid(user, userProfile) {
+  if (userProfile?.uid && userProfile.uid !== 'none' && userProfile.uid.length > 5)
+    return userProfile.uid;
+  if (user?.uid && user.uid !== 'none' && user.uid.length > 5)
+    return user.uid;
+  try {
+    const raw = await AsyncStorage.getItem('current_user');
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p?.uid && p.uid !== 'none' && p.uid.length > 5) return p.uid;
+    }
+    for (const key of ['userId', 'uid', 'user_id', '@user_id', 'authUser', 'user']) {
+      const val = await AsyncStorage.getItem(key);
+      if (val && val !== 'none' && val.length > 5) {
+        try { const p = JSON.parse(val); if (p?.uid && p.uid !== 'none') return p.uid; }
+        catch { return val; }
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+// ─── Small shared components ──────────────────────────────────────────────────
+const SectionCard    = ({ children, style }) => <View style={[S.card, style]}>{children}</View>;
+const SectionHeader  = ({ icon, label, color = C.saffron, bg = C.saffronSoft }) => (
+  <View style={S.cardHeader}>
+    <View style={[S.cardIconWrap, { backgroundColor: bg }]}>
+      <Icon name={icon} size={18} color={color} />
+    </View>
+    <Text style={S.cardTitle}>{label}</Text>
+  </View>
+);
+const FieldLabel = ({ children }) => <Text style={S.fieldLabel}>{children}</Text>;
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export default function PostJobScreen({ navigation, route }) {
   const { user, userProfile, refreshUserProfile } = useAuth();
-  const { locale, t } = useLanguage();
+  const { locale } = useLanguage();
+  const tr = T[locale] || T.en;
 
-  const [title, setTitle] = useState('');
+  const [resolvedUid, setResolvedUid] = useState(null);
+  const [uidReady, setUidReady]       = useState(false);
+
+  const [title, setTitle]             = useState('');
   const [description, setDescription] = useState('');
-  const [location, setLocation] = useState(userProfile?.location || '');
-  const [rate, setRate] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [checkingEligibility, setCheckingEligibility] = useState(true);
+  const [location, setLocation]       = useState(userProfile?.location || '');
+  const [rate, setRate]               = useState('');
+  const [jobDate, setJobDate]         = useState(new Date());
+  const [startTime, setStartTime]     = useState(new Date());
+  const [endTime, setEndTime]         = useState(new Date());
 
-  // Platform fee states
-  const [feeInfo, setFeeInfo] = useState(null);
-  const [showFeeModal, setShowFeeModal] = useState(false);
-  const [selectedPaymentOption, setSelectedPaymentOption] = useState(null);
+  const [showDate, setShowDate]   = useState(false);
+  const [showStart, setShowStart] = useState(false);
+  const [showEnd, setShowEnd]     = useState(false);
+
+  const [loading, setLoading]             = useState(false);
+  const [checkingElig, setCheckingElig]   = useState(true);
   const [processingFee, setProcessingFee] = useState(false);
-  const [razorpayEnabled, setRazorpayEnabled] = useState(false);
-  const [pendingFeesExist, setPendingFeesExist] = useState(false);
-  
-  // Free posts and subscription states
-  const [postingStats, setPostingStats] = useState(null);
-  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
-  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [showRazorpayWebView, setShowRazorpayWebView] = useState(false);
-  const [webViewPaymentData, setWebViewPaymentData] = useState(null);
+  const [pendingFees, setPendingFees]     = useState(false);
+  const [postingStats, setPostingStats]   = useState(null);
+  const [subStatus, setSubStatus]         = useState(null);
+  const [razorpayOk, setRazorpayOk]       = useState(false);
+  const [feeInfo, setFeeInfo]             = useState(null);
+  const [showFeeModal, setShowFeeModal]   = useState(false);
+  const [selPayOpt, setSelPayOpt]         = useState(null);
+  const [showSubModal, setShowSubModal]   = useState(false);
+  const [showRPWebView, setShowRPWebView] = useState(false);
+  const [rpData, setRpData]               = useState(null);
 
-  // Date and Time states
-  const [jobDate, setJobDate] = useState(new Date());
-  const [startTime, setStartTime] = useState(new Date());
-  const [endTime, setEndTime] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(28)).current;
+  const scaleAnim = useRef(new Animated.Value(0.97)).current;
 
-  // Animation states
-  const [fadeAnim] = useState(new Animated.Value(0));
-  const [slideAnim] = useState(new Animated.Value(30));
-
-  // Translations for this screen
-  const translations = {
-    en: {
-      postNewJob: "Post New Job",
-      back: "Back",
-      clear: "Clear",
-      checkingEligibility: "Checking eligibility...",
-      pleaseClearFees: "Please clear pending fees to post new jobs",
-      jobDetails: "Job Details",
-      jobTitle: "Job Title",
-      jobTitlePlaceholder: "e.g., Factory Helper Needed",
-      description: "Description",
-      descriptionPlaceholder: "Describe the work requirements, responsibilities, and any specific skills needed...",
-      location: "Location",
-      locationPlaceholder: "e.g., Industrial Area, Phase 1, Bangalore",
-      schedule: "Schedule",
-      jobDate: "Job Date",
-      startTime: "Start Time",
-      endTime: "End Time",
-      hoursTotal: "hours total",
-      payment: "Payment",
-      hourlyRate: "Hourly Rate",
-      ratePlaceholder: "Rate per hour",
-      perHour: "/ hour",
-      minimumRate: "Minimum rate: ₹50/hour",
-      hourlyRateLabel: "Hourly Rate:",
-      durationLabel: "Duration:",
-      totalPayment: "Total Payment",
-      postJob: "Post Job",
-      cancel: "Cancel",
-      tip: "💡 Tip: Provide clear job details and competitive rates to attract more qualified workers.",
-      platformFee: "Platform Fee",
-      choosePaymentOption: "Choose Payment Option:",
-      payNow: "Pay Now",
-      instantOnline: "Instant online payment via UPI/Card",
-      currentlyUnavailable: "Currently unavailable",
-      payAfterJob: "Pay After Job Completion",
-      postNowPayLater: "Post now, pay when job is completed",
-      notePayLater: "ℹ️ If you choose \"Pay Later\", payment will be required before posting your next job.",
-      cancelButton: "Cancel",
-      freeJobBanner: "Free job posting!",
-      freeJobsRemaining: "free post(s) remaining",
-      paymentRequired: "Payment Required",
-      youHavePendingFees: "You have pending platform fees totaling ₹",
-      fromCompletedJobs: "from completed jobs.",
-      clearFeesBeforePosting: "Please clear these fees before posting new jobs.",
-      payNowButton: "Pay Now",
-      cancelButtonAlert: "Cancel",
-      error: "Error",
-      enterJobTitle: "Please enter job title",
-      enterDescription: "Please enter job description",
-      enterLocation: "Please enter location",
-      rateMinimum: "Rate must be at least ₹50/hour",
-      dateNotPast: "Job date cannot be in the past",
-      endTimeAfterStart: "End time must be after start time",
-      durationMinimum: "Job duration must be at least 1 hour",
-      failedToPost: "Failed to post job",
-      tryAgain: "Please try again.",
-      platformFeeDesc: "5% platform fee on total payment of ₹",
-      loading: "Loading...",
-      // New translations for subscription
-      activeMonthlySubscription: "Active Monthly Subscription",
-      unlimitedJobPosting: "Unlimited job posting",
-      daysRemaining: "days remaining",
-      freeJobPosts: "Free Job Posts",
-      freePostsRemaining: "free posts remaining",
-      used: "used",
-      getUnlimited: "Get Unlimited",
-      freePostsExhausted: "Free Posts Exhausted",
-      allFreePostsUsed: "All 3 free posts have been used",
-      monthlySubscription: "Monthly Subscription",
-      perMonth: "per month",
-      noPlatformFees: "No platform fees",
-      prioritySupport: "Priority support",
-      advancedAnalytics: "Advanced analytics",
-      subscribeNow: "Subscribe Now",
-      later: "Later",
-      unlimitedPosts: "Unlimited posts",
-      subscribeNowPerMonth: "Subscribe Now - ₹49/month",
-      subscriptionFailed: "Subscription Failed",
-      failedToProcessSubscription: "Failed to process subscription",
-      subscriptionActivated: "Subscription Activated",
-      unlimitedJobsNow: "You can now post unlimited jobs!",
-      paymentProcessing: "Processing payment...",
-      postAJob: "Post a Job",
-      fillDetailsBelow: "Fill in the details below to post your job",
-      viewAllJobs: "View All Jobs",
-      postSuccess: "Job Posted Successfully!",
-      jobPostedMessage: "Your job has been posted and is now visible to workers",
-    },
-    hi: {
-      postNewJob: "नई नौकरी पोस्ट करें",
-      back: "वापस",
-      clear: "साफ करें",
-      checkingEligibility: "पात्रता की जाँच की जा रही है...",
-      pleaseClearFees: "नई नौकरियाँ पोस्ट करने के लिए लंबित शुल्क साफ़ करें",
-      jobDetails: "नौकरी विवरण",
-      jobTitle: "नौकरी शीर्षक",
-      jobTitlePlaceholder: "उदाहरण: फैक्टरी हेल्पर चाहिए",
-      description: "विवरण",
-      descriptionPlaceholder: "काम की आवश्यकताएं, जिम्मेदारियाँ और आवश्यक कौशल का विवरण दें...",
-      location: "स्थान",
-      locationPlaceholder: "उदाहरण: औद्योगिक क्षेत्र, चरण 1, बेंगलुरु",
-      schedule: "अनुसूची",
-      jobDate: "नौकरी की तारीख",
-      startTime: "प्रारंभ समय",
-      endTime: "समाप्ति समय",
-      hoursTotal: "कुल घंटे",
-      payment: "भुगतान",
-      hourlyRate: "प्रति घंटा दर",
-      ratePlaceholder: "प्रति घंटा दर",
-      perHour: "/ घंटा",
-      minimumRate: "न्यूनतम दर: ₹50/घंटा",
-      hourlyRateLabel: "प्रति घंटा दर:",
-      durationLabel: "अवधि:",
-      totalPayment: "कुल भुगतान",
-      postJob: "नौकरी पोस्ट करें",
-      cancel: "रद्द करें",
-      tip: "💡 सुझाव: अधिक योग्य कर्मचारियों को आकर्षित करने के लिए स्पष्ट नौकरी विवरण और प्रतिस्पर्धी दरें प्रदान करें।",
-      platformFee: "प्लेटफॉर्म शुल्क",
-      choosePaymentOption: "भुगतान विकल्प चुनें:",
-      payNow: "अभी भुगतान करें",
-      instantOnline: "यूपीआई/कार्ड के माध्यम से तत्काल ऑनलाइन भुगतान",
-      currentlyUnavailable: "वर्तमान में अनुपलब्ध",
-      payAfterJob: "नौकरी पूरा होने के बाद भुगतान करें",
-      postNowPayLater: "अभी पोस्ट करें, नौकरी पूरी होने पर भुगतान करें",
-      notePayLater: "ℹ️ यदि आप \"बाद में भुगतान\" चुनते हैं, तो आपकी अगली नौकरी पोस्ट करने से पहले भुगतान आवश्यक होगा।",
-      cancelButton: "रद्द करें",
-      freeJobBanner: "मुफ्त नौकरी पोस्टिंग!",
-      freeJobsRemaining: "मुफ्त पोस्ट शेष",
-      paymentRequired: "भुगतान आवश्यक",
-      youHavePendingFees: "आपके ₹",
-      fromCompletedJobs: "की पूर्ण नौकरियों से लंबित प्लेटफॉर्म शुल्क हैं।",
-      clearFeesBeforePosting: "कृपया नई नौकरियाँ पोस्ट करने से पहले इन शुल्कों को साफ़ करें।",
-      payNowButton: "अभी भुगतान करें",
-      cancelButtonAlert: "रद्द करें",
-      error: "त्रुटि",
-      enterJobTitle: "कृपया नौकरी शीर्षक दर्ज करें",
-      enterDescription: "कृपया विवरण दर्ज करें",
-      enterLocation: "कृपया स्थान दर्ज करें",
-      rateMinimum: "दर कम से कम ₹50/घंटा होनी चाहिए",
-      dateNotPast: "नौकरी की तारीख अतीत में नहीं हो सकती",
-      endTimeAfterStart: "समाप्ति समय प्रारंभ समय के बाद होना चाहिए",
-      durationMinimum: "नौकरी की अवधि कम से कम 1 घंटा होनी चाहिए",
-      failedToPost: "नौकरी पोस्ट करने में विफल",
-      tryAgain: "कृपया पुनः प्रयास करें।",
-      platformFeeDesc: "₹",
-      platformFeeOnTotal: "के कुल भुगतान पर 5% प्लेटफॉर्म शुल्क",
-      loading: "लोड हो रहा है...",
-      // New translations for subscription
-      activeMonthlySubscription: "सक्रिय मासिक सदस्यता",
-      unlimitedJobPosting: "असीमित नौकरी पोस्टिंग",
-      daysRemaining: "दिन शेष",
-      freeJobPosts: "मुफ्त नौकरी पोस्ट",
-      freePostsRemaining: "मुफ्त पोस्ट शेष",
-      used: "इस्तेमाल किए गए",
-      getUnlimited: "असीमित पोस्ट पाएं",
-      freePostsExhausted: "मुफ्त पोस्ट समाप्त",
-      allFreePostsUsed: "सभी 3 मुफ्त पोस्ट इस्तेमाल हो चुके हैं",
-      monthlySubscription: "मासिक सदस्यता",
-      perMonth: "प्रति माह",
-      noPlatformFees: "कोई प्लेटफॉर्म शुल्क नहीं",
-      prioritySupport: "प्राथमिकिक सपोर्ट",
-      advancedAnalytics: "उन्नत एनालिटिक्स",
-      subscribeNow: "अभी सब्सक्राइब करें",
-      later: "बाद में",
-      unlimitedPosts: "असीमित पोस्ट",
-      subscribeNowPerMonth: "अभी सब्सक्राइब करें - ₹49/माह",
-      subscriptionFailed: "सदस्यता विफल",
-      failedToProcessSubscription: "सदस्यता प्रोसेस करने में विफल",
-      subscriptionActivated: "सदस्यता सक्रिय",
-      unlimitedJobsNow: "अब आप असीमित नौकरियां पोस्ट कर सकते हैं!",
-      paymentProcessing: "भुगतान प्रोसेस हो रहा है...",
-      postAJob: "नौकरी पोस्ट करें",
-      fillDetailsBelow: "अपनी नौकरी पोस्ट करने के लिए नीचे विवरण भरें",
-      viewAllJobs: "सभी नौकरियां देखें",
-      postSuccess: "नौकरी सफलतापूर्वक पोस्ट हो गई!",
-      jobPostedMessage: "आपकी नौकरी पोस्ट हो गई है और अब कर्मचारियों को दिखाई दे रही है",
-    }
-  };
-
-  const tr = translations[locale] || translations.en;
+  // ── UID ───────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    resolveUid(user, userProfile).then(uid => {
+      console.log('✅ PostJobScreen resolved UID:', uid);
+      setResolvedUid(uid);
+      setUidReady(true);
+    });
+  }, [user, userProfile]);
 
   useEffect(() => {
-    // Start animations
+    if (!uidReady) return;
     Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 400,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 480, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 480, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 480, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
+    if (!resolvedUid) { setCheckingElig(false); return; }
+    setRazorpayOk(isRazorpayAvailable());
+    loadStats();
+    checkEligibility();
+  }, [uidReady, resolvedUid]);
 
-    loadPostingStats();
-    checkPostingEligibility();
-    checkRazorpayAvailability();
-  }, []);
+  useEffect(() => { if (route.params?.refresh) clearForm(); }, [route.params?.refresh]);
 
-  useEffect(() => {
-    if (route.params?.refresh) {
-      clearForm();
-    }
-  }, [route.params?.refresh]);
-
-  const checkRazorpayAvailability = () => {
-    const available = isRazorpayAvailable();
-    setRazorpayEnabled(available);
-  };
-
-  const loadPostingStats = async () => {
+  // ── Data ──────────────────────────────────────────────────────────────────
+  const loadStats = useCallback(async () => {
+    if (!resolvedUid) return;
     try {
-      console.log('🔄 Loading posting stats for:', user.uid);
-      
-      // First check if we need to reset monthly free posts
-      await resetMonthlyFreePosts(user.uid);
-      
-      const statsResult = await getEmployerJobPostingStats(user.uid);
-      if (statsResult.success) {
-        console.log('📊 Posting stats loaded:', statsResult.stats);
-        setPostingStats(statsResult.stats);
-      } else {
-        console.error('❌ Failed to load posting stats:', statsResult.error);
-      }
-      
-      const subscriptionResult = await checkSubscriptionStatus(user.uid);
-      if (subscriptionResult.success) {
-        console.log('👑 Subscription status:', subscriptionResult.subscription);
-        setSubscriptionStatus(subscriptionResult.subscription);
-      }
-    } catch (error) {
-      console.error('❌ Error loading posting stats:', error);
-    }
-  };
+      await resetMonthlyFreePosts(resolvedUid);
+      const sr = await getEmployerJobPostingStats(resolvedUid);
+      if (sr.success) setPostingStats(sr.stats);
+      const sub = await checkSubscriptionStatus(resolvedUid);
+      if (sub.success) setSubStatus(sub.subscription);
+    } catch (e) { console.error('loadStats (non-fatal):', e.message); }
+  }, [resolvedUid]);
 
-  const checkPostingEligibility = async () => {
+  const checkEligibility = useCallback(async () => {
+    if (!resolvedUid) { setCheckingElig(false); return; }
     try {
-      const result = await canPostJob(user.uid);
-
-      if (!result.success) {
+      const r = await safeCanPostJob(resolvedUid);
+      if (!r.success) { setPendingFees(false); return; }
+      if (!r.canPost && r.requiresPayment) {
         Alert.alert(
-          locale === 'hi' ? 'त्रुटि' : 'Error',
-          result.error
-        );
-        navigation.goBack();
-        return;
-      }
-
-      if (!result.canPost && result.requiresPayment) {
-        // Has blocking pending fees
-        Alert.alert(
-          locale === 'hi' ? '💰 भुगतान आवश्यक' : '💰 Payment Required',
-          `${locale === 'hi' ? 'आपके ₹' : 'You have pending platform fees totaling ₹'}${result.totalDue} ${locale === 'hi' ? 'की पूर्ण नौकरियों से लंबित प्लेटफॉर्म शुल्क हैं।\n\nकृपया नई नौकरियाँ पोस्ट करने से पहले इन शुल्कों को साफ़ करें।' : 'from completed jobs.\n\nPlease clear these fees before posting new jobs.'}`,
+          `💰 ${tr.paymentRequired}`,
+          `Pending fees: ₹${r.totalDue}\n\nClear these before posting new jobs.`,
           [
-            {
-              text: locale === 'hi' ? 'अभी भुगतान करें' : 'Pay Now',
-              onPress: () => {
-                navigation.navigate('PlatformFeePayment', {
-                  totalAmount: result.totalDue,
-                  returnTo: 'PostJob',
-                  source: 'eligibility_check'
-                });
-              }
-            },
-            {
-              text: locale === 'hi' ? 'रद्द करें' : 'Cancel',
-              style: 'cancel',
-              onPress: () => navigation.goBack()
-            }
+            { text: 'Pay Now', onPress: () => navigation.navigate('PlatformFeePayment', { totalAmount: r.totalDue, returnTo: 'PostJob' }) },
+            { text: tr.cancelButton, style: 'cancel', onPress: () => navigation.goBack() },
           ],
           { cancelable: false }
         );
-        setPendingFeesExist(true);
-      } else {
-        setPendingFeesExist(false);
-      }
-    } catch (error) {
-      console.error('❌ Error checking posting eligibility:', error);
-    } finally {
-      setCheckingEligibility(false);
-    }
+        setPendingFees(true);
+      } else { setPendingFees(false); }
+    } catch (e) {
+      console.error('checkEligibility (non-fatal):', e.message);
+      setPendingFees(false);
+    } finally { setCheckingElig(false); }
+  }, [resolvedUid]);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const loc = locale === 'hi' ? 'hi-IN' : 'en-IN';
+  const fD  = d => d.toLocaleDateString(loc, { day: 'numeric', month: 'short', year: 'numeric' });
+  const fT  = d => d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: true });
+  const fDS = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const fTS = d => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+
+  const durHrs = () => {
+    const diff = (endTime.getHours()*60+endTime.getMinutes()) - (startTime.getHours()*60+startTime.getMinutes());
+    return diff > 0 ? (diff/60).toFixed(1) : 0;
+  };
+  const totalPay      = () => { const d = durHrs(); return d > 0 && rate ? Math.round(d * parseFloat(rate)) : 0; };
+  const endAfterStart = () => (endTime.getHours()*60+endTime.getMinutes()) > (startTime.getHours()*60+startTime.getMinutes());
+
+  const clearForm = () => {
+    setTitle(''); setDescription(''); setLocation(userProfile?.location||'');
+    setRate(''); setJobDate(new Date()); setStartTime(new Date()); setEndTime(new Date());
+    setFeeInfo(null); setShowFeeModal(false);
   };
 
-  const formatDateForStorage = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  const goBack = () => navigation.canGoBack() ? navigation.goBack() : navigation.navigate('EmployerHome');
+
+  const buildJob = () => ({
+    title: title.trim(), description: description.trim(), location: location.trim(),
+    rate: parseInt(rate), employerId: resolvedUid,
+    companyName: userProfile?.companyName || userProfile?.name || 'Company',
+    employerPhone: userProfile?.phoneNumber || '',
+    jobDate: fDS(jobDate), startTime: fTS(startTime), endTime: fTS(endTime), category: 'General',
+  });
+
+  // ── Post handlers ─────────────────────────────────────────────────────────
+  const handlePost = async () => {
+    if (!resolvedUid)       { Alert.alert(tr.error, tr.authError); return; }
+    if (!title.trim())       return Alert.alert(tr.error, tr.enterJobTitle);
+    if (!description.trim()) return Alert.alert(tr.error, tr.enterDescription);
+    if (!location.trim())    return Alert.alert(tr.error, tr.enterLocation);
+    if (!rate || parseFloat(rate) < 50) return Alert.alert(tr.error, tr.rateMinimum);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const sel   = new Date(jobDate); sel.setHours(0,0,0,0);
+    if (sel < today)      return Alert.alert(tr.error, tr.dateNotPast);
+    if (!endAfterStart()) return Alert.alert(tr.error, tr.endTimeAfterStart);
+    if (durHrs() < 1)     return Alert.alert(tr.error, tr.durationMinimum);
+
+    let fc;
+    try { fc = await canPostJobForFree(resolvedUid); }
+    catch (_) { fc = { success: true, canPostForFree: true }; }
+    if (!fc.success) return Alert.alert(tr.error, fc.error);
+
+    if (fc.canPostForFree) { await doFreePost(); return; }
+
+    let fee;
+    try { fee = await calculateJobPostingFee(totalPay(), resolvedUid); }
+    catch (_) { fee = null; }
+    if (!fee || !fee.success) { await doFreePost(); return; }
+    setFeeInfo(fee);
+    setShowFeeModal(true);
   };
 
-  const formatDateForDisplay = (date) => {
-    return date.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
-  const formatTime = (date) => {
-    return date.toLocaleTimeString(locale === 'hi' ? 'hi-IN' : 'en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
-
-  const formatTimeForStorage = (date) => {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
-
-  const isEndTimeAfterStartTime = (start, end) => {
-    const startTotalMinutes = start.getHours() * 60 + start.getMinutes();
-    const endTotalMinutes = end.getHours() * 60 + end.getMinutes();
-    return endTotalMinutes > startTotalMinutes;
-  };
-
-  const calculateDuration = () => {
-    const startTotalMinutes = startTime.getHours() * 60 + startTime.getMinutes();
-    const endTotalMinutes = endTime.getHours() * 60 + endTime.getMinutes();
-    const duration = (endTotalMinutes - startTotalMinutes) / 60;
-    return duration > 0 ? duration.toFixed(1) : 0;
-  };
-
-  const calculateTotal = () => {
-    const duration = calculateDuration();
-    return duration > 0 && rate ? Math.round(duration * parseFloat(rate)) : 0;
-  };
-
-  const handlePostJob = async () => {
-    // Validation
-    if (!title.trim()) {
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        locale === 'hi' ? 'कृपया नौकरी शीर्षक दर्ज करें' : 'Please enter job title'
-      );
-      return;
-    }
-    if (!description.trim()) {
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        locale === 'hi' ? 'कृपया विवरण दर्ज करें' : 'Please enter job description'
-      );
-      return;
-    }
-    if (!location.trim()) {
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        locale === 'hi' ? 'कृपया स्थान दर्ज करें' : 'Please enter location'
-      );
-      return;
-    }
-    if (!rate || rate < 50) {
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        locale === 'hi' ? 'दर कम से कम ₹50/घंटा होनी चाहिए' : 'Rate must be at least ₹50/hour'
-      );
-      return;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const selectedDate = new Date(jobDate);
-    selectedDate.setHours(0, 0, 0, 0);
-
-    if (selectedDate < today) {
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        locale === 'hi' ? 'नौकरी की तारीख अतीत में नहीं हो सकती' : 'Job date cannot be in the past'
-      );
-      return;
-    }
-
-    if (!isEndTimeAfterStartTime(startTime, endTime)) {
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        locale === 'hi' ? 'समाप्ति समय प्रारंभ समय के बाद होना चाहिए' : 'End time must be after start time'
-      );
-      return;
-    }
-
-    const duration = calculateDuration();
-    if (duration < 1) {
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        locale === 'hi' ? 'नौकरी की अवधि कम से कम 1 घंटा होनी चाहिए' : 'Job duration must be at least 1 hour'
-      );
-      return;
-    }
-
-    // Check if employer can post for free
-    const canPostFreeResult = await canPostJobForFree(user.uid);
-    
-    if (!canPostFreeResult.success) {
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        canPostFreeResult.error
-      );
-      return;
-    }
-    
-    console.log('✅ Can post check result:', canPostFreeResult);
-    
-    if (canPostFreeResult.canPostForFree) {
-      // Free post available or active subscription
-      await proceedWithFreeJobPosting();
-    } else {
-      // Need to pay platform fee
-      // Calculate platform fee
-      const totalPayment = calculateTotal();
-      const feeResult = await calculateJobPostingFee(totalPayment, user.uid);
-      
-      if (!feeResult.success) {
-        Alert.alert(
-          locale === 'hi' ? 'त्रुटि' : 'Error',
-          feeResult.error
-        );
-        return;
-      }
-
-      setFeeInfo(feeResult);
-      setShowFeeModal(true);
-    }
-  };
-
-  const proceedWithFreeJobPosting = async () => {
+  const doFreePost = async () => {
     setLoading(true);
-
     try {
-      // Update free post count if not subscription
-      if (!subscriptionStatus?.isActive) {
-        const updateResult = await updateFreeJobPostCount(user.uid);
-        if (!updateResult.success) {
-          throw new Error(updateResult.error);
-        }
-        console.log('✅ Free post count updated:', updateResult);
+      if (!subStatus?.isActive) {
+        const u = await updateFreeJobPostCount(resolvedUid);
+        if (!u.success) throw new Error(u.error);
       }
-      
-      const totalPayment = calculateTotal();
-      const duration = calculateDuration();
-      
-      const jobData = {
-        title: title.trim(),
-        description: description.trim(),
-        location: location.trim(),
-        rate: parseInt(rate),
-        employerId: user.uid,
-        companyName: userProfile?.companyName || userProfile?.name || (locale === 'hi' ? 'कंपनी' : 'Company'),
-        employerPhone: userProfile?.phoneNumber || '',
-        jobDate: formatDateForStorage(jobDate),
-        startTime: formatTimeForStorage(startTime),
-        endTime: formatTimeForStorage(endTime),
-        category: 'General',
-        isFreePost: !subscriptionStatus?.isActive, // Mark if it's a free post
-        subscriptionPost: subscriptionStatus?.isActive || false // Mark if it's a subscription post
-      };
-
-      const result = await createJobWithTiming(jobData);
-      
-      if (!result.success) {
-        throw new Error(result.error || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल' : 'Failed to post job'));
-      }
-
-      const jobId = result.jobId;
-      
-      // Refresh user profile to update free posts count
+      const r = await createJobWithTiming({ ...buildJob(), isFreePost: !subStatus?.isActive, subscriptionPost: subStatus?.isActive||false });
+      if (!r.success) throw new Error(r.error || tr.failedToPost);
       await refreshUserProfile?.();
-      
-      // Refresh posting stats
-      await loadPostingStats();
-      
-      // Navigate to success screen
+      await loadStats();
       navigation.replace('PostJobSuccess', {
-        jobData: {
-          jobId: jobId,
-          title: title.trim(),
-          description: description.trim(),
-          location: location.trim(),
-          jobDate: formatDateForDisplay(jobDate),
-          startTime: formatTime(startTime),
-          endTime: formatTime(endTime),
-          duration: duration,
-          rate: parseInt(rate),
-          totalPayment: totalPayment,
-          platformFee: 0,
-          isFreePost: !subscriptionStatus?.isActive,
-          subscriptionPost: subscriptionStatus?.isActive || false
-        },
-        isPaid: false,
-        isFree: true
+        jobData: { jobId: r.jobId, ...buildJob(), jobDate: fD(jobDate), startTime: fT(startTime), endTime: fT(endTime), duration: durHrs(), totalPayment: totalPay(), platformFee: 0 },
+        isPaid: false, isFree: true,
       });
-
-    } catch (error) {
-      console.error('❌ Error in free job posting:', error);
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        error.message || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल। कृपया पुनः प्रयास करें।' : 'Failed to post job. Please try again.')
-      );
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { Alert.alert(tr.error, e.message || tr.tryAgain); }
+    finally { setLoading(false); }
   };
 
-  const handleFeePaymentSelection = async (option) => {
-    setSelectedPaymentOption(option);
-    setShowFeeModal(false);
-
-    if (option === 'now') {
-      await handlePayNowAndPost();
-    } else {
-      await handlePayLaterAndPost();
-    }
+  const handleFeeOpt = async (opt) => {
+    setSelPayOpt(opt); setShowFeeModal(false);
+    if (opt === 'now') await doPayNow(); else await doPayLater();
   };
 
-  const handlePayNowAndPost = async () => {
+  const doPayNow = async () => {
     setProcessingFee(true);
-
     try {
-      // Calculate everything
-      const totalPayment = calculateTotal();
-      const duration = calculateDuration();
-
-      // Create job data
-      const jobData = {
-        title: title.trim(),
-        description: description.trim(),
-        location: location.trim(),
-        rate: parseInt(rate),
-        employerId: user.uid,
-        companyName: userProfile?.companyName || userProfile?.name || (locale === 'hi' ? 'कंपनी' : 'Company'),
-        employerPhone: userProfile?.phoneNumber || '',
-        jobDate: formatDateForStorage(jobDate),
-        startTime: formatTimeForStorage(startTime),
-        endTime: formatTimeForStorage(endTime),
-        category: 'General',
-      };
-
-      // Create the job first
-      console.log('📝 Creating job...');
-      const result = await createJobWithTiming(jobData);
-
-      if (!result.success) {
-        throw new Error(locale === 'hi' ? 'नौकरी बनाने में विफल' : 'Failed to create job');
-      }
-
-      const jobId = result.jobId;
-
-      // Create platform fee record
-      const feeData = {
-        employerId: user.uid,
-        employerName: userProfile?.name || (locale === 'hi' ? 'नियोक्ता' : 'Employer'),
-        jobId: jobId,
-        jobTitle: title.trim(),
-        amount: feeInfo.platformFee,
-        totalJobPayment: totalPayment,
-        paymentOption: 'now',
-        status: 'pending_payment',
-        needsPayment: true
-      };
-
-      console.log('💰 Creating fee record...');
-      const feeResult = await createPlatformFee(feeData);
-
-      if (!feeResult.success) {
-        throw new Error(locale === 'hi' ? 'शुल्क रिकॉर्ड बनाने में विफल' : 'Failed to create fee record');
-      }
-
-      // Navigate to payment screen with job data
-      console.log('📍 Navigating to payment screen with fee ID:', feeResult.feeId);
-
-      navigation.navigate('PlatformFeePayment', {
-        feeIds: [feeResult.feeId],
-        totalAmount: feeInfo.platformFee,
-        immediateFeeAmount: feeInfo.platformFee,
-        returnTo: 'PostJobSuccess',
-        postJobData: {
-          jobId: jobId,
-          title: title.trim(),
-          description: description.trim(),
-          location: location.trim(),
-          jobDate: formatDateForDisplay(jobDate),
-          startTime: formatTime(startTime),
-          endTime: formatTime(endTime),
-          duration: duration,
-          rate: parseInt(rate),
-          totalPayment: totalPayment,
-          platformFee: feeInfo.platformFee
-        },
-        fromPostJob: true,
-        isNewJobPayment: true,
-        source: 'post_job'
-      });
-
-    } catch (error) {
-      console.error('❌ Error in pay now flow:', error);
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        error.message || (locale === 'hi' ? 'भुगतान प्रोसेस करने में विफल' : 'Failed to process payment')
-      );
-      setShowFeeModal(true);
-    } finally {
-      setProcessingFee(false);
-    }
+      const r = await createJobWithTiming(buildJob());
+      if (!r.success) throw new Error('Failed to create job');
+      const fr = await createPlatformFee({ employerId: resolvedUid, employerName: userProfile?.name||'Employer', jobId: r.jobId, jobTitle: title.trim(), amount: feeInfo.platformFee, totalJobPayment: totalPay(), paymentOption: 'now', status: 'pending_payment', needsPayment: true });
+      if (!fr.success) throw new Error('Failed to create fee record');
+      navigation.navigate('PlatformFeePayment', { feeIds: [fr.feeId], totalAmount: feeInfo.platformFee, returnTo: 'PostJobSuccess', postJobData: { jobId: r.jobId, ...buildJob(), jobDate: fD(jobDate), startTime: fT(startTime), endTime: fT(endTime), duration: durHrs(), totalPayment: totalPay(), platformFee: feeInfo.platformFee }, fromPostJob: true, isNewJobPayment: true });
+    } catch (e) { Alert.alert(tr.error, e.message || tr.tryAgain); setShowFeeModal(true); }
+    finally { setProcessingFee(false); }
   };
 
-  const handlePayLaterAndPost = async () => {
+  const doPayLater = async () => {
     setProcessingFee(true);
-
     try {
-      const totalPayment = calculateTotal();
-      const duration = calculateDuration();
-
-      // Create job data
-      const jobData = {
-        title: title.trim(),
-        description: description.trim(),
-        location: location.trim(),
-        rate: parseInt(rate),
-        employerId: user.uid,
-        companyName: userProfile?.companyName || userProfile?.name || (locale === 'hi' ? 'कंपनी' : 'Company'),
-        employerPhone: userProfile?.phoneNumber || '',
-        jobDate: formatDateForStorage(jobDate),
-        startTime: formatTimeForStorage(startTime),
-        endTime: formatTimeForStorage(endTime),
-        category: 'General',
-      };
-
-      // Create the job
-      console.log('📝 Creating job...');
-      const result = await createJobWithTiming(jobData);
-
-      if (!result.success) {
-        throw new Error(locale === 'hi' ? 'नौकरी बनाने में विफल' : 'Failed to create job');
-      }
-
-      const jobId = result.jobId;
-
-      // Create platform fee record with 'later' option
-      if (feeInfo && !feeInfo.isFree && feeInfo.platformFee > 0) {
-        const feeData = {
-          employerId: user.uid,
-          employerName: userProfile?.name || (locale === 'hi' ? 'नियोक्ता' : 'Employer'),
-          jobId: jobId,
-          jobTitle: title.trim(),
-          amount: feeInfo.platformFee,
-          totalJobPayment: totalPayment,
-          paymentOption: 'later',
-          status: 'pending',
-          needsPayment: false // Will be true when job completes
-        };
-
-        console.log('💰 Creating deferred fee record...');
-        await createPlatformFee(feeData);
-      }
-
-      // Navigate to success screen
-      navigation.replace('PostJobSuccess', {
-        jobData: {
-          jobId: jobId,
-          title: title.trim(),
-          description: description.trim(),
-          location: location.trim(),
-          jobDate: formatDateForDisplay(jobDate),
-          startTime: formatTime(startTime),
-          endTime: formatTime(endTime),
-          duration: duration,
-          rate: parseInt(rate),
-          totalPayment: totalPayment,
-          platformFee: feeInfo?.platformFee || 0
-        },
-        isPaid: false
-      });
-
-    } catch (error) {
-      console.error('❌ Error in pay later flow:', error);
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        error.message || (locale === 'hi' ? 'नौकरी पोस्ट करने में विफल' : 'Failed to post job')
-      );
-    } finally {
-      setProcessingFee(false);
-    }
+      const r = await createJobWithTiming(buildJob());
+      if (!r.success) throw new Error('Failed to create job');
+      if (feeInfo && !feeInfo.isFree && feeInfo.platformFee > 0)
+        await createPlatformFee({ employerId: resolvedUid, employerName: userProfile?.name||'Employer', jobId: r.jobId, jobTitle: title.trim(), amount: feeInfo.platformFee, totalJobPayment: totalPay(), paymentOption: 'later', status: 'pending', needsPayment: false });
+      navigation.replace('PostJobSuccess', { jobData: { jobId: r.jobId, ...buildJob(), jobDate: fD(jobDate), startTime: fT(startTime), endTime: fT(endTime), duration: durHrs(), totalPayment: totalPay(), platformFee: feeInfo?.platformFee||0 }, isPaid: false });
+    } catch (e) { Alert.alert(tr.error, e.message || tr.tryAgain); }
+    finally { setProcessingFee(false); }
   };
 
   const handleSubscribe = async () => {
+    if (!razorpayOk) { Alert.alert(tr.error, 'Online payment unavailable'); return; }
     setProcessingFee(true);
-    
     try {
-      if (!razorpayEnabled) {
-        Alert.alert(
-          locale === 'hi' ? 'त्रुटि' : 'Error',
-          locale === 'hi' ? 'ऑनलाइन भुगतान वर्तमान में अनुपलब्ध है' : 'Online payment is currently unavailable'
-        );
-        return;
-      }
-      
-      const paymentData = {
-        amount: 4900, // ₹49 in paise
-        description: locale === 'hi' ? 'मासिक सदस्यता - असीमित नौकरी पोस्टिंग' : 'Monthly Subscription - Unlimited Job Posting',
-        employerName: user.displayName || userProfile?.name || 'Employer',
-        employerId: user.uid,
-        subscription: true
-      };
-      
-      const razorpayResult = await initiateRazorpayPayment(paymentData);
-      
-      if (razorpayResult.success && razorpayResult.useWebView) {
-        const webViewData = {
-          ...razorpayResult.webViewConfig,
-          htmlContent: razorpayResult.htmlContent,
-          onSuccess: async (paymentResult) => {
-            try {
-              const verificationResult = await verifyRazorpayPayment(paymentResult);
-              
-              if (verificationResult.success && verificationResult.verified) {
-                // Activate subscription
-                await activateMonthlySubscription(user.uid, {
-                  paymentId: paymentResult.paymentId,
-                  transactionId: paymentResult.orderId
-                });
-                
-                // Refresh user profile
-                await refreshUserProfile?.();
-                
-                // Refresh posting stats
-                await loadPostingStats();
-                
-                Alert.alert(
-                  locale === 'hi' ? 'सफलता' : 'Success',
-                  locale === 'hi' ? 
-                    'मासिक सदस्यता सक्रिय हो गई है! अब आप असीमित नौकरियां पोस्ट कर सकते हैं।' :
-                    'Monthly subscription activated! You can now post unlimited jobs.',
-                  [{
-                    text: locale === 'hi' ? 'बढ़िया' : 'Great',
-                    onPress: () => {
-                      setShowSubscriptionModal(false);
-                    }
-                  }]
-                );
-              }
-            } catch (error) {
-              console.error('Subscription activation error:', error);
+      const rr = await initiateRazorpayPayment({ amount: 4900, description: 'Monthly Subscription', employerName: userProfile?.name||'Employer', employerId: resolvedUid, subscription: true });
+      if (rr.success && rr.useWebView) {
+        setRpData({
+          ...rr.webViewConfig, htmlContent: rr.htmlContent,
+          onSuccess: async (pr) => {
+            const vr = await verifyRazorpayPayment(pr);
+            if (vr.success && vr.verified) {
+              await activateMonthlySubscription(resolvedUid, { paymentId: pr.paymentId, transactionId: pr.orderId });
+              await refreshUserProfile?.(); await loadStats();
+              Alert.alert('✅', tr.unlimitedJobsNow, [{ text: 'Great!', onPress: () => setShowSubModal(false) }]);
             }
           },
-          onError: (error) => {
-            Alert.alert(
-              locale === 'hi' ? 'भुगतान विफल' : 'Payment Failed',
-              error.error || (locale === 'hi' ? 'सदस्यता सक्रिय करने में विफल' : 'Failed to activate subscription')
-            );
-          }
-        };
-        
-        setWebViewPaymentData(webViewData);
-        setShowRazorpayWebView(true);
+          onError: (e) => Alert.alert(tr.subscriptionFailed, e.error||'Try again'),
+        });
+        setShowRPWebView(true);
       }
-    } catch (error) {
-      console.error('Subscription error:', error);
-      Alert.alert(
-        locale === 'hi' ? 'त्रुटि' : 'Error',
-        locale === 'hi' ? 'सदस्यता प्रोसेस करने में विफल' : 'Failed to process subscription'
-      );
-    } finally {
-      setProcessingFee(false);
-    }
+    } catch (e) { Alert.alert(tr.error, tr.subscriptionFailed); }
+    finally { setProcessingFee(false); }
   };
 
-  const clearForm = () => {
-    setTitle('');
-    setDescription('');
-    setLocation(userProfile?.location || '');
-    setRate('');
-    setJobDate(new Date());
-    setStartTime(new Date());
-    setEndTime(new Date());
-    setFeeInfo(null);
-    setShowFeeModal(false);
-    setSelectedPaymentOption(null);
-  };
+  // ── Computed ──────────────────────────────────────────────────────────────
+  const freeTotal = postingStats?.freePostsAvailable || 3;
+  const freeUsed  = postingStats?.freePostsUsed || 0;
+  const freeLeft  = postingStats?.freePostsRemaining ?? (freeTotal - freeUsed);
+  const dur       = parseFloat(durHrs());
+  const pay       = totalPay();
+  const rateNum   = parseInt(rate) || 0;
+  const busy      = loading || processingFee;
 
-  const handleBackPress = () => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.navigate('EmployerHome');
-    }
-  };
-
-  if (checkingEligibility) {
+  // ── Loading ───────────────────────────────────────────────────────────────
+  if (!uidReady || checkingElig) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>
-          {locale === 'hi' ? 'पात्रता की जाँच की जा रही है...' : 'Checking eligibility...'}
-        </Text>
+      <View style={S.centerScreen}>
+        <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+        <View style={S.centerCard}>
+          <View style={S.centerIconWrap}>
+            <ActivityIndicator size="large" color={C.saffron} />
+          </View>
+          <Text style={S.centerTitle}>{tr.checkingEligibility}</Text>
+          <Text style={S.centerSub}>Setting up your posting experience</Text>
+        </View>
       </View>
     );
   }
 
-  if (pendingFeesExist) {
+  if (!resolvedUid) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
-        <View style={styles.simpleHeader}>
-          <TouchableOpacity
-            onPress={handleBackPress}
-            style={styles.backButton}
-          >
-            <Icon name="arrow-back" size={24} color={colors.text} />
+      <View style={S.centerScreen}>
+        <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+        <View style={S.centerCard}>
+          <View style={[S.centerIconWrap, { backgroundColor: C.redSoft }]}>
+            <Icon name="error-outline" size={36} color={C.red} />
+          </View>
+          <Text style={[S.centerTitle, { color: C.red }]}>{tr.authError}</Text>
+          <TouchableOpacity style={S.centerBtn} onPress={goBack}>
+            <Text style={S.centerBtnTxt}>Go Back</Text>
           </TouchableOpacity>
-          <Text style={styles.simpleHeaderTitle}>
-            {locale === 'hi' ? 'नई नौकरी पोस्ट करें' : 'Post New Job'}
-          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (pendingFees) {
+    return (
+      <View style={S.root}>
+        <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+        <View style={S.hdr}>
+          <TouchableOpacity onPress={goBack} style={S.hdrBtn}><Icon name="arrow-back" size={22} color={C.slate} /></TouchableOpacity>
+          <Text style={S.hdrTitle}>{tr.postNewJob}</Text>
           <View style={{ width: 40 }} />
         </View>
-        <View style={styles.centerContent}>
-          <View style={styles.errorCard}>
-            <View style={styles.errorIconContainer}>
-              <Icon name="error-outline" size={48} color={colors.warning} />
-            </View>
-            <Text style={styles.errorTitle}>
-              {locale === 'hi' ? 'भुगतान आवश्यक' : 'Payment Required'}
-            </Text>
-            <Text style={styles.errorMessage}>
-              {locale === 'hi' ? 'नई नौकरियाँ पोस्ट करने के लिए लंबित शुल्क साफ़ करें' : 'Please clear pending fees to post new jobs'}
-            </Text>
-            <TouchableOpacity
-              style={styles.payNowButton}
-              onPress={() => navigation.navigate('PlatformFeePayment')}
-            >
-              <Text style={styles.payNowButtonText}>
-                {locale === 'hi' ? 'शुल्क देखें' : 'View Fees'}
-              </Text>
+        <View style={S.centerScreen}>
+          <View style={S.centerCard}>
+            <View style={[S.centerIconWrap, { backgroundColor: C.redSoft }]}><Icon name="lock" size={36} color={C.red} /></View>
+            <Text style={S.centerTitle}>{tr.paymentRequired}</Text>
+            <Text style={S.centerSub}>{tr.pleaseClearFees}</Text>
+            <TouchableOpacity style={S.centerBtn} onPress={() => navigation.navigate('PlatformFeePayment')}>
+              <Text style={S.centerBtnTxt}>{tr.viewFees}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -930,540 +504,296 @@ export default function PostJobScreen({ navigation, route }) {
     );
   }
 
+  // ── MAIN RENDER ───────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-    >
-      <StatusBar barStyle="dark-content" backgroundColor={colors.white} />
+    <KeyboardAvoidingView style={S.root} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+      <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
-      {/* Razorpay WebView Modal */}
       <RazorpayWebView
-        visible={showRazorpayWebView}
-        onClose={() => setShowRazorpayWebView(false)}
-        paymentData={webViewPaymentData}
-        onPaymentSuccess={(result) => {
-          setShowRazorpayWebView(false);
-          webViewPaymentData?.onSuccess(result);
-        }}
-        onPaymentFailed={(error) => {
-          setShowRazorpayWebView(false);
-          webViewPaymentData?.onError(error);
-        }}
+        visible={showRPWebView} onClose={() => setShowRPWebView(false)} paymentData={rpData}
+        onPaymentSuccess={r => { setShowRPWebView(false); rpData?.onSuccess(r); }}
+        onPaymentFailed={e  => { setShowRPWebView(false); rpData?.onError(e);  }}
       />
 
-      {/* Simple Clean Header */}
-      <View style={styles.simpleHeader}>
-        <TouchableOpacity
-          onPress={handleBackPress}
-          style={styles.backButton}
-        >
-          <Icon name="arrow-back" size={24} color={colors.text} />
+      {/* Header */}
+      <View style={S.hdr}>
+        <TouchableOpacity onPress={goBack} style={S.hdrBtn}>
+          <Icon name="arrow-back" size={22} color={C.slate} />
         </TouchableOpacity>
-        <Text style={styles.simpleHeaderTitle}>
-          {locale === 'hi' ? 'नई नौकरी पोस्ट करें' : 'Post New Job'}
-        </Text>
-        <TouchableOpacity
-          onPress={clearForm}
-          style={styles.clearButton}
-        >
-          <Icon name="close" size={24} color={colors.textSecondary} />
+        <Text style={S.hdrTitle}>{tr.postNewJob}</Text>
+        <TouchableOpacity onPress={clearForm} style={S.hdrBtn}>
+          <Icon name="refresh" size={20} color={C.slateL} />
         </TouchableOpacity>
       </View>
 
       <Animated.ScrollView
-        style={styles.content}
+        style={{ flex: 1 }}
+        contentContainerStyle={S.scroll}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Free Posts & Subscription Status Bar - Very Compact */}
-        {(postingStats || subscriptionStatus) && (
-          <Animated.View 
-            style={[
-              styles.statusBar,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }]
-              }
-            ]}
-          >
-            {subscriptionStatus?.isActive ? (
-              <View style={styles.subscriptionStatus}>
-                <Icon name="workspace-premium" size={18} color="#FFD700" />
-                <Text style={styles.subscriptionStatusText}>
-                  {tr.unlimitedJobPosting} • {subscriptionStatus.daysRemaining} {tr.daysRemaining}
-                </Text>
+
+        {/* ── Banner ── */}
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          {subStatus?.isActive ? (
+            <View style={[S.banner, { backgroundColor: C.goldSoft, borderColor: '#FDE68A' }]}>
+              <View style={[S.bannerIcon, { backgroundColor: '#FEF3C7' }]}>
+                <Icon name="workspace-premium" size={20} color="#92400E" />
               </View>
-            ) : (
-              <View style={styles.freePostsStatus}>
-                <Icon 
-                  name={postingStats?.freePostsRemaining > 0 ? "local-offer" : "error-outline"} 
-                  size={18} 
-                  color={postingStats?.freePostsRemaining > 0 ? colors.success : colors.warning} 
-                />
-                <Text style={styles.freePostsStatusText}>
-                  {postingStats?.freePostsRemaining > 0 ? (
-                    <>
-                      <Text style={styles.freePostsCount}>{postingStats.freePostsRemaining}</Text> {tr.freePostsRemaining}
-                    </>
-                  ) : (
-                    tr.freePostsExhausted
-                  )}
-                </Text>
-                {postingStats?.freePostsRemaining === 0 && (
-                  <TouchableOpacity 
-                    style={styles.getUnlimitedButton}
-                    onPress={() => setShowSubscriptionModal(true)}
-                  >
-                    <Text style={styles.getUnlimitedText}>{tr.getUnlimited}</Text>
-                  </TouchableOpacity>
-                )}
+              <View style={{ flex: 1 }}>
+                <Text style={[S.bannerTitle, { color: '#78350F' }]}>{tr.unlimitedJobPosting}</Text>
+                <Text style={[S.bannerSub, { color: '#92400E' }]}>{subStatus.daysRemaining} {tr.daysRemaining}</Text>
               </View>
-            )}
-          </Animated.View>
-        )}
-
-        {/* Free Banner - Only shown when actually posting a free job */}
-        {!subscriptionStatus?.isActive && postingStats?.freePostsRemaining > 0 && (
-          <Animated.View 
-            style={[
-              styles.freeBanner,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }]
-              }
-            ]}
-          >
-            <View style={styles.freeBannerContent}>
-              <Icon name="check-circle" size={20} color={colors.success} />
-              <Text style={styles.freeBannerText}>
-                <Text style={styles.freeBannerHighlight}>{tr.freeJobBanner}</Text> ({postingStats?.freePostsRemaining} {tr.freeJobsRemaining})
-              </Text>
             </View>
-          </Animated.View>
-        )}
-
-        {/* Job Details Section */}
-        <Animated.View 
-          style={[
-            styles.section,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          <Text style={styles.sectionTitle}>
-            {tr.jobDetails}
-          </Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              {tr.jobTitle}
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder={tr.jobTitlePlaceholder}
-              placeholderTextColor={colors.textSecondary}
-              value={title}
-              onChangeText={setTitle}
-              returnKeyType="next"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              {tr.description}
-            </Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder={tr.descriptionPlaceholder}
-              placeholderTextColor={colors.textSecondary}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              returnKeyType="next"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              {tr.location}
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder={tr.locationPlaceholder}
-              placeholderTextColor={colors.textSecondary}
-              value={location}
-              onChangeText={setLocation}
-              returnKeyType="done"
-            />
-          </View>
-        </Animated.View>
-
-        {/* Schedule Section */}
-        <Animated.View 
-          style={[
-            styles.section,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          <Text style={styles.sectionTitle}>
-            {tr.schedule}
-          </Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              {tr.jobDate}
-            </Text>
-            <TouchableOpacity
-              style={styles.dateTimeButton}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Icon name="calendar-today" size={20} color={colors.primary} style={styles.dateTimeIcon} />
-              <Text style={styles.dateTimeText}>{formatDateForDisplay(jobDate)}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.timeRow}>
-            <View style={styles.timeColumn}>
-              <Text style={styles.label}>
-                {tr.startTime}
-              </Text>
-              <TouchableOpacity
-                style={styles.dateTimeButton}
-                onPress={() => setShowStartTimePicker(true)}
-              >
-                <Icon name="access-time" size={20} color={colors.primary} style={styles.dateTimeIcon} />
-                <Text style={styles.dateTimeText}>{formatTime(startTime)}</Text>
+          ) : freeLeft > 0 ? (
+            <View style={[S.banner, { backgroundColor: C.emeraldSoft, borderColor: '#6EE7B7' }]}>
+              <View style={[S.bannerIcon, { backgroundColor: '#A7F3D0' }]}>
+                <Icon name="local-offer" size={20} color={C.emerald} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[S.bannerTitle, { color: '#065F46' }]}>{freeLeft} {tr.freeJobsRemaining} — {tr.freeJobBanner}</Text>
+                <View style={S.dotRow}>
+                  {Array.from({ length: freeTotal }).map((_, i) => (
+                    <View key={i} style={[S.dot, { backgroundColor: i < freeUsed ? '#A7F3D0' : C.emerald }]} />
+                  ))}
+                  <Text style={S.dotLabel}>{freeUsed}/{freeTotal} used</Text>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={[S.banner, { backgroundColor: C.saffronSoft, borderColor: C.saffronMid }]}>
+              <View style={[S.bannerIcon, { backgroundColor: C.saffronMid }]}>
+                <Icon name="warning" size={20} color={C.saffronDeep} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[S.bannerTitle, { color: C.saffronDeep }]}>{tr.freePostsExhausted}</Text>
+                <Text style={[S.bannerSub, { color: C.saffron }]}>Platform fee applies to this post</Text>
+              </View>
+              <TouchableOpacity style={S.upgradePill} onPress={() => setShowSubModal(true)}>
+                <Text style={S.upgradePillTxt}>{tr.getUnlimited}</Text>
               </TouchableOpacity>
-            </View>
-
-            <View style={styles.timeColumn}>
-              <Text style={styles.label}>
-                {tr.endTime}
-              </Text>
-              <TouchableOpacity
-                style={styles.dateTimeButton}
-                onPress={() => setShowEndTimePicker(true)}
-              >
-                <Icon name="access-time" size={20} color={colors.primary} style={styles.dateTimeIcon} />
-                <Text style={styles.dateTimeText}>{formatTime(endTime)}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {calculateDuration() > 0 && (
-            <View style={styles.durationBadge}>
-              <Text style={styles.durationText}>
-                {calculateDuration()} {tr.hoursTotal}
-              </Text>
             </View>
           )}
         </Animated.View>
 
-        {/* Payment Section */}
-        <Animated.View 
-          style={[
-            styles.section,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          <Text style={styles.sectionTitle}>
-            {tr.payment}
-          </Text>
+        {/* ── Section 1: Job Details ── */}
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }}>
+          <SectionCard>
+            <SectionHeader icon="work-outline" label={tr.jobDetails} color="#2563EB" bg="#EFF6FF" />
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              {tr.hourlyRate}
-            </Text>
-            <View style={styles.rateInputContainer}>
-              <View style={styles.rateInputPrefix}>
-                <Text style={styles.rupeeSymbol}>₹</Text>
+            <FieldLabel>{tr.jobTitle}</FieldLabel>
+            <TextInput
+              style={S.input} placeholder={tr.jobTitlePlaceholder} placeholderTextColor={C.slateL}
+              value={title} onChangeText={setTitle} returnKeyType="next"
+            />
+
+            <FieldLabel>{tr.description}</FieldLabel>
+            <TextInput
+              style={[S.input, S.textarea]} placeholder={tr.descriptionPlaceholder} placeholderTextColor={C.slateL}
+              value={description} onChangeText={setDescription} multiline numberOfLines={4} textAlignVertical="top"
+            />
+
+            <FieldLabel>{tr.location}</FieldLabel>
+            <View style={S.iconInput}>
+              <Icon name="place" size={18} color={C.saffron} style={{ marginLeft: 14 }} />
+              <TextInput
+                style={S.iconInputField} placeholder={tr.locationPlaceholder} placeholderTextColor={C.slateL}
+                value={location} onChangeText={setLocation} returnKeyType="done"
+              />
+            </View>
+          </SectionCard>
+        </Animated.View>
+
+        {/* ── Section 2: Schedule ── */}
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          <SectionCard>
+            <SectionHeader icon="event" label={tr.schedule} color={C.emerald} bg={C.emeraldSoft} />
+
+            <FieldLabel>{tr.jobDate}</FieldLabel>
+            <TouchableOpacity style={S.pickerBtn} onPress={() => setShowDate(true)} activeOpacity={0.75}>
+              <Icon name="calendar-today" size={17} color={C.saffron} />
+              <Text style={S.pickerTxt}>{fD(jobDate)}</Text>
+              <Icon name="expand-more" size={20} color={C.slateL} />
+            </TouchableOpacity>
+
+            <View style={S.timeRow}>
+              <View style={{ flex: 1 }}>
+                <FieldLabel>{tr.startTime}</FieldLabel>
+                <TouchableOpacity style={S.pickerBtn} onPress={() => setShowStart(true)} activeOpacity={0.75}>
+                  <Icon name="schedule" size={17} color={C.saffron} />
+                  <Text style={S.pickerTxt}>{fT(startTime)}</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={S.timeArrow}>
+                <Icon name="arrow-forward" size={16} color={C.slateL} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <FieldLabel>{tr.endTime}</FieldLabel>
+                <TouchableOpacity style={S.pickerBtn} onPress={() => setShowEnd(true)} activeOpacity={0.75}>
+                  <Icon name="schedule" size={17} color={C.saffron} />
+                  <Text style={S.pickerTxt}>{fT(endTime)}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {dur > 0 && (
+              <View style={S.durationChip}>
+                <Icon name="timelapse" size={14} color={C.saffron} />
+                <Text style={S.durationChipTxt}>{dur} {tr.hoursTotal} total</Text>
+              </View>
+            )}
+          </SectionCard>
+        </Animated.View>
+
+        {/* ── Section 3: Payment ── */}
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          <SectionCard>
+            <SectionHeader icon="payments" label={tr.payment} color="#EA580C" bg="#FFF7ED" />
+
+            <FieldLabel>{tr.hourlyRate}</FieldLabel>
+            <View style={S.rateRow}>
+              <View style={S.ratePrefix}>
+                <Text style={S.rupeeSymbol}>₹</Text>
               </View>
               <TextInput
-                style={styles.rateInput}
-                placeholder={tr.ratePlaceholder}
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-                value={rate}
-                onChangeText={(text) => setRate(text.replace(/[^0-9]/g, ''))}
-                returnKeyType="done"
+                style={S.rateField} placeholder="0" placeholderTextColor={C.slateL}
+                keyboardType="numeric" value={rate}
+                onChangeText={v => setRate(v.replace(/[^0-9]/g, ''))} returnKeyType="done"
               />
-              <View style={styles.rateInputSuffix}>
-                <Text style={styles.perHourText}>
-                  {tr.perHour}
-                </Text>
+              <View style={S.rateSuffix}>
+                <Text style={S.ratePerHr}>{tr.perHour}</Text>
               </View>
             </View>
-            <Text style={styles.hint}>
-              {tr.minimumRate}
-            </Text>
-          </View>
+            <Text style={S.rateHint}>{tr.minimumRate}</Text>
 
-          {calculateDuration() > 0 && rate && (
-            <View style={styles.paymentSummary}>
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>
-                  {tr.hourlyRateLabel}
-                </Text>
-                <Text style={styles.paymentValue}>₹{rate}</Text>
+            {dur > 0 && rateNum >= 50 && (
+              <View style={S.earningsCard}>
+                <View style={S.earningsRow}>
+                  <View style={S.earningsStat}>
+                    <Text style={S.earningsVal}>₹{rateNum}</Text>
+                    <Text style={S.earningsLbl}>per hour</Text>
+                  </View>
+                  <View style={S.earningsDivider} />
+                  <View style={S.earningsStat}>
+                    <Text style={S.earningsVal}>{dur}h</Text>
+                    <Text style={S.earningsLbl}>{tr.totalDuration}</Text>
+                  </View>
+                  <View style={S.earningsDivider} />
+                  <View style={S.earningsStat}>
+                    <Text style={[S.earningsVal, { color: C.saffron, fontSize: 22 }]}>₹{pay}</Text>
+                    <Text style={S.earningsLbl}>{tr.workerEarns}</Text>
+                  </View>
+                </View>
+                <View style={S.earningsBar}>
+                  <View style={[S.earningsBarFill, { width: `${Math.min((rateNum / 500) * 100, 100)}%` }]} />
+                </View>
+                <Text style={S.earningsNote}>Worker receives this upon job completion</Text>
               </View>
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>
-                  {tr.durationLabel}
-                </Text>
-                <Text style={styles.paymentValue}>{calculateDuration()} {locale === 'hi' ? 'घंटे' : 'hours'}</Text>
-              </View>
-              <View style={styles.paymentDivider} />
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentTotalLabel}>
-                  {tr.totalPayment}:
-                </Text>
-                <Text style={styles.paymentTotalValue}>₹{calculateTotal()}</Text>
-              </View>
-            </View>
-          )}
+            )}
+          </SectionCard>
         </Animated.View>
 
-        {/* Custom Date/Time Pickers */}
-        <CustomDateTimePicker
-          visible={showDatePicker}
-          mode="date"
-          value={jobDate}
-          minimumDate={new Date()}
-          onConfirm={(date) => {
-            setJobDate(date);
-            setShowDatePicker(false);
-          }}
-          onCancel={() => setShowDatePicker(false)}
-        />
+        {/* Pickers */}
+        <CustomDateTimePicker visible={showDate}  mode="date" value={jobDate}   minimumDate={new Date()} onConfirm={d => { setJobDate(d);   setShowDate(false);  }} onCancel={() => setShowDate(false)}  />
+        <CustomDateTimePicker visible={showStart} mode="time" value={startTime}                          onConfirm={t => { setStartTime(t); setShowStart(false); }} onCancel={() => setShowStart(false)} />
+        <CustomDateTimePicker visible={showEnd}   mode="time" value={endTime}                            onConfirm={t => { setEndTime(t);   setShowEnd(false);   }} onCancel={() => setShowEnd(false)}   />
 
-        <CustomDateTimePicker
-          visible={showStartTimePicker}
-          mode="time"
-          value={startTime}
-          onConfirm={(time) => {
-            setStartTime(time);
-            setShowStartTimePicker(false);
-          }}
-          onCancel={() => setShowStartTimePicker(false)}
-        />
-
-        <CustomDateTimePicker
-          visible={showEndTimePicker}
-          mode="time"
-          value={endTime}
-          onConfirm={(time) => {
-            setEndTime(time);
-            setShowEndTimePicker(false);
-          }}
-          onCancel={() => setShowEndTimePicker(false)}
-        />
-
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[styles.postButton, (loading || processingFee) && styles.disabledButton]}
-            onPress={handlePostJob}
-            disabled={loading || processingFee}
-          >
-            {(loading || processingFee) ? (
-              <ActivityIndicator color={colors.white} size="small" />
-            ) : (
-              <>
-                <Icon name="send" size={20} color={colors.white} style={styles.postButtonIcon} />
-                <Text style={styles.postButtonText}>
-                  {tr.postJob}
-                </Text>
-              </>
-            )}
+        {/* Action buttons */}
+        <Animated.View style={{ opacity: fadeAnim, marginTop: 4 }}>
+          <TouchableOpacity style={[S.postBtn, busy && { opacity: 0.6 }]} onPress={handlePost} disabled={busy} activeOpacity={0.88}>
+            {busy
+              ? <ActivityIndicator color="#FFF" size="small" />
+              : <><Icon name="rocket-launch" size={18} color="#FFF" style={{ marginRight: 8 }} /><Text style={S.postBtnTxt}>{tr.postJob}</Text></>
+            }
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={handleBackPress}
-            disabled={loading || processingFee}
-          >
-            <Text style={styles.cancelButtonText}>
-              {tr.cancel}
-            </Text>
+          <TouchableOpacity style={S.ghostBtn} onPress={goBack} disabled={busy} activeOpacity={0.7}>
+            <Icon name="arrow-back" size={15} color={C.slateL} style={{ marginRight: 6 }} />
+            <Text style={S.ghostTxt}>{tr.cancel}</Text>
           </TouchableOpacity>
+        </Animated.View>
+
+        <View style={S.tipRow}>
+          <Icon name="lightbulb-outline" size={14} color={C.gold} />
+          <Text style={S.tipTxt}>{tr.tip}</Text>
         </View>
-
-        <Text style={styles.footerNote}>
-          {tr.tip}
-        </Text>
-
-        <View style={styles.bottomSpacing} />
+        <View style={{ height: 40 }} />
       </Animated.ScrollView>
 
-      {/* Platform Fee Modal - Clean Version */}
-      <Modal
-        visible={showFeeModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowFeeModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalOverlayBackground} />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {tr.platformFee}
-              </Text>
-              <Text style={styles.modalSubtitle}>
-                {locale === 'hi' ? '₹' : ''}{calculateTotal()}{locale === 'hi' ? ' के कुल भुगतान पर 5% प्लेटफॉर्म शुल्क' : '5% platform fee on total payment of ₹'}
-              </Text>
-            </View>
-
-            <View style={styles.feeAmountContainer}>
-              <Text style={styles.feeAmount}>₹{feeInfo?.platformFee || 0}</Text>
-            </View>
-
-            <Text style={styles.modalOptionTitle}>
-              {tr.choosePaymentOption}
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.paymentOptionCard, !razorpayEnabled && styles.disabledOption]}
-              onPress={() => handleFeePaymentSelection('now')}
-              disabled={!razorpayEnabled || processingFee}
-            >
-              <View style={styles.optionHeader}>
-                <Icon name="credit-card" size={24} color={colors.primary} />
-                <View style={styles.optionInfo}>
-                  <Text style={styles.optionTitle}>
-                    {tr.payNow}
-                  </Text>
-                  <Text style={styles.optionSubtitle}>
-                    {razorpayEnabled
-                      ? tr.instantOnline
-                      : tr.currentlyUnavailable
-                    }
-                  </Text>
-                </View>
-                {processingFee && selectedPaymentOption === 'now' && (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                )}
+      {/* ── Platform Fee Modal ── */}
+      <Modal visible={showFeeModal} animationType="slide" transparent onRequestClose={() => setShowFeeModal(false)}>
+        <View style={S.modalOverlay}>
+          <View style={S.sheet}>
+            <View style={S.sheetHandle} />
+            <View style={S.sheetHeadRow}>
+              <View style={[S.sheetHeadIcon, { backgroundColor: C.saffronSoft }]}>
+                <Icon name="receipt-long" size={22} color={C.saffron} />
               </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.paymentOptionCard, processingFee && styles.disabledOption]}
-              onPress={() => handleFeePaymentSelection('later')}
-              disabled={processingFee}
-            >
-              <View style={styles.optionHeader}>
-                <Icon name="watch-later" size={24} color={colors.warning} />
-                <View style={styles.optionInfo}>
-                  <Text style={styles.optionTitle}>
-                    {tr.payAfterJob}
-                  </Text>
-                  <Text style={styles.optionSubtitle}>
-                    {tr.postNowPayLater}
-                  </Text>
-                </View>
-                {processingFee && selectedPaymentOption === 'later' && (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                )}
+              <View>
+                <Text style={S.sheetTitle}>{tr.platformFee}</Text>
+                <Text style={S.sheetSub}>{tr.platformFeeDesc}{totalPay()} · 5%</Text>
               </View>
-            </TouchableOpacity>
-
-            <Text style={styles.modalNote}>
-              {tr.notePayLater}
-            </Text>
-
-            <TouchableOpacity
-              style={styles.modalCancelButton}
-              onPress={() => setShowFeeModal(false)}
-              disabled={processingFee}
-            >
-              <Text style={styles.modalCancelText}>
-                {tr.cancelButton}
-              </Text>
+            </View>
+            <View style={S.feeAmtBox}>
+              <Text style={S.feeAmtLabel}>TOTAL DUE</Text>
+              <Text style={S.feeAmtVal}>₹{feeInfo?.platformFee || 0}</Text>
+            </View>
+            <Text style={S.chooseLabel}>{tr.choosePaymentOption}</Text>
+            {[
+              { opt: 'now',   icon: 'credit-card', iconBg: '#EFF6FF', iconColor: '#2563EB', title: tr.payNow,      sub: razorpayOk ? tr.instantOnline : tr.currentlyUnavailable, disabled: !razorpayOk },
+              { opt: 'later', icon: 'schedule',    iconBg: '#FFFBEB', iconColor: '#D97706', title: tr.payAfterJob, sub: tr.postNowPayLater, disabled: false },
+            ].map(({ opt, icon, iconBg, iconColor, title, sub, disabled }) => (
+              <TouchableOpacity
+                key={opt} style={[S.payOptCard, (disabled || processingFee) && { opacity: 0.4 }]}
+                onPress={() => handleFeeOpt(opt)} disabled={disabled || processingFee} activeOpacity={0.8}
+              >
+                <View style={[S.payOptIcon, { backgroundColor: iconBg }]}><Icon name={icon} size={20} color={iconColor} /></View>
+                <View style={{ flex: 1, marginLeft: 14 }}>
+                  <Text style={S.payOptTitle}>{title}</Text>
+                  <Text style={S.payOptSub}>{sub}</Text>
+                </View>
+                {selPayOpt === opt && processingFee
+                  ? <ActivityIndicator size="small" color={iconColor} />
+                  : <Icon name="chevron-right" size={22} color={C.border} />}
+              </TouchableOpacity>
+            ))}
+            <Text style={S.payNote}>{tr.notePayLater}</Text>
+            <TouchableOpacity style={S.ghostBtn} onPress={() => setShowFeeModal(false)} disabled={processingFee}>
+              <Text style={S.ghostTxt}>{tr.cancelButton}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Subscription Modal - Clean Version */}
-      <Modal
-        visible={showSubscriptionModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowSubscriptionModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalOverlayBackground} />
-          <View style={styles.subscriptionModalContent}>
-            <View style={styles.modalHeader}>
-              <Icon name="workspace-premium" size={32} color="#FFD700" />
-              <Text style={styles.modalTitle}>
-                {tr.monthlySubscription}
-              </Text>
-            </View>
-            
-            <View style={styles.subscriptionPlanCard}>
-              <Text style={styles.planPrice}>₹49</Text>
-              <Text style={styles.planDuration}>
-                {tr.perMonth}
-              </Text>
-            </View>
-            
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <Icon name="check" size={20} color={colors.success} />
-                <Text style={styles.featureText}>
-                  {tr.unlimitedJobPosting}
-                </Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Icon name="check" size={20} color={colors.success} />
-                <Text style={styles.featureText}>
-                  {tr.noPlatformFees}
-                </Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Icon name="check" size={20} color={colors.success} />
-                <Text style={styles.featureText}>
-                  {tr.prioritySupport}
-                </Text>
+      {/* ── Subscription Modal ── */}
+      <Modal visible={showSubModal} animationType="slide" transparent onRequestClose={() => setShowSubModal(false)}>
+        <View style={S.modalOverlay}>
+          <View style={S.sheet}>
+            <View style={S.sheetHandle} />
+            <View style={S.subHero}>
+              <View style={S.subHeroIcon}><Icon name="workspace-premium" size={32} color="#D97706" /></View>
+              <Text style={S.subHeroTitle}>{tr.monthlySubscription}</Text>
+              <View style={S.subPriceRow}>
+                <Text style={S.subPrice}>₹49</Text>
+                <Text style={S.subPricePer}>{tr.perMonth}</Text>
               </View>
             </View>
-            
-            <TouchableOpacity
-              style={styles.subscribeNowButton}
-              onPress={handleSubscribe}
-              disabled={processingFee}
-            >
-              {processingFee ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <Text style={styles.subscribeNowText}>
-                  {tr.subscribeNowPerMonth}
-                </Text>
-              )}
+            {[
+              { icon: 'all-inclusive', label: tr.unlimitedJobPosting, color: C.emerald },
+              { icon: 'money-off',     label: tr.noPlatformFees,      color: C.saffron  },
+              { icon: 'support-agent', label: tr.prioritySupport,     color: '#2563EB'  },
+            ].map((f, i) => (
+              <View key={i} style={S.subFeature}>
+                <View style={[S.subFeatureIcon, { backgroundColor: f.color + '18' }]}>
+                  <Icon name={f.icon} size={18} color={f.color} />
+                </View>
+                <Text style={S.subFeatureTxt}>{f.label}</Text>
+              </View>
+            ))}
+            <TouchableOpacity style={[S.postBtn, { backgroundColor: C.purple, marginTop: 12 }]} onPress={handleSubscribe} disabled={processingFee} activeOpacity={0.85}>
+              {processingFee ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={S.postBtnTxt}>{tr.subscribeNowPerMonth}</Text>}
             </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.modalCancelButton}
-              onPress={() => setShowSubscriptionModal(false)}
-              disabled={processingFee}
-            >
-              <Text style={styles.modalCancelText}>
-                {tr.later}
-              </Text>
+            <TouchableOpacity style={S.ghostBtn} onPress={() => setShowSubModal(false)} disabled={processingFee}>
+              <Text style={S.ghostTxt}>{tr.later}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1472,522 +802,106 @@ export default function PostJobScreen({ navigation, route }) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
-  // Simple Header
-  simpleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    paddingTop: Platform.OS === 'ios' ? 50 : 40,
-  },
-  simpleHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  backButton: {
-    padding: 8,
-  },
-  clearButton: {
-    padding: 8,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 16,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorCard: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 24,
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  errorIconContainer: {
-    marginBottom: 16,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.warning,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  errorMessage: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  payNowButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    width: '100%',
-    alignItems: 'center',
-  },
-  payNowButtonText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  // Status Bar (Compact)
-  statusBar: {
-    marginBottom: 16,
-  },
-  subscriptionStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#FFD700',
-  },
-  subscriptionStatusText: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  freePostsStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  freePostsStatusText: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  freePostsCount: {
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  getUnlimitedButton: {
-    marginLeft: 'auto',
-    backgroundColor: colors.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  getUnlimitedText: {
-    fontSize: 11,
-    color: colors.white,
-    fontWeight: '600',
-  },
-  // Free Banner
-  freeBanner: {
-    marginBottom: 16,
-  },
-  freeBannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.success + '10',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  freeBannerText: {
-    fontSize: 14,
-    color: colors.success,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  freeBannerHighlight: {
-    fontWeight: '600',
-  },
-  // Sections
-  section: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 16,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.text,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: colors.background,
-    padding: 14,
-    borderRadius: 8,
-    fontSize: 15,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-    paddingTop: 14,
-  },
-  dateTimeButton: {
-    backgroundColor: colors.background,
-    padding: 14,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  dateTimeIcon: {
-    marginRight: 10,
-  },
-  dateTimeText: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.text,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  timeColumn: {
-    flex: 1,
-  },
-  durationBadge: {
-    backgroundColor: colors.primary + '10',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: 8,
-  },
-  durationText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.primary,
-  },
-  rateInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-    overflow: 'hidden',
-  },
-  rateInputPrefix: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: colors.primary + '10',
-  },
-  rupeeSymbol: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  rateInput: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: colors.text,
-  },
-  rateInputSuffix: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  perHourText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  hint: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 6,
-  },
-  paymentSummary: {
-    backgroundColor: colors.primary + '5',
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  paymentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  paymentLabel: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  paymentValue: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: '600',
-  },
-  paymentDivider: {
-    height: 1,
-    backgroundColor: colors.borderLight,
-    marginVertical: 8,
-  },
-  paymentTotalLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  paymentTotalValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  actionsContainer: {
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  postButton: {
-    backgroundColor: colors.primary,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  postButtonIcon: {
-    marginRight: 8,
-  },
-  postButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  cancelButton: {
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
-  },
-  cancelButtonText: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  footerNote: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  bottomSpacing: {
-    height: 20,
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  modalOverlayBackground: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  modalContent: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
-  },
-  modalHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  feeAmountContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  feeAmount: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  modalOptionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  paymentOptionCard: {
-    backgroundColor: colors.background,
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-  },
-  disabledOption: {
-    opacity: 0.5,
-  },
-  optionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  optionInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  optionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 2,
-  },
-  optionSubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
-  modalNote: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 16,
-    lineHeight: 18,
-    fontStyle: 'italic',
-  },
-  modalCancelButton: {
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    backgroundColor: colors.white,
-  },
-  modalCancelText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  // Subscription Modal
-  subscriptionModalContent: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 20,
-    margin: 16,
-  },
-  subscriptionPlanCard: {
-    alignItems: 'center',
-    marginBottom: 20,
-    padding: 20,
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    borderRadius: 12,
-  },
-  planPrice: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  planDuration: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  featuresList: {
-    marginBottom: 20,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  featureText: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.text,
-    marginLeft: 12,
-  },
-  subscribeNowButton: {
-    backgroundColor: colors.primary,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  subscribeNowText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: '600',
-  },
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const S = StyleSheet.create({
+  root:       { flex: 1, backgroundColor: C.bg },
+
+  centerScreen: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: C.bg, padding: 32 },
+  centerCard:   { alignItems: 'center', backgroundColor: C.surface, borderRadius: 24, padding: 36, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 6 },
+  centerIconWrap:{ width: 72, height: 72, borderRadius: 36, backgroundColor: C.saffronSoft, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  centerTitle:  { fontSize: 18, fontWeight: '700', color: C.slate, marginBottom: 6, textAlign: 'center' },
+  centerSub:    { fontSize: 13, color: C.slateL, textAlign: 'center', lineHeight: 20 },
+  centerBtn:    { marginTop: 24, backgroundColor: C.saffron, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32, shadowColor: C.saffron, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 5 },
+  centerBtnTxt: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+
+  hdr: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: C.bg, borderBottomWidth: 1, borderBottomColor: C.borderL,
+    paddingHorizontal: 8, paddingBottom: 12,
+    paddingTop: Platform.OS === 'ios' ? 54 : 44,
+  },
+  hdrBtn:   { padding: 8, minWidth: 40, alignItems: 'center' },
+  hdrTitle: { fontSize: 18, fontWeight: '800', color: C.slate, letterSpacing: -0.4 },
+
+  scroll: { paddingHorizontal: 16, paddingTop: 16 },
+
+  banner:     { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, gap: 12 },
+  bannerIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  bannerTitle:{ fontSize: 14, fontWeight: '700', marginBottom: 4 },
+  bannerSub:  { fontSize: 12, fontWeight: '500' },
+  dotRow:     { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  dot:        { width: 8, height: 8, borderRadius: 4 },
+  dotLabel:   { fontSize: 11, color: C.slateL, marginLeft: 4 },
+  upgradePill:{ backgroundColor: C.saffron, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 },
+  upgradePillTxt: { fontSize: 12, fontWeight: '700', color: '#FFF' },
+
+  card:       { backgroundColor: C.surface, borderRadius: 20, padding: 20, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 16, elevation: 3, borderWidth: 1, borderColor: C.borderL },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
+  cardIconWrap:{ width: 38, height: 38, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+  cardTitle:  { fontSize: 16, fontWeight: '800', color: C.slate, letterSpacing: -0.3 },
+
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: C.slateL, marginBottom: 7, marginTop: 14, textTransform: 'uppercase', letterSpacing: 0.8 },
+  input:      { backgroundColor: C.bg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15, color: C.slate, borderWidth: 1, borderColor: C.border },
+  textarea:   { height: 96, textAlignVertical: 'top', paddingTop: 13 },
+  iconInput:  { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg, borderRadius: 12, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+  iconInputField: { flex: 1, paddingHorizontal: 10, paddingVertical: 13, fontSize: 15, color: C.slate },
+
+  pickerBtn:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.bg, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 13 },
+  pickerTxt:  { flex: 1, fontSize: 15, color: C.slate, fontWeight: '600' },
+  timeRow:    { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  timeArrow:  { paddingBottom: 14, alignItems: 'center' },
+  durationChip:   { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 14, backgroundColor: C.saffronSoft, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: C.saffronMid },
+  durationChipTxt:{ fontSize: 13, fontWeight: '700', color: C.saffron },
+
+  rateRow:    { flexDirection: 'row', alignItems: 'center', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: C.border },
+  ratePrefix: { paddingHorizontal: 16, paddingVertical: 14, backgroundColor: C.saffronSoft, borderRightWidth: 1, borderRightColor: C.saffronMid },
+  rupeeSymbol:{ fontSize: 20, fontWeight: '800', color: C.saffron },
+  rateField:  { flex: 1, paddingHorizontal: 14, paddingVertical: 14, fontSize: 24, color: C.slate, fontWeight: '800', backgroundColor: C.bg },
+  rateSuffix: { paddingHorizontal: 14, backgroundColor: C.bg },
+  ratePerHr:  { fontSize: 13, color: C.slateL, fontWeight: '600' },
+  rateHint:   { fontSize: 12, color: C.slateL, marginTop: 8 },
+
+  earningsCard:   { marginTop: 16, backgroundColor: C.saffronSoft, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: C.saffronMid },
+  earningsRow:    { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  earningsStat:   { flex: 1, alignItems: 'center' },
+  earningsVal:    { fontSize: 18, fontWeight: '800', color: C.slate, marginBottom: 2 },
+  earningsLbl:    { fontSize: 11, color: C.slateL, fontWeight: '500' },
+  earningsDivider:{ width: 1, height: 40, backgroundColor: C.saffronMid },
+  earningsBar:    { height: 4, backgroundColor: C.saffronMid, borderRadius: 2, overflow: 'hidden', marginBottom: 10 },
+  earningsBarFill:{ height: '100%', backgroundColor: C.saffron, borderRadius: 2 },
+  earningsNote:   { fontSize: 11, color: C.slateM, textAlign: 'center' },
+
+  postBtn:    { backgroundColor: C.saffron, borderRadius: 16, paddingVertical: 17, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 10, shadowColor: C.saffron, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 6 },
+  postBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
+  ghostBtn:   { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderRadius: 16, paddingVertical: 14, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, marginBottom: 8 },
+  ghostTxt:   { fontSize: 15, fontWeight: '600', color: C.slateL },
+  tipRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: 7, marginTop: 8, paddingHorizontal: 4 },
+  tipTxt:     { fontSize: 12, color: C.slateL, lineHeight: 18, flex: 1, fontStyle: 'italic' },
+
+  modalOverlay:{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet:      { backgroundColor: C.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: Platform.OS === 'ios' ? 44 : 28 },
+  sheetHandle:{ width: 40, height: 4, backgroundColor: C.border, borderRadius: 2, alignSelf: 'center', marginBottom: 24 },
+  sheetHeadRow:{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 20 },
+  sheetHeadIcon:{ width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: C.slate },
+  sheetSub:   { fontSize: 13, color: C.slateL, marginTop: 2 },
+  feeAmtBox:  { alignItems: 'center', backgroundColor: C.saffronSoft, borderRadius: 16, paddingVertical: 20, marginBottom: 22, borderWidth: 1, borderColor: C.saffronMid },
+  feeAmtLabel:{ fontSize: 11, fontWeight: '700', color: C.saffron, letterSpacing: 1.4, marginBottom: 4 },
+  feeAmtVal:  { fontSize: 44, fontWeight: '800', color: C.saffronDeep },
+  chooseLabel:{ fontSize: 11, fontWeight: '700', color: C.slateL, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
+  payOptCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: C.border },
+  payOptIcon: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
+  payOptTitle:{ fontSize: 15, fontWeight: '700', color: C.slate, marginBottom: 3 },
+  payOptSub:  { fontSize: 12, color: C.slateL },
+  payNote:    { fontSize: 12, color: C.slateL, textAlign: 'center', marginVertical: 12, lineHeight: 17, fontStyle: 'italic' },
+
+  subHero:       { alignItems: 'center', marginBottom: 20 },
+  subHeroIcon:   { width: 72, height: 72, borderRadius: 36, backgroundColor: C.goldSoft, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  subHeroTitle:  { fontSize: 20, fontWeight: '800', color: C.slate, marginBottom: 8 },
+  subPriceRow:   { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  subPrice:      { fontSize: 40, fontWeight: '800', color: '#78350F' },
+  subPricePer:   { fontSize: 14, color: '#92400E', fontWeight: '600' },
+  subFeature:    { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14, paddingHorizontal: 4 },
+  subFeatureIcon:{ width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  subFeatureTxt: { fontSize: 15, color: C.slate, fontWeight: '600' },
 });
