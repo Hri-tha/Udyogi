@@ -4,16 +4,26 @@
     "slug": "udyogi",
     "scheme": "udyogi",
     "icon": "./assets/Logo.png",
+
     "android": {
-      "package": "com.udyogi.app"
+      "package": "com.udyogi.app",
+      "googleServicesFile": "./google-services.json"
     },
+
     "ios": {
       "bundleIdentifier": "com.udyogi.app"
     },
+
     "plugins": [
       "expo-localization",
       "@react-native-community/datetimepicker",
-      "expo-font"
-    ]
+      "expo-font",
+      "expo-notifications"
+    ],
+
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#1a56db"
+    }
   }
 }
