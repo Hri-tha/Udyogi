@@ -13,6 +13,7 @@ import {
   arrayRemove,
   Timestamp // ADD THIS IMPORT
 } from 'firebase/firestore';
+import { sendPushToUser } from './pushNotifications';
 import { getFirebaseDb } from './firebase';
 import { updateFeeOnJobCompletion } from './platformFeeService';
 // Add to your existing database.js file - USER FUNCTIONS
@@ -26,6 +27,23 @@ const getDb = () => {
   const instance = getFirebaseDb();
   if (!instance) throw new Error('Firestore not available — check firebase.js');
   return instance;
+};
+
+const CHANNEL_MAP = {
+  application_accepted:  'jobs',
+  application_rejected:  'jobs',
+  new_application:       'jobs',
+  application_update:    'jobs',
+  worker_status_update:  'jobs',
+  payment_required:      'payments',
+  payment_received:      'payments',
+  platform_fee_due:      'payments',
+  rating_required:       'jobs',
+  rating_received:       'jobs',
+  job_completed:         'jobs',
+  job_cancelled:         'jobs',
+  new_message:           'default',
+  general:               'default',
 };
 
 // ========== USER FUNCTIONS ==========
@@ -539,19 +557,25 @@ export const onJobUpdate = (jobId, callback) => {
 // ========== NOTIFICATION FUNCTIONS ==========
 
 export const createNotification = async (userId, notificationData) => {
+  const { getFirebaseDb } = await import('./firebase');
+  const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
+ 
   try {
-    // Validate required fields
     if (!userId) {
       console.error('Cannot create notification: userId is missing');
       return { success: false, error: 'User ID is required' };
     }
-
+ 
     if (!notificationData.title || !notificationData.message) {
       console.error('Cannot create notification: title or message is missing');
       return { success: false, error: 'Title and message are required' };
     }
-
-    const notificationRef = await addDoc(collection(getDb(), 'notifications'), {
+ 
+    const db = getFirebaseDb();
+    if (!db) return { success: false, error: 'Firestore not available' };
+ 
+    // 1. Write to Firestore (powers the in-app notification centre + real-time toast)
+    const notificationRef = await addDoc(collection(db, 'notifications'), {
       userId: String(userId),
       title: String(notificationData.title),
       message: String(notificationData.message),
@@ -561,8 +585,24 @@ export const createNotification = async (userId, notificationData) => {
       actionId: notificationData.actionId || null,
       createdAt: serverTimestamp(),
     });
-
+ 
     console.log('Notification created successfully:', notificationRef.id);
+ 
+    // 2. Send Expo push notification to the user's device (non-blocking)
+    sendPushToUser(
+      userId,
+      notificationData.title,
+      notificationData.message,
+      {
+        actionType: notificationData.actionType || null,
+        actionId: notificationData.actionId || null,
+        type: notificationData.type || 'general',
+        channelId: CHANNEL_MAP[notificationData.type] || 'default',
+      }
+    ).catch(err => {
+      console.warn('Push notification delivery failed (non-fatal):', err?.message);
+    });
+ 
     return { success: true, id: notificationRef.id };
   } catch (error) {
     console.error('Error creating notification:', error);

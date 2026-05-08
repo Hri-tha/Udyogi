@@ -1,5 +1,5 @@
 // src/context/NotificationContext.js - FIXED VERSION
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { fetchUserNotifications, markNotificationAsRead } from '../services/database';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -12,14 +12,20 @@ export const NotificationProvider = ({ children }) => {
   const [toastNotification, setToastNotification] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
 
+  // FIX: Track whether the initial snapshot has loaded so we only toast on
+  // genuinely NEW documents, not the first batch of existing ones.
+  const initialLoadDoneRef = useRef(false);
+  const notificationsRef = useRef([]);
+
   const loadNotifications = async () => {
     if (!currentUserId) return;
-    
+
     try {
       console.log('📥 Loading notifications for user:', currentUserId);
       const result = await fetchUserNotifications(currentUserId);
       if (result.success) {
         setNotifications(result.notifications);
+        notificationsRef.current = result.notifications;
         const unread = result.notifications.filter(n => !n.read).length;
         setUnreadCount(unread);
         console.log('✅ Loaded notifications:', result.notifications.length);
@@ -32,10 +38,6 @@ export const NotificationProvider = ({ children }) => {
   const showToast = (notification) => {
     console.log('🔔 Showing toast notification:', notification.title);
     setToastNotification(notification);
-    // Auto-hide after 3 seconds
-    setTimeout(() => {
-      setToastNotification(null);
-    }, 3000);
   };
 
   const markAsRead = async (notificationId) => {
@@ -63,17 +65,23 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
+  // FIX: Reset initialLoadDoneRef whenever the user changes
+  useEffect(() => {
+    initialLoadDoneRef.current = false;
+  }, [currentUserId]);
+
   useEffect(() => {
     if (!currentUserId) {
       console.log('⏳ No user ID set, skipping notification listener');
       setNotifications([]);
+      notificationsRef.current = [];
       setUnreadCount(0);
+      initialLoadDoneRef.current = false;
       return;
     }
 
     console.log('🎧 Setting up notification listener for user:', currentUserId);
-    
-    // Set up real-time listener for new notifications
+
     const notificationsQuery = query(
       collection(db, 'notifications'),
       where('userId', '==', currentUserId),
@@ -87,27 +95,34 @@ export const NotificationProvider = ({ children }) => {
           id: doc.id,
           ...doc.data()
         }));
-        
+
         console.log('📨 Real-time notification update:', allNotifications.length, 'notifications');
-        
-        // Show toast for new notifications
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            const notification = {
-              id: change.doc.id,
-              ...change.doc.data()
-            };
-            
-            // Only show toast if we already have some notifications (not initial load)
-            if (notifications.length > 0 && !notification.read) {
-              showToast(notification);
+
+        // FIX: Only show toasts for new additions AFTER the initial load
+        if (initialLoadDoneRef.current) {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+              const notification = {
+                id: change.doc.id,
+                ...change.doc.data()
+              };
+              // Only toast for unread notifications
+              if (!notification.read) {
+                showToast(notification);
+              }
             }
-          }
-        });
-        
+          });
+        }
+
         setNotifications(allNotifications);
+        notificationsRef.current = allNotifications;
         const unread = allNotifications.filter(n => !n.read).length;
         setUnreadCount(unread);
+
+        // Mark initial load as done after first snapshot
+        if (!initialLoadDoneRef.current) {
+          initialLoadDoneRef.current = true;
+        }
       }, (error) => {
         console.error('🔥 Error in notification listener:', error);
       });
@@ -134,7 +149,7 @@ export const NotificationProvider = ({ children }) => {
     notifications,
     unreadCount,
     toastNotification,
-    setUserId: setCurrentUserId, // Expose this function for NotificationSync component
+    setUserId: setCurrentUserId,
     loadNotifications,
     markAsRead,
     markAllAsRead,

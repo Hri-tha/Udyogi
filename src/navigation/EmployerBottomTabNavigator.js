@@ -1,4 +1,5 @@
-// src/navigation/EmployerBottomTabNavigator.js - UPDATED & CORRECTED
+// src/navigation/EmployerBottomTabNavigator.js
+// FIXED: notification badge count + InAppNotificationBanner properly layered
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -13,17 +14,19 @@ import PaymentProcessingScreen from '../screens/employer/PaymentProcessingScreen
 import CompleteJobScreen from '../screens/employer/CompleteJobScreen';
 import PlatformFeePaymentScreen from '../screens/employer/PlatformFeePaymentScreen';
 import PostJobSuccessScreen from '../screens/employer/PostJobSuccessScreen';
-import SubscriptionScreen from '../screens/employer/SubscriptionScreen'; // Added import
+import SubscriptionScreen from '../screens/employer/SubscriptionScreen';
 import { colors } from '../constants/colors';
+import { useNotification } from '../context/NotificationContext';
 
-// Import the employer banner
+// Import banners
 import EmployerJobTrackingBanner from '../components/EmployerJobTrackingBanner';
+import InAppNotificationBanner from '../components/InAppNotificationBanner';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-// Simple icon component
-const TabIcon = ({ name, focused }) => {
+// Tab icon with optional badge
+const TabIcon = ({ name, focused, badgeCount }) => {
   const getIconChar = (iconName) => {
     const iconMap = {
       'home': '🏠',
@@ -36,16 +39,43 @@ const TabIcon = ({ name, focused }) => {
   };
 
   return (
-    <Text style={{
-      fontSize: 24,
-      color: focused ? colors.primary : colors.textSecondary,
-    }}>
-      {getIconChar(name)}
-    </Text>
+    <View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{
+        fontSize: 24,
+        color: focused ? colors.primary : colors.textSecondary,
+      }}>
+        {getIconChar(name)}
+      </Text>
+      {badgeCount > 0 && (
+        <View style={{
+          position: 'absolute',
+          top: -2,
+          right: -4,
+          backgroundColor: '#ef4444',
+          borderRadius: 9,
+          minWidth: 18,
+          height: 18,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingHorizontal: 4,
+          borderWidth: 1.5,
+          borderColor: colors.white,
+        }}>
+          <Text style={{
+            color: '#fff',
+            fontSize: 10,
+            fontWeight: '700',
+            lineHeight: 13,
+          }}>
+            {badgeCount > 99 ? '99+' : badgeCount}
+          </Text>
+        </View>
+      )}
+    </View>
   );
 };
 
-// Home Stack Navigator
+// ─── Stack navigators ──────────────────────────────────────────────────────────
 function HomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -60,7 +90,6 @@ function HomeStack() {
   );
 }
 
-// Post Job Stack Navigator
 function PostJobStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -72,7 +101,6 @@ function PostJobStack() {
   );
 }
 
-// Applications Stack Navigator
 function ApplicationsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -85,7 +113,6 @@ function ApplicationsStack() {
   );
 }
 
-// Profile Stack Navigator
 function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -96,7 +123,6 @@ function ProfileStack() {
   );
 }
 
-// Notifications Stack Navigator
 function NotificationsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -108,8 +134,10 @@ function NotificationsStack() {
   );
 }
 
-// Main Tab Navigator Component
+// ─── Main Tab Navigator (reads badge from context) ────────────────────────────
 function MainTabNavigator() {
+  const { unreadCount } = useNotification();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -130,40 +158,42 @@ function MainTabNavigator() {
         tabBarInactiveTintColor: colors.textSecondary,
       }}
     >
-      <Tab.Screen 
-        name="Home" 
+      <Tab.Screen
+        name="Home"
         component={HomeStack}
         options={{
           tabBarLabel: 'Home',
           tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} />,
         }}
       />
-      <Tab.Screen 
-        name="PostJob" 
+      <Tab.Screen
+        name="PostJob"
         component={PostJobStack}
         options={{
           tabBarLabel: 'Post Job',
           tabBarIcon: ({ focused }) => <TabIcon name="post-job" focused={focused} />,
         }}
       />
-      <Tab.Screen 
-        name="Applications" 
+      <Tab.Screen
+        name="Applications"
         component={ApplicationsStack}
         options={{
           tabBarLabel: 'Applications',
           tabBarIcon: ({ focused }) => <TabIcon name="applications" focused={focused} />,
         }}
       />
-      <Tab.Screen 
-        name="Notifications" 
+      <Tab.Screen
+        name="Notifications"
         component={NotificationsStack}
         options={{
           tabBarLabel: 'Notifications',
-          tabBarIcon: ({ focused }) => <TabIcon name="notifications" focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="notifications" focused={focused} badgeCount={unreadCount} />
+          ),
         }}
       />
-      <Tab.Screen 
-        name="Profile" 
+      <Tab.Screen
+        name="Profile"
         component={ProfileStack}
         options={{
           tabBarLabel: 'Profile',
@@ -174,14 +204,17 @@ function MainTabNavigator() {
   );
 }
 
-// Main Export - TabNavigatorWithBanner (Now correctly structured)
+// ─── Root: tab navigator + both banners layered on top ────────────────────────
 const TabNavigatorWithBanner = () => {
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <MainTabNavigator />
+      {/* Job tracking banner - sits above the tab bar at the bottom */}
       <EmployerJobTrackingBanner />
-    </>
+      {/* In-app push notification banner - slides from the top */}
+      <InAppNotificationBanner />
+    </View>
   );
-}
+};
 
 export default TabNavigatorWithBanner;
