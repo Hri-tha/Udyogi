@@ -1,9 +1,10 @@
 // App.js – COMPLETE FIXED VERSION
-// KEY FIX: useNotification imported at top (not bottom), AppWrapper uses it correctly
+// KEY FIX: SafeAreaProvider added so useSafeAreaInsets works in navigators
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { ActivityIndicator, View, StyleSheet, Image } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Context Providers
 import { LanguageProvider } from './src/context/LanguageContext';
@@ -117,7 +118,6 @@ function AppNavigator() {
 }
 
 // ─── App Wrapper (needs NotificationProvider to be an ancestor) ───────────────
-// NOTE: useNotification is used HERE — inside NotificationProvider's tree
 function AppWrapper() {
   const { toastNotification, hideToast } = useNotification();
 
@@ -146,28 +146,37 @@ export default function App() {
   }, []);
 
   if (showSplash) {
-    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+    return (
+      <SafeAreaProvider>
+        <SplashScreen onFinish={() => setShowSplash(false)} />
+      </SafeAreaProvider>
+    );
   }
 
   if (!appInitialized) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
+      <SafeAreaProvider>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <LanguageProvider>
-      <AuthProvider>
-        <JobProvider>
-          {/* NotificationProvider wraps AppWrapper so useNotification works inside it */}
-          <NotificationProvider>
-            <AppWrapper />
-          </NotificationProvider>
-        </JobProvider>
-      </AuthProvider>
-    </LanguageProvider>
+    // SafeAreaProvider MUST be the outermost wrapper so useSafeAreaInsets
+    // works anywhere in the tree (including inside the tab navigators).
+    <SafeAreaProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <JobProvider>
+            <NotificationProvider>
+              <AppWrapper />
+            </NotificationProvider>
+          </JobProvider>
+        </AuthProvider>
+      </LanguageProvider>
+    </SafeAreaProvider>
   );
 }
 

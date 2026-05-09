@@ -1,22 +1,15 @@
 // src/screens/worker/WorkerHomeScreen.js
-// FIXED: Apply button error, location filter added, navigation fixes, enhanced UI
+// FIX 1: getDefaultAvatar() uses real user name instead of hardcoded "Worker"
+// FIX 2: BackHandler blocks Android back-press ONLY when this screen is focused
+//         AND the navigation stack has no screens behind it (i.e. truly at root).
+//         This prevents accidental app exit but still allows normal in-app back navigation.
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
-  RefreshControl,
-  StatusBar,
-  Alert,
-  Dimensions,
-  Modal,
-  Image,
-  Platform,
-  TextInput,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet,
+  ActivityIndicator, RefreshControl, StatusBar, Alert,
+  Dimensions, Modal, Image, Platform, TextInput, BackHandler,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { useJob } from '../../context/JobContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -26,152 +19,69 @@ import { useFocusEffect } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
-const defaultAvatar =
-  'https://ui-avatars.com/api/?name=Worker&background=1a56db&color=fff&size=128';
+// FIX: Dynamic avatar using the actual user's name for correct initials
+const getDefaultAvatar = (name) => {
+  const encoded = name ? encodeURIComponent(name.trim()) : 'U';
+  return `https://ui-avatars.com/api/?name=${encoded}&background=1a56db&color=fff&size=128`;
+};
 
-// ─── Translations ─────────────────────────────────────────────────────────────
 const translations = {
   en: {
-    welcomeBack: 'Welcome back 👋',
-    subtitle: 'Find your next job',
-    verifiedWorker: 'Verified Worker',
-    workerLevel: 'Worker',
-    jobsDone: 'jobs done',
-    view: 'View',
-    overview: '📊 Overview',
-    details: 'Details →',
-    labelNew: 'New',
-    labelWaiting: 'Waiting',
-    labelDone: 'Done',
-    labelEarned: 'Earned',
-    jobsAvailable: 'Jobs Available',
-    applications: 'Applications',
-    completed: 'Completed',
-    totalEarned: 'Total Earned',
-    quickActions: '⚡ Quick Actions',
-    browseJobs: 'Browse Jobs',
-    findWork: 'Find work',
-    myApplications: 'My Applications',
-    myProfile: 'My Profile',
-    editInfo: 'Edit info',
-    help: 'Help',
-    support: 'Support',
-    availableJobs: '🧱 Available Jobs',
-    jobsNearYou: 'jobs near you',
-    viewAll: 'View All →',
-    open: 'OPEN',
-    applicants: 'applicants',
-    applyNow: 'Apply Now',
-    alreadyApplied: '✅ Applied!',
-    moreJobs: 'more jobs',
-    browseAllJobs: '🔍 Browse All Jobs',
-    noAvailableJobs: 'No Jobs Right Now',
-    noJobsDesc: 'New jobs will show here.\nCheck back soon!',
-    loading: 'Loading...',
-    applyTitle: 'Apply for Job?',
-    applyMsg: 'Do you want to apply for',
-    cancel: 'Cancel',
-    apply: 'Apply',
-    success: '✅ Success',
-    applySuccess: 'Application submitted!',
-    error: '❌ Error',
-    applyError: 'Could not apply. Try again.',
-    jobDetails: 'Job Details',
-    description: 'About this Job',
-    requirements: 'Requirements',
-    location: 'Location',
-    date: 'Date & Time',
-    close: 'Close',
-    perHour: '/hr',
-    hours: 'hours',
-    today: 'Today',
-    tomorrow: 'Tomorrow',
-    pending: 'pending',
-    contactInfo: 'Contact',
-    locationLabel: 'Your Area',
-    noProfile: 'Profile incomplete',
-    completeProfile: 'Complete Profile',
-    filterByLocation: 'Filter by location',
-    searchPlaceholder: 'Search city...',
-    allLocations: 'All Locations',
-    locationFilter: '📍 Location',
-    clearFilter: 'Clear',
+    welcomeBack: 'Welcome back 👋', subtitle: 'Find your next job',
+    verifiedWorker: 'Verified Worker', workerLevel: 'Worker', jobsDone: 'jobs done',
+    view: 'View', overview: '📊 Overview', details: 'Details →',
+    labelNew: 'New', labelWaiting: 'Waiting', labelDone: 'Done', labelEarned: 'Earned',
+    jobsAvailable: 'Jobs Available', applications: 'Applications',
+    completed: 'Completed', totalEarned: 'Total Earned',
+    quickActions: '⚡ Quick Actions', browseJobs: 'Browse Jobs', findWork: 'Find work',
+    myApplications: 'My Applications', myProfile: 'My Profile', editInfo: 'Edit info',
+    help: 'Help', support: 'Support', availableJobs: '🧱 Available Jobs',
+    jobsNearYou: 'jobs near you', viewAll: 'View All →', open: 'OPEN',
+    applicants: 'applicants', applyNow: 'Apply Now', alreadyApplied: '✅ Applied!',
+    moreJobs: 'more jobs', browseAllJobs: '🔍 Browse All Jobs',
+    noAvailableJobs: 'No Jobs Right Now', noJobsDesc: 'New jobs will show here.\nCheck back soon!',
+    loading: 'Loading...', applyTitle: 'Apply for Job?', applyMsg: 'Do you want to apply for',
+    cancel: 'Cancel', apply: 'Apply', success: '✅ Success', applySuccess: 'Application submitted!',
+    error: '❌ Error', applyError: 'Could not apply. Try again.',
+    jobDetails: 'Job Details', description: 'About this Job', requirements: 'Requirements',
+    location: 'Location', date: 'Date & Time', close: 'Close', perHour: '/hr', hours: 'hours',
+    today: 'Today', tomorrow: 'Tomorrow', pending: 'pending', contactInfo: 'Contact',
+    locationLabel: 'Your Area', noProfile: 'Profile incomplete', completeProfile: 'Complete Profile',
+    filterByLocation: 'Filter by location', searchPlaceholder: 'Search city...',
+    allLocations: 'All Locations', locationFilter: '📍 Location', clearFilter: 'Clear',
     profileIncomplete: 'Profile Incomplete',
     profileIncompleteMsg: 'Please complete your name and phone number in your profile before applying.',
     goToProfile: 'Go to Profile',
   },
   hi: {
-    welcomeBack: 'वापसी पर स्वागत है 👋',
-    subtitle: 'अगला काम खोजें',
-    verifiedWorker: 'सत्यापित मजदूर',
-    workerLevel: 'मजदूर',
-    jobsDone: 'काम पूरे',
-    view: 'देखें',
-    overview: '📊 जानकारी',
-    details: 'और देखें →',
-    labelNew: 'नया',
-    labelWaiting: 'प्रतीक्षा',
-    labelDone: 'पूर्ण',
-    labelEarned: 'कमाई',
-    jobsAvailable: 'नौकरियां',
-    applications: 'आवेदन',
-    completed: 'पूर्ण काम',
-    totalEarned: 'कुल कमाई',
-    quickActions: '⚡ तुरंत करें',
-    browseJobs: 'नौकरी खोजें',
-    findWork: 'काम ढूंढें',
-    myApplications: 'मेरे आवेदन',
-    myProfile: 'मेरी प्रोफ़ाइल',
-    editInfo: 'जानकारी',
-    help: 'मदद',
-    support: 'सहायता',
-    availableJobs: '🧱 उपलब्ध नौकरियां',
-    jobsNearYou: 'नौकरियां पास में',
-    viewAll: 'सब देखें →',
-    open: 'खुला',
-    applicants: 'आवेदक',
-    applyNow: 'आवेदन करें',
-    alreadyApplied: '✅ हो गया!',
-    moreJobs: 'और नौकरियां',
-    browseAllJobs: '🔍 सभी नौकरियां देखें',
-    noAvailableJobs: 'अभी कोई नौकरी नहीं',
-    noJobsDesc: 'नई नौकरियां यहाँ दिखेंगी।\nबाद में देखें!',
-    loading: 'लोड हो रहा है...',
-    applyTitle: 'आवेदन करें?',
+    welcomeBack: 'वापसी पर स्वागत है 👋', subtitle: 'अगला काम खोजें',
+    verifiedWorker: 'सत्यापित मजदूर', workerLevel: 'मजदूर', jobsDone: 'काम पूरे',
+    view: 'देखें', overview: '📊 जानकारी', details: 'और देखें →',
+    labelNew: 'नया', labelWaiting: 'प्रतीक्षा', labelDone: 'पूर्ण', labelEarned: 'कमाई',
+    jobsAvailable: 'नौकरियां', applications: 'आवेदन', completed: 'पूर्ण काम',
+    totalEarned: 'कुल कमाई', quickActions: '⚡ तुरंत करें', browseJobs: 'नौकरी खोजें',
+    findWork: 'काम ढूंढें', myApplications: 'मेरे आवेदन', myProfile: 'मेरी प्रोफ़ाइल',
+    editInfo: 'जानकारी', help: 'मदद', support: 'सहायता',
+    availableJobs: '🧱 उपलब्ध नौकरियां', jobsNearYou: 'नौकरियां पास में', viewAll: 'सब देखें →',
+    open: 'खुला', applicants: 'आवेदक', applyNow: 'आवेदन करें', alreadyApplied: '✅ हो गया!',
+    moreJobs: 'और नौकरियां', browseAllJobs: '🔍 सभी नौकरियां देखें',
+    noAvailableJobs: 'अभी कोई नौकरी नहीं', noJobsDesc: 'नई नौकरियां यहाँ दिखेंगी।\nबाद में देखें!',
+    loading: 'लोड हो रहा है...', applyTitle: 'आवेदन करें?',
     applyMsg: 'क्या आप इस नौकरी के लिए आवेदन करना चाहते हैं?',
-    cancel: 'रद्द करें',
-    apply: 'आवेदन करें',
-    success: '✅ सफल',
-    applySuccess: 'आवेदन हो गया!',
-    error: '❌ त्रुटि',
-    applyError: 'आवेदन नहीं हुआ। फिर कोशिश करें।',
-    jobDetails: 'नौकरी विवरण',
-    description: 'नौकरी के बारे में',
-    requirements: 'आवश्यकताएं',
-    location: 'जगह',
-    date: 'तारीख और समय',
-    close: 'बंद करें',
-    perHour: '/घंटा',
-    hours: 'घंटे',
-    today: 'आज',
-    tomorrow: 'कल',
-    pending: 'बाकी',
-    contactInfo: 'संपर्क',
-    locationLabel: 'आपका क्षेत्र',
-    noProfile: 'प्रोफाइल अधूरा',
-    completeProfile: 'प्रोफाइल पूरा करें',
-    filterByLocation: 'स्थान के अनुसार फ़िल्टर करें',
-    searchPlaceholder: 'शहर खोजें...',
-    allLocations: 'सभी स्थान',
-    locationFilter: '📍 स्थान',
-    clearFilter: 'हटाएं',
+    cancel: 'रद्द करें', apply: 'आवेदन करें', success: '✅ सफल', applySuccess: 'आवेदन हो गया!',
+    error: '❌ त्रुटि', applyError: 'आवेदन नहीं हुआ। फिर कोशिश करें।',
+    jobDetails: 'नौकरी विवरण', description: 'नौकरी के बारे में', requirements: 'आवश्यकताएं',
+    location: 'जगह', date: 'तारीख और समय', close: 'बंद करें', perHour: '/घंटा', hours: 'घंटे',
+    today: 'आज', tomorrow: 'कल', pending: 'बाकी', contactInfo: 'संपर्क',
+    locationLabel: 'आपका क्षेत्र', noProfile: 'प्रोफाइल अधूरा', completeProfile: 'प्रोफाइल पूरा करें',
+    filterByLocation: 'स्थान के अनुसार फ़िल्टर करें', searchPlaceholder: 'शहर खोजें...',
+    allLocations: 'सभी स्थान', locationFilter: '📍 स्थान', clearFilter: 'हटाएं',
     profileIncomplete: 'प्रोफाइल अधूरी है',
     profileIncompleteMsg: 'आवेदन करने से पहले कृपया अपना नाम और फ़ोन नंबर प्रोफाइल में भरें।',
     goToProfile: 'प्रोफाइल पर जाएं',
   },
 };
 
-// ─── Job emoji helper ──────────────────────────────────────────────────────────
 const getJobEmoji = (title = '') => {
   const t = title.toLowerCase();
   if (t.includes('construct') || t.includes('build') || t.includes('mason')) return '🏗';
@@ -187,7 +97,6 @@ const getJobEmoji = (title = '') => {
   return '💼';
 };
 
-// ─── Soft location match ──────────────────────────────────────────────────────
 const locationMatches = (jobLocation = '', filterLocation = '') => {
   if (!filterLocation || filterLocation.trim() === '') return true;
   const jl = jobLocation.toLowerCase().trim();
@@ -199,26 +108,48 @@ export default function WorkerHomeScreen({ navigation }) {
   const { user, userProfile, refreshUserProfile, resolvedUid } = useAuth();
   const { currentLocation, setCurrentLocation } = useJob();
   const { locale } = useLanguage();
+  const insets = useSafeAreaInsets();
 
-  const [availableJobs, setAvailableJobs]       = useState([]);
-  const [myApplications, setMyApplications]     = useState([]);
-  const [loading, setLoading]                   = useState(true);
-  const [refreshing, setRefreshing]             = useState(false);
-  const [showJobDetails, setShowJobDetails]     = useState(false);
-  const [selectedJob, setSelectedJob]           = useState(null);
-  const [showAllJobs, setShowAllJobs]           = useState(false);
-  const [applyingJobId, setApplyingJobId]       = useState(null);
-  const [appliedLocally, setAppliedLocally]     = useState([]);
-  const [lang, setLang]                         = useState(locale || 'en');
-
-  // ── Location filter state ──────────────────────────────────────────────────
-  const [showLocationFilter, setShowLocationFilter] = useState(false);
-  const [locationSearch, setLocationSearch]         = useState('');
+  const [availableJobs, setAvailableJobs]   = useState([]);
+  const [myApplications, setMyApplications] = useState([]);
+  const [loading, setLoading]               = useState(true);
+  const [refreshing, setRefreshing]         = useState(false);
+  const [showJobDetails, setShowJobDetails] = useState(false);
+  const [selectedJob, setSelectedJob]       = useState(null);
+  const [showAllJobs, setShowAllJobs]       = useState(false);
+  const [applyingJobId, setApplyingJobId]   = useState(null);
+  const [appliedLocally, setAppliedLocally] = useState([]);
+  const [lang, setLang]                     = useState(locale || 'en');
+  const [showLocationFilter, setShowLocationFilter]     = useState(false);
+  const [locationSearch, setLocationSearch]             = useState('');
   const [activeLocationFilter, setActiveLocationFilter] = useState('');
 
   const tr = translations[lang] || translations.en;
 
-  // ── Seed location from worker profile ────────────────────────────────────
+  // FIX: Block Android hardware back ONLY when this is the root/home screen
+  // (i.e. the user has no screens to go back to in the stack). This prevents
+  // the app from doing anything unexpected when the user presses back on the
+  // home tab, without interfering with back navigation on deeper screens.
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // canGoBack() returns false when we are at the root of the stack,
+        // meaning pressing back would exit the app. We simply block that here
+        // so the user stays on the home screen (standard behavior for most apps).
+        // When canGoBack() is true (e.g. user came from a push notification deep
+        // link into a nested screen), we return false so React Navigation handles
+        // it normally.
+        if (!navigation.canGoBack()) {
+          return true; // block — we're at the root, nothing to go back to
+        }
+        return false; // allow normal back navigation
+      };
+
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => sub.remove();
+    }, [navigation])
+  );
+
   useEffect(() => {
     if (userProfile?.location && !currentLocation) {
       setCurrentLocation(userProfile.location);
@@ -226,12 +157,9 @@ export default function WorkerHomeScreen({ navigation }) {
     }
   }, [userProfile?.location]);
 
-  // ── Data loading ──────────────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
-      if (resolvedUid) {
-        loadData();
-      }
+      if (resolvedUid) loadData();
     }, [resolvedUid])
   );
 
@@ -252,9 +180,7 @@ export default function WorkerHomeScreen({ navigation }) {
     try {
       const result = await fetchFutureJobs({});
       if (result.success) setAvailableJobs(result.jobs);
-    } catch (error) {
-      console.error('Error loading jobs:', error);
-    }
+    } catch (error) { console.error('Error loading jobs:', error); }
   };
 
   const loadApplications = async () => {
@@ -262,17 +188,11 @@ export default function WorkerHomeScreen({ navigation }) {
       if (!resolvedUid) return;
       const result = await fetchWorkerApplications(resolvedUid);
       if (result.success) setMyApplications(result.applications);
-    } catch (error) {
-      console.error('Error loading applications:', error);
-    }
+    } catch (error) { console.error('Error loading applications:', error); }
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadData();
-  };
+  const onRefresh = () => { setRefreshing(true); loadData(); };
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   const getFirstName = () => {
     if (userProfile?.name) return userProfile.name.split(' ')[0];
     return lang === 'hi' ? 'मजदूर' : 'Worker';
@@ -288,13 +208,10 @@ export default function WorkerHomeScreen({ navigation }) {
     ...appliedLocally,
   ];
 
-  // Use activeLocationFilter for filtering (not just currentLocation)
   const filterLocation = activeLocationFilter || '';
   const unappliedJobs = availableJobs.filter(
-    job =>
-      job.status === 'open' &&
-      !appliedJobIds.includes(job.id) &&
-      locationMatches(job.location, filterLocation)
+    job => job.status === 'open' && !appliedJobIds.includes(job.id) &&
+           locationMatches(job.location, filterLocation)
   );
   const jobsToShow = showAllJobs ? unappliedJobs : unappliedJobs.slice(0, 3);
 
@@ -311,146 +228,73 @@ export default function WorkerHomeScreen({ navigation }) {
     return startTime ? `${label}, ${startTime}` : label;
   };
 
-  // ── FIXED Apply function ──────────────────────────────────────────────────
-  // Root cause: userProfile.phoneNumber may be undefined; also need to check
-  // both `phone` and `phoneNumber` fields. We now call createApplication directly
-  // instead of going through JobContext.applyForJob to avoid the strict profile check.
   const handleApply = (job) => {
-    if (!resolvedUid) {
-      Alert.alert(tr.error, 'Please log in to apply');
-      return;
-    }
-
-    // Check profile completeness — accept either `phone` or `phoneNumber`
+    if (!resolvedUid) { Alert.alert(tr.error, 'Please log in to apply'); return; }
     const workerName  = userProfile?.name;
     const workerPhone = userProfile?.phoneNumber || userProfile?.phone || '';
-
     if (!workerName) {
-      Alert.alert(
-        tr.profileIncomplete,
-        tr.profileIncompleteMsg,
-        [
-          { text: tr.cancel, style: 'cancel' },
-          { text: tr.goToProfile, onPress: () => navigation.navigate('WorkerProfile') },
-        ]
-      );
+      Alert.alert(tr.profileIncomplete, tr.profileIncompleteMsg, [
+        { text: tr.cancel, style: 'cancel' },
+        { text: tr.goToProfile, onPress: () => navigation.navigate('WorkerProfile') },
+      ]);
       return;
     }
-
-    Alert.alert(
-      tr.applyTitle,
-      `${tr.applyMsg}\n\n${job.title}`,
-      [
-        { text: tr.cancel, style: 'cancel' },
-        {
-          text: tr.apply,
-          onPress: async () => {
-            setApplyingJobId(job.id);
-            try {
-              // Build application data — never pass undefined values to Firestore
-              const applicationData = {
-                jobId:       job.id,
-                workerId:    resolvedUid,
-                workerName:  workerName || 'Worker',
-                workerPhone: workerPhone || '',
-                workerEmail: userProfile?.email || user?.email || '',
-                employerId:  job.employerId,
-                jobTitle:    job.title,
-                companyName: job.companyName || job.company || 'Company',
-                status:      'pending',
-              };
-
-              const result = await createApplication(applicationData);
-
-              if (result.success) {
-                setAppliedLocally(prev => [...prev, job.id]);
-                Alert.alert(tr.success, tr.applySuccess);
-                // Send notification to employer (non-blocking)
-                createNotification(job.employerId, {
-                  title:      '📥 New Application Received',
-                  message:    `${workerName} has applied for your "${job.title}" position.`,
-                  type:       'new_application',
-                  actionType: 'view_applications',
-                  actionId:   job.id,
-                }).catch(() => {});
-                await loadApplications();
-              } else {
-                Alert.alert(tr.error, result.error || tr.applyError);
-              }
-            } catch (err) {
-              console.error('Apply error:', err);
-              Alert.alert(tr.error, err.message || tr.applyError);
-            } finally {
-              setApplyingJobId(null);
+    Alert.alert(tr.applyTitle, `${tr.applyMsg}\n\n${job.title}`, [
+      { text: tr.cancel, style: 'cancel' },
+      {
+        text: tr.apply,
+        onPress: async () => {
+          setApplyingJobId(job.id);
+          try {
+            const applicationData = {
+              jobId: job.id, workerId: resolvedUid,
+              workerName: workerName || 'Worker', workerPhone: workerPhone || '',
+              workerEmail: userProfile?.email || user?.email || '',
+              employerId: job.employerId, jobTitle: job.title,
+              companyName: job.companyName || job.company || 'Company', status: 'pending',
+            };
+            const result = await createApplication(applicationData);
+            if (result.success) {
+              setAppliedLocally(prev => [...prev, job.id]);
+              Alert.alert(tr.success, tr.applySuccess);
+              createNotification(job.employerId, {
+                title: '📥 New Application Received',
+                message: `${workerName} has applied for your "${job.title}" position.`,
+                type: 'new_application', actionType: 'view_applications', actionId: job.id,
+              }).catch(() => {});
+              await loadApplications();
+            } else {
+              Alert.alert(tr.error, result.error || tr.applyError);
             }
-          },
+          } catch (err) {
+            console.error('Apply error:', err);
+            Alert.alert(tr.error, err.message || tr.applyError);
+          } finally {
+            setApplyingJobId(null);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
   const stats = [
-    {
-      emoji: '💼',
-      value: unappliedJobs.length,
-      label: tr.jobsAvailable,
-      pill: tr.labelNew,
-      pillBg: '#eff6ff', pillColor: '#1a56db', iconBg: '#eff6ff',
-    },
-    {
-      emoji: '📋',
-      value: myApplications.filter(a => a.status === 'pending').length,
-      label: tr.applications,
-      pill: tr.labelWaiting,
-      pillBg: '#fff7ed', pillColor: '#ea580c', iconBg: '#fff7ed',
-    },
-    {
-      emoji: '✅',
-      value: myApplications.filter(a => a.status === 'completed' || a.status === 'accepted').length,
-      label: tr.completed,
-      pill: tr.labelDone,
-      pillBg: '#f0fdf4', pillColor: '#16a34a', iconBg: '#f0fdf4',
-    },
-    {
-      emoji: '💰',
-      value: `₹${userProfile?.totalEarnings || 0}`,
-      label: tr.totalEarned,
-      pill: tr.labelEarned,
-      pillBg: '#fefce8', pillColor: '#ca8a04', iconBg: '#fefce8',
-    },
+    { emoji: '💼', value: unappliedJobs.length, label: tr.jobsAvailable, pill: tr.labelNew, pillBg: '#eff6ff', pillColor: '#1a56db', iconBg: '#eff6ff' },
+    { emoji: '📋', value: myApplications.filter(a => a.status === 'pending').length, label: tr.applications, pill: tr.labelWaiting, pillBg: '#fff7ed', pillColor: '#ea580c', iconBg: '#fff7ed' },
+    { emoji: '✅', value: myApplications.filter(a => a.status === 'completed' || a.status === 'accepted').length, label: tr.completed, pill: tr.labelDone, pillBg: '#f0fdf4', pillColor: '#16a34a', iconBg: '#f0fdf4' },
+    { emoji: '💰', value: `₹${userProfile?.totalEarnings || 0}`, label: tr.totalEarned, pill: tr.labelEarned, pillBg: '#fefce8', pillColor: '#ca8a04', iconBg: '#fefce8' },
   ];
 
-  // ── Quick Actions — use correct screen names ───────────────────────────────
   const quickActions = [
-    {
-      emoji: '🔍', title: tr.browseJobs, sub: tr.findWork, iconBg: '#eff6ff',
-      // Try BrowseJobs first; if that fails the navigator will warn (dev only)
-      action: () => {
-        try { navigation.navigate('BrowseJobs'); }
-        catch { navigation.navigate('WorkerBrowseJobs'); }
-      },
-    },
-    {
-      emoji: '📄', title: tr.myApplications,
-      sub: `${myApplications.length} ${tr.pending}`,
-      iconBg: '#fff7ed',
-      action: () => navigation.navigate('WorkerApplications'),
-    },
-    {
-      emoji: '👤', title: tr.myProfile, sub: tr.editInfo, iconBg: '#f0fdf4',
-      action: () => navigation.navigate('WorkerProfile'),
-    },
-    {
-      emoji: '🙋', title: tr.help, sub: tr.support, iconBg: '#fefce8',
-      action: () => {
-        try { navigation.navigate('HelpSupport'); }
-        catch { Alert.alert('Help', 'Contact us at support@udyogi.com'); }
-      },
-    },
+    { emoji: '🔍', title: tr.browseJobs, sub: tr.findWork, iconBg: '#eff6ff',
+      action: () => { try { navigation.navigate('BrowseJobs'); } catch { navigation.navigate('WorkerBrowseJobs'); } } },
+    { emoji: '📄', title: tr.myApplications, sub: `${myApplications.length} ${tr.pending}`, iconBg: '#fff7ed',
+      action: () => navigation.navigate('WorkerApplications') },
+    { emoji: '👤', title: tr.myProfile, sub: tr.editInfo, iconBg: '#f0fdf4',
+      action: () => navigation.navigate('WorkerProfile') },
+    { emoji: '🙋', title: tr.help, sub: tr.support, iconBg: '#fefce8',
+      action: () => { try { navigation.navigate('HelpSupport'); } catch { Alert.alert('Help', 'Contact us at support@udyogi.com'); } } },
   ];
 
-  // ── Location filter modal cities ───────────────────────────────────────────
   const popularCities = [
     'Mumbai, Maharashtra', 'Delhi, Delhi', 'Bengaluru, Karnataka',
     'Hyderabad, Telangana', 'Chennai, Tamil Nadu', 'Kolkata, West Bengal',
@@ -462,7 +306,9 @@ export default function WorkerHomeScreen({ navigation }) {
     c.toLowerCase().includes(locationSearch.toLowerCase())
   );
 
-  // ── No-profile guard ──────────────────────────────────────────────────────
+  const fabBottom = insets.bottom + 60 + 16;
+  const scrollPaddingBottom = insets.bottom + 60 + 80;
+
   if (!loading && resolvedUid && userProfile && !userProfile.profileComplete) {
     return (
       <View style={s.container}>
@@ -478,9 +324,7 @@ export default function WorkerHomeScreen({ navigation }) {
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
           <Text style={{ fontSize: 52, marginBottom: 16 }}>👷</Text>
-          <Text style={{ fontSize: 20, fontWeight: '800', color: '#1e293b', marginBottom: 8 }}>
-            {tr.noProfile}
-          </Text>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#1e293b', marginBottom: 8 }}>{tr.noProfile}</Text>
           <Text style={{ fontSize: 14, color: '#64748b', textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
             Please complete your profile to start applying for jobs.
           </Text>
@@ -495,7 +339,6 @@ export default function WorkerHomeScreen({ navigation }) {
     );
   }
 
-  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading && !refreshing) {
     return (
       <View style={s.loadingScreen}>
@@ -505,24 +348,17 @@ export default function WorkerHomeScreen({ navigation }) {
     );
   }
 
-  // ── Main render ───────────────────────────────────────────────────────────
   return (
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="#1a56db" />
 
-      {/* ── HEADER ── */}
       <View style={s.header}>
         <LangToggle lang={lang} setLang={setLang} />
-
         <View style={s.headerTop}>
           <View style={{ flex: 1 }}>
             <Text style={s.welcomeText}>{tr.welcomeBack}</Text>
             <Text style={s.greetingName}>{getGreeting()}</Text>
-            {/* Location filter pill in header */}
-            <TouchableOpacity
-              style={s.locationFilterPill}
-              onPress={() => setShowLocationFilter(true)}
-            >
+            <TouchableOpacity style={s.locationFilterPill} onPress={() => setShowLocationFilter(true)}>
               <Text style={s.locationFilterPillIcon}>📍</Text>
               <Text style={s.locationFilterPillText} numberOfLines={1}>
                 {activeLocationFilter || tr.allLocations}
@@ -530,9 +366,10 @@ export default function WorkerHomeScreen({ navigation }) {
               <Text style={s.locationFilterPillChevron}>▾</Text>
             </TouchableOpacity>
           </View>
+          {/* FIX: Real user name used for avatar initials */}
           <TouchableOpacity style={s.avatarWrap} onPress={() => navigation.navigate('WorkerProfile')}>
             <Image
-              source={{ uri: userProfile?.photoURL || defaultAvatar }}
+              source={{ uri: userProfile?.photoURL || getDefaultAvatar(userProfile?.name) }}
               style={s.avatar}
             />
             {userProfile?.isVerified && (
@@ -543,7 +380,6 @@ export default function WorkerHomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Worker Status Card */}
         <View style={s.workerCard}>
           <View style={s.workerCardLeft}>
             <View style={s.workerCardIcon}>
@@ -554,8 +390,7 @@ export default function WorkerHomeScreen({ navigation }) {
                 {userProfile?.isVerified ? tr.verifiedWorker : tr.workerLevel}
               </Text>
               <Text style={s.workerCardSub}>
-                {myApplications.filter(a => a.status === 'completed').length} {tr.jobsDone} • ⭐{' '}
-                {userProfile?.rating || 4.5}
+                {myApplications.filter(a => a.status === 'completed').length} {tr.jobsDone} • ⭐ {userProfile?.rating || 4.5}
               </Text>
             </View>
           </View>
@@ -565,16 +400,13 @@ export default function WorkerHomeScreen({ navigation }) {
         </View>
       </View>
 
-      {/* ── SCROLL CONTENT ── */}
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={s.scrollContent}
+        contentContainerStyle={[s.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}
       >
-        {/* Stats Grid */}
+        {/* Stats */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>{tr.overview}</Text>
@@ -624,7 +456,6 @@ export default function WorkerHomeScreen({ navigation }) {
               <Text style={s.sectionSub}>{unappliedJobs.length} {tr.jobsNearYou}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {/* Location Filter Button */}
               <TouchableOpacity
                 style={[s.locationFilterBtn, activeLocationFilter && s.locationFilterBtnActive]}
                 onPress={() => setShowLocationFilter(true)}
@@ -641,7 +472,6 @@ export default function WorkerHomeScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Active filter chip */}
           {activeLocationFilter ? (
             <View style={s.activeFilterChip}>
               <Text style={s.activeFilterIcon}>📍</Text>
@@ -661,16 +491,12 @@ export default function WorkerHomeScreen({ navigation }) {
               <Text style={s.emptyTitle}>{tr.noAvailableJobs}</Text>
               <Text style={s.emptyDesc}>{tr.noJobsDesc}</Text>
               {activeLocationFilter ? (
-                <TouchableOpacity
-                  style={[s.emptyBtn, { marginBottom: 10 }]}
-                  onPress={() => setActiveLocationFilter('')}
-                >
+                <TouchableOpacity style={[s.emptyBtn, { marginBottom: 10 }]} onPress={() => setActiveLocationFilter('')}>
                   <Text style={s.emptyBtnText}>🌍 {tr.allLocations}</Text>
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity style={s.emptyBtn} onPress={() => {
-                try { navigation.navigate('BrowseJobs'); }
-                catch { navigation.navigate('WorkerBrowseJobs'); }
+                try { navigation.navigate('BrowseJobs'); } catch { navigation.navigate('WorkerBrowseJobs'); }
               }}>
                 <Text style={s.emptyBtnText}>🔍 {tr.browseJobs}</Text>
               </TouchableOpacity>
@@ -680,14 +506,11 @@ export default function WorkerHomeScreen({ navigation }) {
               {jobsToShow.map(job => {
                 const isApplying = applyingJobId === job.id;
                 const isApplied  = appliedJobIds.includes(job.id);
-                const applicantCount =
-                  job.applicationsCount !== undefined
-                    ? job.applicationsCount
-                    : (job.applications?.length ?? 0);
+                const applicantCount = job.applicationsCount !== undefined
+                  ? job.applicationsCount : (job.applications?.length ?? 0);
                 return (
                   <TouchableOpacity
-                    key={job.id}
-                    style={s.jobCard}
+                    key={job.id} style={s.jobCard}
                     onPress={() => { setSelectedJob(job); setShowJobDetails(true); }}
                     activeOpacity={0.85}
                   >
@@ -704,7 +527,6 @@ export default function WorkerHomeScreen({ navigation }) {
                         <Text style={s.jobSalaryUnit}>{tr.perHour}</Text>
                       </View>
                     </View>
-
                     <View style={s.jobMeta}>
                       <View style={s.jobMetaRow}>
                         <Text style={s.jobMetaIcon}>📍</Text>
@@ -713,13 +535,10 @@ export default function WorkerHomeScreen({ navigation }) {
                       {(job.jobDate || job.startTime) && (
                         <View style={s.jobMetaRow}>
                           <Text style={s.jobMetaIcon}>🕐</Text>
-                          <Text style={s.jobMetaText}>
-                            {formatJobDate(job.jobDate, job.startTime)}
-                          </Text>
+                          <Text style={s.jobMetaText}>{formatJobDate(job.jobDate, job.startTime)}</Text>
                         </View>
                       )}
                     </View>
-
                     <View style={s.jobFooter}>
                       <View style={s.applicantsRow}>
                         <Text style={s.applicantsIcon}>👥</Text>
@@ -730,13 +549,10 @@ export default function WorkerHomeScreen({ navigation }) {
                         onPress={() => !isApplied && !isApplying && handleApply(job)}
                         disabled={isApplied || isApplying}
                       >
-                        {isApplying ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={s.applyBtnText}>
-                            {isApplied ? tr.alreadyApplied : `✋ ${tr.applyNow}`}
-                          </Text>
-                        )}
+                        {isApplying
+                          ? <ActivityIndicator size="small" color="#fff" />
+                          : <Text style={s.applyBtnText}>{isApplied ? tr.alreadyApplied : `✋ ${tr.applyNow}`}</Text>
+                        }
                       </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
@@ -752,27 +568,21 @@ export default function WorkerHomeScreen({ navigation }) {
             </>
           )}
         </View>
-
-        <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* ── FLOATING BUTTON ── */}
-      <TouchableOpacity style={s.fab} onPress={() => {
-        try { navigation.navigate('BrowseJobs'); }
-        catch { navigation.navigate('WorkerBrowseJobs'); }
-      }} activeOpacity={0.85}>
+      {/* FAB */}
+      <TouchableOpacity
+        style={[s.fab, { bottom: fabBottom }]}
+        onPress={() => { try { navigation.navigate('BrowseJobs'); } catch { navigation.navigate('WorkerBrowseJobs'); } }}
+        activeOpacity={0.85}
+      >
         <View style={s.fabGradient}>
           <Text style={s.fabText}>{tr.browseAllJobs}</Text>
         </View>
       </TouchableOpacity>
 
-      {/* ── LOCATION FILTER MODAL ── */}
-      <Modal
-        visible={showLocationFilter}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowLocationFilter(false)}
-      >
+      {/* Location Filter Modal */}
+      <Modal visible={showLocationFilter} animationType="slide" transparent onRequestClose={() => setShowLocationFilter(false)}>
         <View style={s.modalOverlay}>
           <View style={[s.modalBox, { paddingBottom: 24 }]}>
             <View style={s.modalHeader}>
@@ -781,8 +591,6 @@ export default function WorkerHomeScreen({ navigation }) {
                 <Text style={{ fontSize: 20, color: '#64748b' }}>✕</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Search input */}
             <View style={s.locationSearchBox}>
               <Text style={{ fontSize: 16, marginRight: 8 }}>🔍</Text>
               <TextInput
@@ -799,34 +607,20 @@ export default function WorkerHomeScreen({ navigation }) {
                 </TouchableOpacity>
               ) : null}
             </View>
-
-            {/* All locations option */}
             <TouchableOpacity
               style={[s.cityItem, !activeLocationFilter && s.cityItemSelected]}
-              onPress={() => {
-                setActiveLocationFilter('');
-                setLocationSearch('');
-                setShowLocationFilter(false);
-              }}
+              onPress={() => { setActiveLocationFilter(''); setLocationSearch(''); setShowLocationFilter(false); }}
             >
               <Text style={s.cityIcon}>🌍</Text>
-              <Text style={[s.cityName, !activeLocationFilter && s.cityNameSelected]}>
-                {tr.allLocations}
-              </Text>
+              <Text style={[s.cityName, !activeLocationFilter && s.cityNameSelected]}>{tr.allLocations}</Text>
               {!activeLocationFilter && <Text style={s.cityCheck}>✓</Text>}
             </TouchableOpacity>
-
-            {/* City list */}
             <ScrollView style={{ maxHeight: height * 0.45 }} showsVerticalScrollIndicator={false}>
               {filteredCities.map((city, i) => (
                 <TouchableOpacity
                   key={i}
                   style={[s.cityItem, activeLocationFilter === city && s.cityItemSelected]}
-                  onPress={() => {
-                    setActiveLocationFilter(city);
-                    setLocationSearch('');
-                    setShowLocationFilter(false);
-                  }}
+                  onPress={() => { setActiveLocationFilter(city); setLocationSearch(''); setShowLocationFilter(false); }}
                 >
                   <Text style={s.cityIcon}>📍</Text>
                   <View style={{ flex: 1 }}>
@@ -848,13 +642,8 @@ export default function WorkerHomeScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* ── JOB DETAILS MODAL ── */}
-      <Modal
-        visible={showJobDetails}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowJobDetails(false)}
-      >
+      {/* Job Details Modal */}
+      <Modal visible={showJobDetails} animationType="slide" transparent onRequestClose={() => setShowJobDetails(false)}>
         <View style={s.modalOverlay}>
           <View style={s.modalBox}>
             <View style={s.modalHeader}>
@@ -863,27 +652,19 @@ export default function WorkerHomeScreen({ navigation }) {
                 <Text style={{ fontSize: 20, color: '#64748b' }}>✕</Text>
               </TouchableOpacity>
             </View>
-
             {selectedJob && (
               <ScrollView style={s.modalScroll} showsVerticalScrollIndicator={false}>
                 <View style={s.modalCard}>
                   <View style={s.modalTitleRow}>
-                    <Text style={s.modalJobTitle}>
-                      {getJobEmoji(selectedJob.title)} {selectedJob.title}
-                    </Text>
+                    <Text style={s.modalJobTitle}>{getJobEmoji(selectedJob.title)} {selectedJob.title}</Text>
                     <View>
                       <Text style={s.modalSalary}>₹{selectedJob.rate}</Text>
                       <Text style={s.modalSalaryUnit}>{tr.perHour}</Text>
                     </View>
                   </View>
                   <View style={s.modalBadgeRow}>
-                    <View style={s.openBadge}>
-                      <View style={s.openDot} />
-                      <Text style={s.openText}>{tr.open}</Text>
-                    </View>
-                    <Text style={s.modalDate}>
-                      {formatJobDate(selectedJob.jobDate, selectedJob.startTime)}
-                    </Text>
+                    <View style={s.openBadge}><View style={s.openDot} /><Text style={s.openText}>{tr.open}</Text></View>
+                    <Text style={s.modalDate}>{formatJobDate(selectedJob.jobDate, selectedJob.startTime)}</Text>
                   </View>
                   <View style={s.modalInfoRow}>
                     <Text style={s.modalInfoIcon}>📍</Text>
@@ -900,8 +681,7 @@ export default function WorkerHomeScreen({ navigation }) {
                     <Text style={s.modalInfoText}>
                       {selectedJob.applicationsCount !== undefined
                         ? selectedJob.applicationsCount
-                        : selectedJob.applications?.length ?? 0}{' '}
-                      {tr.applicants}
+                        : selectedJob.applications?.length ?? 0} {tr.applicants}
                     </Text>
                   </View>
                   {selectedJob.description && (
@@ -928,16 +708,12 @@ export default function WorkerHomeScreen({ navigation }) {
                 </View>
               </ScrollView>
             )}
-
             <View style={s.modalActions}>
               <TouchableOpacity style={s.modalCloseAction} onPress={() => setShowJobDetails(false)}>
                 <Text style={s.modalCloseActionText}>{tr.close}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  s.modalApplyAction,
-                  selectedJob && appliedJobIds.includes(selectedJob.id) && s.applyBtnDone,
-                ]}
+                style={[s.modalApplyAction, selectedJob && appliedJobIds.includes(selectedJob.id) && s.applyBtnDone]}
                 onPress={() => {
                   if (selectedJob && !appliedJobIds.includes(selectedJob.id)) {
                     setShowJobDetails(false);
@@ -947,9 +723,7 @@ export default function WorkerHomeScreen({ navigation }) {
                 disabled={selectedJob && appliedJobIds.includes(selectedJob.id)}
               >
                 <Text style={s.modalApplyText}>
-                  {selectedJob && appliedJobIds.includes(selectedJob.id)
-                    ? tr.alreadyApplied
-                    : `✋ ${tr.applyNow}`}
+                  {selectedJob && appliedJobIds.includes(selectedJob.id) ? tr.alreadyApplied : `✋ ${tr.applyNow}`}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -960,7 +734,6 @@ export default function WorkerHomeScreen({ navigation }) {
   );
 }
 
-// ─── Language Toggle ──────────────────────────────────────────────────────────
 function LangToggle({ lang, setLang }) {
   return (
     <View style={s.langRow}>
@@ -974,19 +747,13 @@ function LangToggle({ lang, setLang }) {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const CARD_WIDTH = (width - 20 * 2 - 10) / 2;
 
 const s = StyleSheet.create({
   container:    { flex: 1, backgroundColor: '#f0f4ff' },
   loadingScreen:{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f4ff' },
   loadingText:  { marginTop: 14, fontSize: 16, color: '#64748b', fontWeight: '600' },
-
-  header: {
-    paddingTop: Platform.OS === 'ios' ? 52 : 42,
-    paddingHorizontal: 18, paddingBottom: 20,
-    backgroundColor: '#1a56db',
-  },
+  header: { paddingTop: Platform.OS === 'ios' ? 52 : 42, paddingHorizontal: 18, paddingBottom: 20, backgroundColor: '#1a56db' },
   langRow:        { flexDirection: 'row', gap: 6, marginBottom: 10 },
   langBtn:        { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.12)' },
   langBtnActive:  { backgroundColor: 'rgba(255,255,255,0.9)', borderColor: 'transparent' },
@@ -995,22 +762,13 @@ const s = StyleSheet.create({
   headerTop:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   welcomeText:    { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '500', marginBottom: 2 },
   greetingName:   { fontSize: 22, fontWeight: '800', color: '#ffffff', marginBottom: 8 },
-
-  // Location filter pill in header
-  locationFilterPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  locationFilterPillIcon:    { fontSize: 12 },
-  locationFilterPillText:    { fontSize: 12, color: '#ffffff', fontWeight: '600', maxWidth: 160 },
+  locationFilterPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  locationFilterPillIcon: { fontSize: 12 },
+  locationFilterPillText: { fontSize: 12, color: '#ffffff', fontWeight: '600', maxWidth: 160 },
   locationFilterPillChevron: { fontSize: 11, color: 'rgba(255,255,255,0.8)' },
-
   avatarWrap:     { position: 'relative' },
   avatar:         { width: 48, height: 48, borderRadius: 24, borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.6)' },
   verifiedDot:    { position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, borderRadius: 8, backgroundColor: '#22c55e', borderWidth: 2, borderColor: '#1a56db', justifyContent: 'center', alignItems: 'center' },
-
   workerCard:     { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   workerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   workerCardIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
@@ -1018,38 +776,22 @@ const s = StyleSheet.create({
   workerCardSub:  { fontSize: 11, color: 'rgba(255,255,255,0.75)', fontWeight: '500' },
   workerCardBtn:  { backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', paddingHorizontal: 14, paddingVertical: 6 },
   workerCardBtnText: { fontSize: 12, fontWeight: '700', color: '#ffffff' },
-
   scroll:        { flex: 1 },
-  scrollContent: { paddingTop: 20, paddingHorizontal: 20, paddingBottom: 110 },
-
+  scrollContent: { paddingTop: 20, paddingHorizontal: 20 },
   section:       { marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12 },
   sectionTitle:  { fontSize: 17, fontWeight: '800', color: '#1e293b' },
   sectionSub:    { fontSize: 11, color: '#94a3b8', fontWeight: '600', marginTop: 2 },
   sectionLink:   { fontSize: 13, fontWeight: '700', color: '#1a56db' },
-
-  // Location filter button in section header
-  locationFilterBtn: {
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-    backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0',
-  },
-  locationFilterBtnActive: {
-    backgroundColor: '#eff6ff', borderColor: '#1a56db',
-  },
+  locationFilterBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+  locationFilterBtnActive: { backgroundColor: '#eff6ff', borderColor: '#1a56db' },
   locationFilterBtnText: { fontSize: 11, fontWeight: '700', color: '#64748b' },
   locationFilterBtnTextActive: { color: '#1a56db' },
-
-  // Active filter chip
-  activeFilterChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#eff6ff', borderRadius: 20, borderWidth: 1, borderColor: '#bfdbfe',
-    paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start', marginBottom: 12,
-  },
-  activeFilterIcon:      { fontSize: 13 },
-  activeFilterText:      { fontSize: 12, fontWeight: '600', color: '#1a56db', maxWidth: 180 },
-  activeFilterClear:     { padding: 2 },
+  activeFilterChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#eff6ff', borderRadius: 20, borderWidth: 1, borderColor: '#bfdbfe', paddingHorizontal: 12, paddingVertical: 6, alignSelf: 'flex-start', marginBottom: 12 },
+  activeFilterIcon: { fontSize: 13 },
+  activeFilterText: { fontSize: 12, fontWeight: '600', color: '#1a56db', maxWidth: 180 },
+  activeFilterClear: { padding: 2 },
   activeFilterClearText: { fontSize: 13, color: '#94a3b8', fontWeight: '700' },
-
   statsGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statCard:      { backgroundColor: '#ffffff', borderRadius: 16, padding: 14, width: CARD_WIDTH, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
   statCardTop:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
@@ -1058,13 +800,11 @@ const s = StyleSheet.create({
   statPillText:  { fontSize: 10, fontWeight: '800' },
   statValue:     { fontSize: 24, fontWeight: '800', color: '#1e293b', marginBottom: 3 },
   statLabel:     { fontSize: 11, color: '#64748b', fontWeight: '600' },
-
   actionsGrid:   { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
   actionCard:    { backgroundColor: '#ffffff', borderRadius: 16, padding: 14, width: CARD_WIDTH, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
   actionIcon:    { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   actionTitle:   { fontSize: 12, fontWeight: '800', color: '#1e293b', textAlign: 'center', marginBottom: 3 },
   actionSub:     { fontSize: 11, color: '#94a3b8', fontWeight: '500', textAlign: 'center' },
-
   jobCard:       { backgroundColor: '#ffffff', borderRadius: 18, padding: 15, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3 },
   jobCardTop:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
   jobTitle:      { fontSize: 15, fontWeight: '800', color: '#1e293b', marginBottom: 6, lineHeight: 20 },
@@ -1084,23 +824,18 @@ const s = StyleSheet.create({
   applyBtn:      { backgroundColor: '#1a56db', paddingHorizontal: 18, paddingVertical: 9, borderRadius: 10, minWidth: 110, alignItems: 'center', justifyContent: 'center' },
   applyBtnDone:  { backgroundColor: '#16a34a' },
   applyBtnText:  { fontSize: 13, fontWeight: '800', color: '#ffffff' },
-
   viewMoreCard:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 2, borderColor: '#c7d7ff', borderStyle: 'dashed', padding: 14, marginTop: 2 },
   viewMoreIcon:  { fontSize: 18 },
   viewMoreText:  { fontSize: 13, fontWeight: '700', color: '#1a56db' },
-
   emptyState:    { backgroundColor: '#ffffff', borderRadius: 18, padding: 36, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   emptyEmoji:    { fontSize: 52, marginBottom: 12 },
   emptyTitle:    { fontSize: 16, fontWeight: '800', color: '#1e293b', marginBottom: 6 },
   emptyDesc:     { fontSize: 13, color: '#94a3b8', textAlign: 'center', lineHeight: 20, marginBottom: 20 },
   emptyBtn:      { backgroundColor: '#1a56db', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
   emptyBtnText:  { fontSize: 14, fontWeight: '800', color: '#ffffff' },
-
-  fab:           { position: 'absolute', bottom: 24, alignSelf: 'center', borderRadius: 30, overflow: 'hidden', shadowColor: '#1a56db', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 10 },
+  fab:           { position: 'absolute', alignSelf: 'center', left: 0, right: 0, alignItems: 'center', borderRadius: 30, shadowColor: '#1a56db', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 10 },
   fabGradient:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 28, paddingVertical: 15, backgroundColor: '#1a56db', borderRadius: 30 },
   fabText:       { fontSize: 15, fontWeight: '800', color: '#ffffff' },
-
-  // Modals
   modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBox:      { backgroundColor: '#f0f4ff', borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: height * 0.88 },
   modalHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
@@ -1125,21 +860,9 @@ const s = StyleSheet.create({
   modalCloseActionText: { fontSize: 15, fontWeight: '700', color: '#64748b' },
   modalApplyAction:  { flex: 2, backgroundColor: '#1a56db', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
   modalApplyText:    { fontSize: 15, fontWeight: '800', color: '#ffffff' },
-
-  // Location filter modal
-  locationSearchBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#f1f5f9', borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 10,
-    marginHorizontal: 16, marginBottom: 8,
-  },
+  locationSearchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, marginHorizontal: 16, marginBottom: 8 },
   locationSearchInput: { flex: 1, fontSize: 15, color: '#1e293b' },
-  cityItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 20, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
-    backgroundColor: '#ffffff',
-  },
+  cityItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', backgroundColor: '#ffffff' },
   cityItemSelected: { backgroundColor: '#eff6ff' },
   cityIcon:  { fontSize: 18, width: 24, textAlign: 'center' },
   cityName:  { fontSize: 15, fontWeight: '600', color: '#1e293b' },

@@ -1,4 +1,5 @@
 // src/screens/employer/EmployerHomeScreen.js - FIXED VERSION
+// SAFE AREA FIX: floating button and scroll content now respect bottom inset
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -20,6 +21,7 @@ import GradientView from '../../components/GradientView';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   fetchAllEmployerJobs,
   fetchJobApplications,
@@ -37,6 +39,8 @@ const defaultAvatar = 'https://ui-avatars.com/api/?name=Employer&background=007A
 export default function EmployerHomeScreen({ navigation }) {
   const { user, userProfile, refreshUserProfile } = useAuth();
   const { locale, t } = useLanguage();
+  const insets = useSafeAreaInsets();
+
   const [futureJobs, setFutureJobs] = useState([]);
   const [pastJobs, setPastJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,8 +52,6 @@ export default function EmployerHomeScreen({ navigation }) {
   const [showAllJobs, setShowAllJobs] = useState(false);
 
   // ── Resolve the real employer UID ──────────────────────────────────────────
-  // After OTP login, Firebase Auth may not be initialised, so user?.uid is null.
-  // The profile is persisted to AsyncStorage and loaded into userProfile instead.
   const resolvedUid = user?.uid || userProfile?.uid || null;
 
   const translations = {
@@ -233,19 +235,15 @@ export default function EmployerHomeScreen({ navigation }) {
 
   useFocusEffect(
     useCallback(() => {
-      console.log('EmployerHomeScreen focused, loading data...');
       loadData();
     }, [resolvedUid])
   );
 
-  // ── Load posting stats — uses resolvedUid not user?.uid ───────────────────
   const loadPostingStats = async () => {
     try {
       if (!resolvedUid) return;
       const result = await getEmployerJobPostingStats(resolvedUid);
-      if (result.success) {
-        setPostingStats(result.stats);
-      }
+      if (result.success) setPostingStats(result.stats);
     } catch (error) {
       console.error('❌ Error loading posting stats:', error);
     }
@@ -267,30 +265,20 @@ export default function EmployerHomeScreen({ navigation }) {
   const loadJobs = async () => {
     try {
       if (!resolvedUid) return;
-
       const result = await fetchAllEmployerJobs(resolvedUid);
-
       if (result.success) {
         const futureJobsWithApps = await Promise.all(
           result.futureJobs.map(async (job) => {
             const appsResult = await fetchJobApplications(job.id);
-            return {
-              ...job,
-              applications: appsResult.success ? appsResult.applications : []
-            };
+            return { ...job, applications: appsResult.success ? appsResult.applications : [] };
           })
         );
-
         const pastJobsWithApps = await Promise.all(
           result.pastJobs.map(async (job) => {
             const appsResult = await fetchJobApplications(job.id);
-            return {
-              ...job,
-              applications: appsResult.success ? appsResult.applications : []
-            };
+            return { ...job, applications: appsResult.success ? appsResult.applications : [] };
           })
         );
-
         setFutureJobs(futureJobsWithApps);
         setPastJobs(pastJobsWithApps);
       } else {
@@ -326,19 +314,14 @@ export default function EmployerHomeScreen({ navigation }) {
     return tr.welcome;
   };
 
-  const isSubscriptionActive = () => {
-    return userProfile?.subscriptionStatus === 'active' ||
-      postingStats?.hasActiveSubscription;
-  };
+  const isSubscriptionActive = () =>
+    userProfile?.subscriptionStatus === 'active' || postingStats?.hasActiveSubscription;
 
-  const getFreePostsUsed = () => {
-    return postingStats?.freePostsUsed ?? userProfile?.freePostsUsed ?? 0;
-  };
+  const getFreePostsUsed = () =>
+    postingStats?.freePostsUsed ?? userProfile?.freePostsUsed ?? 0;
 
   const getFreePostsRemaining = () => {
-    if (postingStats?.freePostsRemaining !== undefined) {
-      return postingStats.freePostsRemaining;
-    }
+    if (postingStats?.freePostsRemaining !== undefined) return postingStats.freePostsRemaining;
     const used = userProfile?.freePostsUsed || 0;
     const available = userProfile?.freePostsAvailable || 3;
     return Math.max(0, available - used);
@@ -404,86 +387,49 @@ export default function EmployerHomeScreen({ navigation }) {
     );
   };
 
-  const handleJobCardPress = (job) => {
-    setSelectedJob(job);
-    setShowJobDetails(true);
-  };
-
-  const handleViewAllJobs = () => {
-    setShowAllJobs(!showAllJobs);
-  };
+  const handleJobCardPress = (job) => { setSelectedJob(job); setShowJobDetails(true); };
+  const handleViewAllJobs = () => setShowAllJobs(!showAllJobs);
 
   const quickActions = [
     {
-      id: '1',
-      title: tr.postNewJob,
-      subtitle: tr.findWorkers,
-      icon: 'add-business',
-      color: colors.primary,
-      action: () => navigation.navigate('PostJob')
+      id: '1', title: tr.postNewJob, subtitle: tr.findWorkers,
+      icon: 'add-business', color: colors.primary,
+      action: () => navigation.navigate('PostJob'),
     },
     {
-      id: '2',
-      title: tr.viewApplications,
+      id: '2', title: tr.viewApplications,
       subtitle: `${futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0)} ${locale === 'hi' ? 'नए' : 'new'}`,
-      icon: 'people',
-      color: colors.success,
-      action: () => navigation.navigate('Applications')
+      icon: 'people', color: colors.success,
+      action: () => navigation.navigate('Applications'),
     },
     {
-      id: '3',
-      title: tr.pastJobs,
+      id: '3', title: tr.pastJobs,
       subtitle: `${pastJobs.length} ${locale === 'hi' ? 'पूर्ण' : 'completed'}`,
-      icon: 'history',
-      color: colors.warning,
-      action: () => setShowPastJobs(true)
+      icon: 'history', color: colors.warning,
+      action: () => setShowPastJobs(true),
     },
     {
-      id: '4',
-      title: tr.settings,
-      subtitle: tr.manageSubscription,
-      icon: 'settings',
-      color: colors.info,
-      action: () => navigation.navigate('EmployerProfile')
+      id: '4', title: tr.settings, subtitle: tr.manageSubscription,
+      icon: 'settings', color: colors.info,
+      action: () => navigation.navigate('EmployerProfile'),
     },
   ];
 
   const statsData = [
-    {
-      id: '1',
-      title: tr.upcomingJobs,
-      value: futureJobs.length,
-      subtitle: tr.futureDates,
-      icon: 'event',
-      color: colors.primary,
-    },
-    {
-      id: '2',
-      title: tr.totalHires,
-      value: pastJobs.reduce((sum, job) => sum + (job.applications?.filter(app => app.status === 'completed').length || 0), 0),
-      subtitle: tr.completedWork,
-      icon: 'work',
-      color: colors.success,
-    },
-    {
-      id: '3',
-      title: tr.applications,
-      value: futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0),
-      subtitle: tr.totalReceived,
-      icon: 'description',
-      color: colors.info,
-    },
-    {
-      id: '4',
-      title: tr.responseRate,
-      value: '92%',
-      subtitle: '24h response',
-      icon: 'trending-up',
-      color: colors.warning,
-    },
+    { id: '1', title: tr.upcomingJobs, value: futureJobs.length, subtitle: tr.futureDates, icon: 'event', color: colors.primary },
+    { id: '2', title: tr.totalHires, value: pastJobs.reduce((sum, job) => sum + (job.applications?.filter(app => app.status === 'completed').length || 0), 0), subtitle: tr.completedWork, icon: 'work', color: colors.success },
+    { id: '3', title: tr.applications, value: futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0), subtitle: tr.totalReceived, icon: 'description', color: colors.info },
+    { id: '4', title: tr.responseRate, value: '92%', subtitle: '24h response', icon: 'trending-up', color: colors.warning },
   ];
 
   const jobsToShow = showAllJobs ? futureJobs : futureJobs.slice(0, 3);
+
+  // ── The FAB bottom offset must clear the tab bar (60) + system inset.
+  // We add a small extra gap (16) so it floats visibly above the tab bar.
+  const fabBottom = insets.bottom + 60 + 16;
+
+  // ── Scroll content bottom padding: enough to clear FAB + tab bar + inset
+  const scrollPaddingBottom = insets.bottom + 60 + 80;
 
   if (loading && !refreshing) {
     return (
@@ -538,8 +484,8 @@ export default function EmployerHomeScreen({ navigation }) {
                   <View style={styles.premiumInfo}>
                     <Text style={styles.premiumTitle}>{tr.activeSubscription}</Text>
                     <Text style={styles.premiumSubtitle}>
-                      {tr.unlimitedJobPosting} • {tr.daysLeft}: {postingStats?.subscriptionExpiry ?
-                        new Date(postingStats.subscriptionExpiry).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')
+                      {tr.unlimitedJobPosting} • {tr.daysLeft}: {postingStats?.subscriptionExpiry
+                        ? new Date(postingStats.subscriptionExpiry).toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN')
                         : tr.expiresNotSet}
                     </Text>
                   </View>
@@ -560,26 +506,15 @@ export default function EmployerHomeScreen({ navigation }) {
                     <Text style={styles.newBadgeText}>{tr.limitedTime}</Text>
                   </View>
                 </View>
-
                 <View style={styles.progressContainer}>
                   <View style={styles.progressLabels}>
-                    <Text style={styles.progressText}>
-                      {getFreePostsUsed()} / 3 {tr.freePostsUsed}
-                    </Text>
-                    <Text style={styles.progressText}>
-                      {getFreePostsRemaining()} {tr.freePostsRemaining}
-                    </Text>
+                    <Text style={styles.progressText}>{getFreePostsUsed()} / 3 {tr.freePostsUsed}</Text>
+                    <Text style={styles.progressText}>{getFreePostsRemaining()} {tr.freePostsRemaining}</Text>
                   </View>
                   <View style={styles.progressBar}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        { width: `${Math.min((getFreePostsUsed() / 3) * 100, 100)}%` }
-                      ]}
-                    />
+                    <View style={[styles.progressFill, { width: `${Math.min((getFreePostsUsed() / 3) * 100, 100)}%` }]} />
                   </View>
                 </View>
-
                 <TouchableOpacity
                   style={styles.upgradeButton}
                   onPress={() => navigation.navigate('Subscription')}
@@ -602,14 +537,10 @@ export default function EmployerHomeScreen({ navigation }) {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
         {/* Stats Grid */}
@@ -620,7 +551,6 @@ export default function EmployerHomeScreen({ navigation }) {
               <Text style={styles.viewAllText}>{tr.viewInsights}</Text>
             </TouchableOpacity>
           </View>
-
           <View style={styles.statsGrid}>
             {statsData.map((stat) => (
               <View key={stat.id} style={styles.statCard}>
@@ -642,14 +572,9 @@ export default function EmployerHomeScreen({ navigation }) {
               {locale === 'hi' ? 'त्वरित कार्रवाई' : 'Quick Actions'}
             </Text>
           </View>
-
           <View style={styles.actionsGrid}>
             {quickActions.map((action) => (
-              <TouchableOpacity
-                key={action.id}
-                style={styles.actionCard}
-                onPress={action.action}
-              >
+              <TouchableOpacity key={action.id} style={styles.actionCard} onPress={action.action}>
                 <View style={[styles.actionIcon, { backgroundColor: action.color + '20' }]}>
                   <Icon name={action.icon} size={24} color={action.color} />
                 </View>
@@ -699,18 +624,11 @@ export default function EmployerHomeScreen({ navigation }) {
               </Text>
             </View>
             {futureJobs.length > 0 && (
-              <TouchableOpacity
-                style={styles.viewAllButton}
-                onPress={handleViewAllJobs}
-              >
+              <TouchableOpacity style={styles.viewAllButton} onPress={handleViewAllJobs}>
                 <Text style={styles.viewAllButtonText}>
                   {showAllJobs ? tr.viewLessJobs : tr.viewAllJobs}
                 </Text>
-                <Icon
-                  name={showAllJobs ? "expand-less" : "chevron-right"}
-                  size={16}
-                  color={colors.primary}
-                />
+                <Icon name={showAllJobs ? "expand-less" : "chevron-right"} size={16} color={colors.primary} />
               </TouchableOpacity>
             )}
           </View>
@@ -731,11 +649,7 @@ export default function EmployerHomeScreen({ navigation }) {
           ) : (
             <View style={styles.jobsList}>
               {jobsToShow.map((job) => (
-                <TouchableOpacity
-                  key={job.id}
-                  style={styles.jobCard}
-                  onPress={() => handleJobCardPress(job)}
-                >
+                <TouchableOpacity key={job.id} style={styles.jobCard} onPress={() => handleJobCardPress(job)}>
                   <View style={styles.jobCardHeader}>
                     <View style={styles.jobTitleContainer}>
                       <Text style={styles.jobTitle}>{job.title}</Text>
@@ -744,14 +658,11 @@ export default function EmployerHomeScreen({ navigation }) {
                         job.status === 'open' && styles.jobStatusActive,
                         job.status === 'closed' && styles.jobStatusCompleted,
                       ]}>
-                        <Text style={styles.jobStatusText}>
-                          {getStatusText(job.status)}
-                        </Text>
+                        <Text style={styles.jobStatusText}>{getStatusText(job.status)}</Text>
                       </View>
                     </View>
                     <Text style={styles.jobSalary}>₹{job.rate}/hr</Text>
                   </View>
-
                   <View style={styles.jobDetails}>
                     <View style={styles.jobDetail}>
                       <Icon name="location-on" size={14} color={colors.textLight} />
@@ -759,12 +670,9 @@ export default function EmployerHomeScreen({ navigation }) {
                     </View>
                     <View style={styles.jobDetail}>
                       <Icon name="access-time" size={14} color={colors.textLight} />
-                      <Text style={styles.jobDetailText}>
-                        {formatJobDate(job.jobDate, job.startTime)}
-                      </Text>
+                      <Text style={styles.jobDetailText}>{formatJobDate(job.jobDate, job.startTime)}</Text>
                     </View>
                   </View>
-
                   <View style={styles.jobFooter}>
                     <View style={styles.applicationsContainer}>
                       <Icon name="people" size={16} color={colors.primary} />
@@ -776,10 +684,7 @@ export default function EmployerHomeScreen({ navigation }) {
                       style={styles.viewApplicationsButton}
                       onPress={() => {
                         setShowJobDetails(false);
-                        navigation.navigate('Applications', {
-                          jobId: job.id,
-                          jobTitle: job.title
-                        });
+                        navigation.navigate('Applications', { jobId: job.id, jobTitle: job.title });
                       }}
                     >
                       <Text style={styles.viewApplicationsText}>
@@ -791,31 +696,27 @@ export default function EmployerHomeScreen({ navigation }) {
               ))}
 
               {futureJobs.length > 3 && !showAllJobs && (
-                <TouchableOpacity
-                  style={styles.viewMoreJobs}
-                  onPress={handleViewAllJobs}
-                >
+                <TouchableOpacity style={styles.viewMoreJobs} onPress={handleViewAllJobs}>
                   <View style={styles.viewMoreIconContainer}>
                     <Icon name="add" size={20} color={colors.primary} />
                   </View>
                   <Text style={styles.viewMoreText}>
-                    {locale === 'hi' ?
-                      `+ ${futureJobs.length - 3} और नौकरियां देखें` :
-                      `+${futureJobs.length - 3} ${tr.viewMoreJobs}`
-                    }
+                    {locale === 'hi'
+                      ? `+ ${futureJobs.length - 3} और नौकरियां देखें`
+                      : `+${futureJobs.length - 3} ${tr.viewMoreJobs}`}
                   </Text>
                 </TouchableOpacity>
               )}
             </View>
           )}
         </View>
-
-        <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Floating Post Job Button */}
+      {/* Floating Post Job Button
+          bottom is dynamic: tab bar height (60) + system inset + gap (16)
+          so it always floats visibly above the tab bar on every device. */}
       <TouchableOpacity
-        style={styles.floatingButton}
+        style={[styles.floatingButton, { bottom: fabBottom }]}
         onPress={() => navigation.navigate('PostJob')}
       >
         <GradientView
@@ -847,14 +748,10 @@ export default function EmployerHomeScreen({ navigation }) {
           <View style={styles.jobDetailsContent}>
             <View style={styles.jobDetailsHeader}>
               <Text style={styles.jobDetailsTitle}>{tr.jobDetails}</Text>
-              <TouchableOpacity
-                style={styles.jobDetailsCloseButton}
-                onPress={() => setShowJobDetails(false)}
-              >
+              <TouchableOpacity style={styles.jobDetailsCloseButton} onPress={() => setShowJobDetails(false)}>
                 <Icon name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
-
             {selectedJob && (
               <ScrollView style={styles.jobDetailsScroll} showsVerticalScrollIndicator={false}>
                 <View style={styles.jobDetailsCard}>
@@ -862,21 +759,12 @@ export default function EmployerHomeScreen({ navigation }) {
                     <Text style={styles.jobDetailsJobTitle}>{selectedJob.title}</Text>
                     <Text style={styles.jobDetailsSalary}>₹{selectedJob.rate}/hr</Text>
                   </View>
-
                   <View style={styles.jobDetailsStatusContainer}>
-                    <View style={[
-                      styles.jobDetailsStatus,
-                      selectedJob.status === 'open' && styles.jobDetailsStatusActive,
-                    ]}>
-                      <Text style={styles.jobDetailsStatusText}>
-                        {getStatusText(selectedJob.status)}
-                      </Text>
+                    <View style={[styles.jobDetailsStatus, selectedJob.status === 'open' && styles.jobDetailsStatusActive]}>
+                      <Text style={styles.jobDetailsStatusText}>{getStatusText(selectedJob.status)}</Text>
                     </View>
-                    <Text style={styles.jobDetailsDate}>
-                      {formatJobDate(selectedJob.jobDate, selectedJob.startTime)}
-                    </Text>
+                    <Text style={styles.jobDetailsDate}>{formatJobDate(selectedJob.jobDate, selectedJob.startTime)}</Text>
                   </View>
-
                   <View style={styles.jobDetailsSection}>
                     <View style={styles.jobDetailsRow}>
                       <Icon name="location-on" size={18} color={colors.textLight} />
@@ -889,7 +777,6 @@ export default function EmployerHomeScreen({ navigation }) {
                       </Text>
                     </View>
                   </View>
-
                   {selectedJob.description && (
                     <View style={styles.jobDetailsSection}>
                       <Text style={styles.jobDetailsSectionTitle}>{tr.jobDescription}</Text>
@@ -899,28 +786,19 @@ export default function EmployerHomeScreen({ navigation }) {
                 </View>
               </ScrollView>
             )}
-
             <View style={styles.jobDetailsActions}>
-              <TouchableOpacity
-                style={styles.jobDetailsCloseBtn}
-                onPress={() => setShowJobDetails(false)}
-              >
+              <TouchableOpacity style={styles.jobDetailsCloseBtn} onPress={() => setShowJobDetails(false)}>
                 <Text style={styles.jobDetailsCloseBtnText}>{tr.close}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.jobDetailsViewApplicationsBtn}
                 onPress={() => {
                   setShowJobDetails(false);
-                  navigation.navigate('Applications', {
-                    jobId: selectedJob?.id,
-                    jobTitle: selectedJob?.title
-                  });
+                  navigation.navigate('Applications', { jobId: selectedJob?.id, jobTitle: selectedJob?.title });
                 }}
               >
                 <Icon name="visibility" size={18} color={colors.white} />
-                <Text style={styles.jobDetailsViewApplicationsText}>
-                  {tr.viewAllApplications}
-                </Text>
+                <Text style={styles.jobDetailsViewApplicationsText}>{tr.viewAllApplications}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -937,14 +815,10 @@ export default function EmployerHomeScreen({ navigation }) {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{tr.pastJobs}</Text>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setShowPastJobs(false)}
-            >
+            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowPastJobs(false)}>
               <Icon name="close" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
-
           <FlatList
             data={pastJobs}
             keyExtractor={(item) => item.id}
@@ -961,9 +835,7 @@ export default function EmployerHomeScreen({ navigation }) {
                 <View style={styles.modalJobHeader}>
                   <View>
                     <Text style={styles.modalJobTitle}>{job.title}</Text>
-                    <Text style={styles.modalJobDate}>
-                      {formatJobDate(job.jobDate, job.startTime)}
-                    </Text>
+                    <Text style={styles.modalJobDate}>{formatJobDate(job.jobDate, job.startTime)}</Text>
                   </View>
                   <Text style={styles.modalJobSalary}>₹{job.rate}/hr</Text>
                 </View>
@@ -974,10 +846,7 @@ export default function EmployerHomeScreen({ navigation }) {
                   </Text>
                 </View>
                 <View style={styles.modalJobActions}>
-                  <TouchableOpacity
-                    style={styles.modalDeleteButton}
-                    onPress={() => handleDeletePastJob(job)}
-                  >
+                  <TouchableOpacity style={styles.modalDeleteButton} onPress={() => handleDeletePastJob(job)}>
                     <Icon name="delete-outline" size={18} color={colors.error} />
                     <Text style={styles.modalDeleteText}>{tr.deleteJob}</Text>
                   </TouchableOpacity>
@@ -985,10 +854,7 @@ export default function EmployerHomeScreen({ navigation }) {
                     style={styles.modalViewButton}
                     onPress={() => {
                       setShowPastJobs(false);
-                      navigation.navigate('Applications', {
-                        jobId: job.id,
-                        jobTitle: job.title
-                      });
+                      navigation.navigate('Applications', { jobId: job.id, jobTitle: job.title });
                     }}
                   >
                     <Icon name="visibility" size={18} color={colors.primary} />
@@ -1039,7 +905,8 @@ const styles = StyleSheet.create({
   upgradeGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   upgradeButtonText: { fontSize: 14, fontWeight: '600', color: colors.white, marginLeft: 8 },
   scrollView: { flex: 1 },
-  scrollContent: { paddingTop: 20, paddingBottom: 100 },
+  // NOTE: paddingBottom is applied dynamically via inline style using insets
+  scrollContent: { paddingTop: 20 },
   statsSection: { paddingHorizontal: 20, marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
@@ -1096,10 +963,10 @@ const styles = StyleSheet.create({
   viewMoreJobs: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: colors.white, borderRadius: 16, borderWidth: 1, borderColor: colors.borderLight, borderStyle: 'dashed' },
   viewMoreIconContainer: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary + '10', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   viewMoreText: { fontSize: 14, fontWeight: '600', color: colors.primary },
-  floatingButton: { position: 'absolute', bottom: 24, right: 20, borderRadius: 25, overflow: 'hidden', shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
+  // bottom is set dynamically via inline style — do NOT set it here
+  floatingButton: { position: 'absolute', right: 20, borderRadius: 25, overflow: 'hidden', shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
   floatingButtonGradient: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
   floatingButtonText: { color: colors.white, fontSize: 14, fontWeight: '600', marginLeft: 8 },
-  bottomSpacing: { height: 40 },
   jobDetailsModal: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
   jobDetailsContent: { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: height * 0.9 },
   jobDetailsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.borderLight },

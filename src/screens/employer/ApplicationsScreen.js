@@ -1,4 +1,4 @@
-// src/screens/employer/ApplicationsScreen.js - FIXED: null user + undefined jobId
+// src/screens/employer/ApplicationsScreen.js - REVAMPED UI with status tabs
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
+  Platform,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
@@ -21,146 +22,159 @@ import {
 } from '../../services/database';
 import { colors } from '../../constants/colors';
 
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const C = {
+  bg:        '#F4F6FB',
+  white:     '#FFFFFF',
+  primary:   '#4F63D2',
+  success:   '#16A34A',
+  warning:   '#D97706',
+  error:     '#DC2626',
+  text:      '#111827',
+  sub:       '#6B7280',
+  border:    '#E5E7EB',
+  muted:     '#9CA3AF',
+  tag_pend:  '#FEF3C7',
+  tag_acc:   '#D1FAE5',
+  tag_rej:   '#FEE2E2',
+  tag_done:  '#DBEAFE',
+  tag_pay:   '#FEF9C3',
+};
+
+const SHADOW = {
+  shadowColor: '#1A1D2E',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.08,
+  shadowRadius: 8,
+  elevation: 3,
+};
+
 const ApplicationsScreen = ({ route, navigation }) => {
   const { jobId: routeJobId } = route.params || {};
-  // ── FIX: pull resolvedUid exactly like EmployerHomeScreen ─────────────────
   const { user, userProfile, resolvedUid } = useAuth();
   const { locale } = useLanguage();
 
-  const [applications, setApplications] = useState([]);
-  const [jobs, setJobs] = useState([]);
-  const [selectedJobId, setSelectedJobId] = useState(routeJobId || null);
-  const [loading, setLoading] = useState(true);
-  const [showJobSelector, setShowJobSelector] = useState(!routeJobId);
-  const [processingApplication, setProcessingApplication] = useState(null);
+  const [applications, setApplications]         = useState([]);
+  const [jobs, setJobs]                         = useState([]);
+  const [selectedJobId, setSelectedJobId]       = useState(routeJobId || null);
+  const [loading, setLoading]                   = useState(true);
+  const [showJobSelector, setShowJobSelector]   = useState(!routeJobId);
+  const [processingId, setProcessingId]         = useState(null);
+  const [activeTab, setActiveTab]               = useState('all');
 
-  // ── effective UID ─────────────────────────────────────────────────────────
   const uid = resolvedUid || user?.uid || userProfile?.uid || null;
 
-  // Translations
-  const translations = {
+  const tr = {
     en: {
       back: 'Back',
       applications: 'Applications',
       selectJob: 'Select Job',
-      loadingApplications: 'Loading applications...',
-      selectJobToView: 'Select a job to view applications',
-      noJobsWithApplications: 'No jobs with applications',
-      noJobsDesc: 'Applications will appear here when workers apply to your jobs',
-      applicationsCountPlural: 'applications',
-      applicationsCount: 'application',
-      noApplicationsYet: 'No applications yet',
-      noApplicationsDesc: 'Applications will appear here when workers apply',
-      applied: 'Applied',
-      applicationAccepted: 'Application accepted! Location shared and chat enabled with the worker.',
+      loadingApplications: 'Loading applications…',
+      selectJobToView: 'Select a job to view its applications',
+      noJobsWithApplications: 'No applications yet',
+      noJobsDesc: 'Applications will appear once workers apply to your jobs',
+      noApplicationsYet: 'No applications here',
+      noApplicationsDesc: 'Switch tabs or wait for workers to apply',
+      applicationAccepted: 'Application accepted! Location shared and chat enabled.',
       locationPermissionRequired: 'Location Permission Required',
-      locationPermissionDesc: 'We need your location to share the work location with the worker.',
+      locationPermissionDesc: 'We need your location to share with the worker.',
       success: 'Success',
       error: 'Error',
       failedToLoad: 'Failed to load',
-      applicationRejected: 'Application rejected',
-      failedToAccept: 'Failed to accept application',
-      failedToReject: 'Failed to reject application',
+      applicationRejected: 'Application rejected.',
+      failedToAccept: 'Failed to accept application.',
+      failedToReject: 'Failed to reject application.',
       pleaseTryAgain: 'Please try again.',
-      pending: 'Pending',
-      accepted: 'Accepted',
-      rejected: 'Rejected',
-      completed: 'Completed',
-      paymentRequired: 'Payment Required',
-      rateWorker: 'Rate Worker',
       accept: 'Accept',
       reject: 'Reject',
-      trackJobProgress: 'Track Job Progress',
+      trackJob: 'Track Job',
       processPayment: 'Process Payment',
-      viewSharedLocation: 'View Shared Location',
+      viewLocation: 'View Location',
       openChat: 'Open Chat',
-      workerContactInfo: 'Worker Contact Information',
+      rateWorker: 'Rate Worker',
+      noUserFound: 'Please log in to view applications.',
+      tabs: { all: 'All', pending: 'Pending', accepted: 'Active', completed: 'Done', rejected: 'Rejected' },
+      status: {
+        pending:         '⏳ Pending',
+        accepted:        '✅ Accepted',
+        rejected:        '❌ Rejected',
+        completed:       '🏁 Completed',
+        awaiting_payment:'💰 Pay Required',
+      },
+      applied: 'Applied',
+      workerContact: 'Contact Worker',
       name: 'Name',
       phone: 'Phone',
-      contactNote: 'Please contact the worker to coordinate the job details.',
-      jobCompleted: 'Job Completed Successfully',
-      viewJobDetails: 'View Job Details',
-      rateWorkerNow: 'Rate Worker Now',
-      rateWorkerPerformance: 'Rate Worker Performance',
+      contactNote: 'Contact the worker to coordinate job details.',
+      jobCompleted: 'Job Completed',
       payment: 'Payment',
       amount: 'Amount',
       paid: 'Paid',
       youRated: 'You rated',
       stars: 'stars',
-      noUserFound: 'Please log in to view applications.',
     },
     hi: {
       back: 'पीछे',
       applications: 'आवेदन',
       selectJob: 'नौकरी चुनें',
-      loadingApplications: 'आवेदन लोड हो रहे हैं...',
-      selectJobToView: 'आवेदन देखने के लिए एक नौकरी चुनें',
-      noJobsWithApplications: 'आवेदन वाली कोई नौकरियां नहीं',
-      noJobsDesc: 'जब कर्मचारी आपकी नौकरियों के लिए आवेदन करेंगे तो आवेदन यहां दिखाई देंगे',
-      applicationsCountPlural: 'आवेदन',
-      applicationsCount: 'आवेदन',
-      noApplicationsYet: 'अभी तक कोई आवेदन नहीं',
-      noApplicationsDesc: 'जब कर्मचारी आवेदन करेंगे तो आवेदन यहां दिखाई देंगे',
-      applied: 'आवेदन किया',
-      applicationAccepted: 'आवेदन स्वीकृत! स्थान साझा किया गया और कर्मचारी के साथ चैट सक्षम हुई।',
+      loadingApplications: 'आवेदन लोड हो रहे हैं…',
+      selectJobToView: 'आवेदन देखने के लिए नौकरी चुनें',
+      noJobsWithApplications: 'अभी तक कोई आवेदन नहीं',
+      noJobsDesc: 'जब कर्मचारी आवेदन करेंगे तो यहाँ दिखेगा',
+      noApplicationsYet: 'यहाँ कोई आवेदन नहीं',
+      noApplicationsDesc: 'टैब बदलें या प्रतीक्षा करें',
+      applicationAccepted: 'आवेदन स्वीकृत! स्थान साझा किया गया।',
       locationPermissionRequired: 'स्थान अनुमति आवश्यक',
-      locationPermissionDesc: 'हमें कर्मचारी के साथ कार्य स्थान साझा करने के लिए आपके स्थान की आवश्यकता है।',
+      locationPermissionDesc: 'कर्मचारी के साथ स्थान साझा करने के लिए आवश्यक।',
       success: 'सफल',
       error: 'त्रुटि',
-      failedToLoad: 'लोड करने में विफल',
-      applicationRejected: 'आवेदन अस्वीकृत',
-      failedToAccept: 'आवेदन स्वीकार करने में विफल',
-      failedToReject: 'आवेदन अस्वीकार करने में विफल',
-      pleaseTryAgain: 'कृपया पुनः प्रयास करें।',
-      pending: 'लंबित',
-      accepted: 'स्वीकृत',
-      rejected: 'अस्वीकृत',
-      completed: 'पूर्ण',
-      paymentRequired: 'भुगतान आवश्यक',
-      rateWorker: 'कर्मचारी को रेट करें',
-      accept: 'स्वीकार करें',
-      reject: 'अस्वीकार करें',
-      trackJobProgress: 'नौकरी प्रगति ट्रैक करें',
-      processPayment: 'भुगतान प्रक्रिया करें',
-      viewSharedLocation: 'साझा स्थान देखें',
+      failedToLoad: 'लोड विफल',
+      applicationRejected: 'आवेदन अस्वीकृत।',
+      failedToAccept: 'स्वीकार करने में विफल।',
+      failedToReject: 'अस्वीकार करने में विफल।',
+      pleaseTryAgain: 'पुनः प्रयास करें।',
+      accept: 'स्वीकार',
+      reject: 'अस्वीकार',
+      trackJob: 'नौकरी ट्रैक करें',
+      processPayment: 'भुगतान करें',
+      viewLocation: 'स्थान देखें',
       openChat: 'चैट खोलें',
-      workerContactInfo: 'कर्मचारी संपर्क जानकारी',
+      rateWorker: 'रेटिंग दें',
+      noUserFound: 'आवेदन देखने के लिए लॉग इन करें।',
+      tabs: { all: 'सभी', pending: 'लंबित', accepted: 'सक्रिय', completed: 'पूर्ण', rejected: 'अस्वीकृत' },
+      status: {
+        pending:         '⏳ लंबित',
+        accepted:        '✅ स्वीकृत',
+        rejected:        '❌ अस्वीकृत',
+        completed:       '🏁 पूर्ण',
+        awaiting_payment:'💰 भुगतान बाकी',
+      },
+      applied: 'आवेदन',
+      workerContact: 'कर्मचारी से संपर्क',
       name: 'नाम',
       phone: 'फोन',
-      contactNote: 'कृपया नौकरी के विवरणों का समन्वय करने के लिए कर्मचारी से संपर्क करें।',
-      jobCompleted: 'नौकरी सफलतापूर्वक पूर्ण हुई',
-      viewJobDetails: 'नौकरी विवरण देखें',
-      rateWorkerNow: 'अभी कर्मचारी को रेट करें',
-      rateWorkerPerformance: 'कर्मचारी प्रदर्शन रेट करें',
+      contactNote: 'नौकरी के विवरण के लिए संपर्क करें।',
+      jobCompleted: 'नौकरी पूर्ण',
       payment: 'भुगतान',
       amount: 'राशि',
       paid: 'भुगतान हुआ',
       youRated: 'आपने रेट किया',
       stars: 'स्टार',
-      noUserFound: 'आवेदन देखने के लिए कृपया लॉग इन करें।',
     },
-  };
+  }[locale] || { ...{} };
+  // fallback merge
+  const t = { ...(tr.en || {}), ...tr };
 
-  const tr = translations[locale] || translations.en;
-
-  // ── Reload when screen is focused ────────────────────────────────────────
+  // ── Focus reload ─────────────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
-      if (!uid) {
-        setLoading(false);
-        return;
-      }
-      if (routeJobId) {
-        loadApplications(routeJobId);
-      } else if (selectedJobId) {
-        loadApplications(selectedJobId);
-      } else {
-        loadEmployerJobs();
-      }
+      if (!uid) { setLoading(false); return; }
+      if (routeJobId)       loadApplications(routeJobId);
+      else if (selectedJobId) loadApplications(selectedJobId);
+      else                  loadEmployerJobs();
     }, [uid, routeJobId, selectedJobId])
   );
 
-  // ── Also re-run when routeJobId changes (e.g. navigate with new jobId) ──
   useEffect(() => {
     if (routeJobId && routeJobId !== selectedJobId) {
       setSelectedJobId(routeJobId);
@@ -169,520 +183,613 @@ const ApplicationsScreen = ({ route, navigation }) => {
     }
   }, [routeJobId]);
 
-  // ── Load all employer jobs (for job-selector view) ────────────────────────
+  // ── Data fetchers ─────────────────────────────────────────────────────────
   const loadEmployerJobs = async () => {
     try {
       setLoading(true);
-
-      if (!uid) {
-        console.log('No user ID available');
-        setLoading(false);
-        return;
-      }
-
-      console.log('Loading employer jobs for:', uid);
+      if (!uid) { setLoading(false); return; }
       const result = await fetchEmployerJobs(uid);
-
       if (result.success) {
         const jobsWithApps = [];
         for (const job of result.jobs) {
           const appsResult = await fetchJobApplications(job.id);
-          if (appsResult.success && appsResult.applications.length > 0) {
+          if (appsResult.success && appsResult.applications.length > 0)
             jobsWithApps.push({ ...job, applications: appsResult.applications });
-          }
         }
         setJobs(jobsWithApps);
       } else {
-        console.error('Failed to fetch jobs:', result.error);
-        Alert.alert(tr.error, `${tr.failedToLoad} jobs: ${result.error}`);
+        Alert.alert(t.error, `${t.failedToLoad}: ${result.error}`);
       }
-    } catch (error) {
-      console.error('Error loading jobs:', error);
-      Alert.alert(tr.error, `${tr.failedToLoad} jobs`);
-    } finally {
-      setLoading(false);
-    }
+    } catch { Alert.alert(t.error, t.failedToLoad); }
+    finally  { setLoading(false); }
   };
 
-  // ── Load applications for a specific job ─────────────────────────────────
   const loadApplications = async (targetJobId) => {
-    if (!targetJobId) {
-      console.warn('loadApplications called without jobId — showing job selector');
-      setShowJobSelector(true);
-      await loadEmployerJobs();
-      return;
-    }
-
+    if (!targetJobId) { setShowJobSelector(true); await loadEmployerJobs(); return; }
     try {
       setLoading(true);
-      console.log('Loading applications for job:', targetJobId);
-
       const result = await fetchJobApplications(targetJobId);
       if (result.success) {
-        console.log('Found applications:', result.applications.length);
         setApplications(result.applications);
         setSelectedJobId(targetJobId);
         setShowJobSelector(false);
       } else {
-        console.error('Failed to fetch applications:', result.error);
-        Alert.alert(tr.error, result.error || `${tr.failedToLoad} applications`);
+        Alert.alert(t.error, result.error || t.failedToLoad);
       }
-    } catch (error) {
-      console.error('Error in loadApplications:', error);
-      Alert.alert(tr.error, `${tr.failedToLoad} applications`);
-    } finally {
-      setLoading(false);
-    }
+    } catch { Alert.alert(t.error, t.failedToLoad); }
+    finally  { setLoading(false); }
   };
 
-  // ── Accept application ────────────────────────────────────────────────────
-  const handleAcceptApplication = async (application) => {
-    setProcessingApplication(application.id);
+  // ── Actions ───────────────────────────────────────────────────────────────
+  const handleAccept = async (application) => {
+    setProcessingId(application.id);
     try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(tr.locationPermissionRequired, tr.locationPermissionDesc);
-        setProcessingApplication(null);
+        Alert.alert(t.locationPermissionRequired, t.locationPermissionDesc);
         return;
       }
-
-      let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      let geocode = await Location.reverseGeocodeAsync({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-      });
-
-      const address =
-        geocode.length > 0
-          ? `${geocode[0].name || ''} ${geocode[0].street || ''}, ${geocode[0].city || ''}, ${geocode[0].region || ''}`
-          : userProfile?.location || 'Work Location';
-
-      const locationData = {
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        address: address.trim(),
-        sharedAt: new Date().toISOString(),
-      };
-
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const geo = await Location.reverseGeocodeAsync({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      const address = geo.length > 0
+        ? `${geo[0].name || ''} ${geo[0].street || ''}, ${geo[0].city || ''}, ${geo[0].region || ''}`.trim()
+        : userProfile?.location || 'Work Location';
+      const locationData = { latitude: loc.coords.latitude, longitude: loc.coords.longitude, address, sharedAt: new Date().toISOString() };
       const result = await updateApplicationStatus(application.id, 'accepted', locationData);
-
       if (result.success) {
-        Alert.alert(tr.success, tr.applicationAccepted);
+        Alert.alert(t.success, t.applicationAccepted);
         await loadApplications(selectedJobId);
       } else {
-        Alert.alert(tr.error, result.error || tr.failedToAccept);
+        Alert.alert(t.error, result.error || t.failedToAccept);
       }
-    } catch (error) {
-      console.error('Error accepting application:', error);
-      Alert.alert(tr.error, `${tr.failedToAccept} ${tr.pleaseTryAgain}`);
-    } finally {
-      setProcessingApplication(null);
-    }
+    } catch { Alert.alert(t.error, `${t.failedToAccept} ${t.pleaseTryAgain}`); }
+    finally  { setProcessingId(null); }
   };
 
-  // ── Reject application ────────────────────────────────────────────────────
-  const handleRejectApplication = async (applicationId) => {
+  const handleReject = async (applicationId) => {
     try {
       const result = await updateApplicationStatus(applicationId, 'rejected');
       if (result.success) {
-        Alert.alert(tr.success, tr.applicationRejected);
+        Alert.alert(t.success, t.applicationRejected);
         await loadApplications(selectedJobId);
       } else {
-        Alert.alert(tr.error, result.error || tr.failedToReject);
+        Alert.alert(t.error, result.error || t.failedToReject);
       }
-    } catch (error) {
-      console.error('Error rejecting application:', error);
-      Alert.alert(tr.error, tr.failedToReject);
-    }
+    } catch { Alert.alert(t.error, t.failedToReject); }
   };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'accepted': return colors.success;
-      case 'rejected': return colors.error;
-      case 'completed': return colors.success;
-      case 'awaiting_payment': return colors.warning;
-      default: return colors.warning;
-    }
-  };
-
-  const getStatusText = (application) => {
-    if (application.status === 'completed')       return locale === 'hi' ? '✅ पूर्ण' : '✅ Completed';
-    if (application.status === 'awaiting_payment') return locale === 'hi' ? '💰 भुगतान आवश्यक' : '💰 Payment Required';
-    if (application.status === 'accepted')         return locale === 'hi' ? '✅ स्वीकृत' : '✅ Accepted';
-    if (application.status === 'rejected')         return locale === 'hi' ? '❌ अस्वीकृत' : '❌ Rejected';
-    return locale === 'hi' ? '⏳ लंबित' : '⏳ Pending';
-  };
-
-  const getJourneyStatusText = (journeyStatus) => {
-    switch (journeyStatus) {
-      case 'onTheWay':  return locale === 'hi' ? '🚗 रास्ते में' : '🚗 On The Way';
-      case 'reached':   return locale === 'hi' ? '📍 पहुंच गया' : '📍 Arrived';
-      case 'started':   return locale === 'hi' ? '⚡ काम कर रहा' : '⚡ Working';
-      case 'completed': return locale === 'hi' ? '✅ पूर्ण' : '✅ Completed';
-      default: return '';
-    }
-  };
-
   const formatDate = (date) => {
     if (!date) return '';
     try {
       const d = date.toDate ? date.toDate() : new Date(date);
-      return d.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN');
+      return d.toLocaleDateString(locale === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
     } catch { return ''; }
   };
 
-  // ── Navigation helpers ────────────────────────────────────────────────────
-  const handleViewLocation  = (app) => app.employerLocation && navigation.navigate('JobLocation', { application: app, isEmployer: true });
-  const handleOpenChat      = (app) => app.chatEnabled && navigation.navigate('ChatScreen', { applicationId: app.id, otherUser: app.workerId, jobTitle: app.jobTitle, otherUserName: app.workerName });
-  const handleTrackJob      = (app) => navigation.navigate('EmployerJobTracking', { applicationId: app.id });
-  const handleProcessPayment= (app) => navigation.navigate('PaymentProcessing', { applicationId: app.id });
-  const handleRateWorker    = (app) => navigation.navigate('CompleteJob', { applicationId: app.id, jobId: app.jobId, workerId: app.workerId, workerName: app.workerName });
+  const getStatusMeta = (app) => {
+    const s = app.status;
+    if (s === 'completed')        return { label: t.status?.completed || '🏁 Completed',       bg: C.tag_done,  text: '#1D4ED8' };
+    if (s === 'awaiting_payment') return { label: t.status?.awaiting_payment || '💰 Pay Required', bg: C.tag_pay,   text: '#B45309' };
+    if (s === 'accepted')         return { label: t.status?.accepted || '✅ Accepted',           bg: C.tag_acc,   text: '#15803D' };
+    if (s === 'rejected')         return { label: t.status?.rejected || '❌ Rejected',           bg: C.tag_rej,   text: '#B91C1C' };
+    return                               { label: t.status?.pending  || '⏳ Pending',            bg: C.tag_pend,  text: '#92400E' };
+  };
 
-  // ── Not logged in ─────────────────────────────────────────────────────────
+  const getJourneyLabel = (js) => {
+    switch (js) {
+      case 'onTheWay':  return '🚗 On the Way';
+      case 'reached':   return '📍 Arrived';
+      case 'started':   return '⚡ Working';
+      case 'completed': return '✅ Work Done';
+      default:          return '';
+    }
+  };
+
+  // ── Tab filtering ─────────────────────────────────────────────────────────
+  const TAB_KEYS   = ['all', 'pending', 'accepted', 'completed', 'rejected'];
+  const tabLabels  = t.tabs || { all: 'All', pending: 'Pending', accepted: 'Active', completed: 'Done', rejected: 'Rejected' };
+
+  const filterApps = (apps) => {
+    if (activeTab === 'all') return apps;
+    if (activeTab === 'accepted') return apps.filter(a => a.status === 'accepted' || a.status === 'awaiting_payment');
+    if (activeTab === 'completed') return apps.filter(a => a.status === 'completed');
+    if (activeTab === 'rejected')  return apps.filter(a => a.status === 'rejected');
+    return apps.filter(a => a.status === activeTab);
+  };
+
+  const tabCount = (key) => {
+    if (key === 'all') return applications.length;
+    if (key === 'accepted') return applications.filter(a => a.status === 'accepted' || a.status === 'awaiting_payment').length;
+    return applications.filter(a => a.status === key).length;
+  };
+
+  const visibleApps = filterApps(applications);
+
+  // ── Guard ─────────────────────────────────────────────────────────────────
   if (!loading && !uid) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="dark-content" />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← {tr.back}</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{tr.applications}</Text>
-          <View style={{ width: 60 }} />
-        </View>
-        <View style={styles.centerContent}>
-          <Text style={styles.emptyIcon}>🔒</Text>
-          <Text style={styles.emptyText}>{tr.noUserFound}</Text>
+      <View style={styles.screen}>
+        <StatusBar barStyle="dark-content" backgroundColor={C.white} />
+        <AppHeader title={t.applications} onBack={() => navigation.goBack()} left="← Back" />
+        <View style={styles.center}>
+          <Text style={styles.lockIcon}>🔒</Text>
+          <Text style={styles.emptyTitle}>{t.noUserFound}</Text>
         </View>
       </View>
     );
   }
 
-  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="dark-content" />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={styles.backButton}>← {tr.back}</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{tr.applications}</Text>
-          <View style={{ width: 60 }} />
-        </View>
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>{tr.loadingApplications}</Text>
+      <View style={styles.screen}>
+        <StatusBar barStyle="dark-content" backgroundColor={C.white} />
+        <AppHeader title={t.applications} onBack={() => navigation.goBack()} left="← Back" />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={C.primary} />
+          <Text style={styles.loadingText}>{t.loadingApplications}</Text>
         </View>
       </View>
     );
   }
 
-  // ── Main render ───────────────────────────────────────────────────────────
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+  // ── Job Selector ──────────────────────────────────────────────────────────
+  if (showJobSelector) {
+    return (
+      <View style={styles.screen}>
+        <StatusBar barStyle="dark-content" backgroundColor={C.white} />
+        <AppHeader
+          title={t.selectJob}
+          onBack={() => navigation.goBack()}
+          left={`← ${t.back}`}
+        />
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.sectionHeading}>{t.selectJobToView}</Text>
 
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => {
-            if (showJobSelector) {
-              navigation.goBack();
-            } else {
-              setShowJobSelector(true);
-              setApplications([]);
-            }
-          }}
-        >
-          <Text style={styles.backButton}>
-            {showJobSelector ? `← ${tr.back}` : `← ${tr.selectJob}`}
-          </Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {showJobSelector ? tr.selectJob : tr.applications}
-        </Text>
-        <View style={{ width: 60 }} />
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {showJobSelector ? (
-          // ── Job Selector ─────────────────────────────────────────────────
-          <View>
-            <Text style={styles.sectionTitle}>{tr.selectJobToView}</Text>
-            {jobs.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>📋</Text>
-                <Text style={styles.emptyText}>{tr.noJobsWithApplications}</Text>
-                <Text style={styles.emptySubtext}>{tr.noJobsDesc}</Text>
-              </View>
-            ) : (
-              jobs.map((job) => (
+          {jobs.length === 0 ? (
+            <EmptyState icon="📋" title={t.noJobsWithApplications} sub={t.noJobsDesc} />
+          ) : (
+            jobs.map((job) => {
+              const counts = { pending: 0, accepted: 0, completed: 0, rejected: 0 };
+              (job.applications || []).forEach(app => {
+                if (counts[app.status] !== undefined) counts[app.status]++;
+              });
+              return (
                 <TouchableOpacity
                   key={job.id}
                   style={styles.jobCard}
                   onPress={() => loadApplications(job.id)}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.jobTitle}>{job.title}</Text>
-                  <Text style={styles.jobLocation}>📍 {job.location}</Text>
-                  <Text style={styles.applicationCount}>
-                    {job.applications?.length || 0}{' '}
-                    {locale === 'hi'
-                      ? 'आवेदन'
-                      : job.applications?.length !== 1
-                      ? tr.applicationsCountPlural
-                      : tr.applicationsCount}
-                  </Text>
-                </TouchableOpacity>
-              ))
-            )}
-          </View>
-        ) : (
-          // ── Applications List ─────────────────────────────────────────────
-          <>
-            <View style={styles.statsCard}>
-              <Text style={styles.statsText}>
-                {applications.length}{' '}
-                {locale === 'hi'
-                  ? 'आवेदन'
-                  : applications.length !== 1
-                  ? tr.applicationsCountPlural
-                  : tr.applicationsCount}
-              </Text>
-              {applications.length > 0 && (
-                <Text style={styles.jobName}>
-                  {applications[0]?.jobTitle || tr.applications}
-                </Text>
-              )}
-            </View>
-
-            {applications.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>👥</Text>
-                <Text style={styles.emptyText}>{tr.noApplicationsYet}</Text>
-                <Text style={styles.emptySubtext}>{tr.noApplicationsDesc}</Text>
-              </View>
-            ) : (
-              applications.map((application) => (
-                <View key={application.id} style={styles.applicationCard}>
-                  {/* Header */}
-                  <View style={styles.applicationHeader}>
-                    <View style={styles.workerInfo}>
-                      <Text style={styles.workerName}>{application.workerName}</Text>
-                      <Text style={styles.workerPhone}>📞 {application.workerPhone}</Text>
+                  <View style={styles.jobCardLeft}>
+                    <Text style={styles.jobCardTitle}>{job.title}</Text>
+                    <Text style={styles.jobCardLocation}>📍 {job.location}</Text>
+                    <View style={styles.jobCardBadgeRow}>
+                      {counts.pending   > 0 && <Badge label={`${counts.pending} pending`}   color={C.warning} />}
+                      {counts.accepted  > 0 && <Badge label={`${counts.accepted} active`}   color={C.primary} />}
+                      {counts.completed > 0 && <Badge label={`${counts.completed} done`}    color={C.success} />}
+                      {counts.rejected  > 0 && <Badge label={`${counts.rejected} rejected`} color={C.error}   />}
                     </View>
-                    <Text style={[styles.status, { color: getStatusColor(application.status) }]}>
-                      {getStatusText(application)}
-                    </Text>
                   </View>
+                  <Text style={styles.jobCardArrow}>›</Text>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
 
-                  <Text style={styles.jobTitle}>💼 {application.jobTitle}</Text>
-                  <Text style={styles.appliedDate}>
-                    📅 {tr.applied}: {formatDate(application.appliedAt)}
-                  </Text>
+  // ── Applications List ─────────────────────────────────────────────────────
+  return (
+    <View style={styles.screen}>
+      <StatusBar barStyle="dark-content" backgroundColor={C.white} />
 
-                  {/* Journey Status */}
-                  {application.journeyStatus && application.journeyStatus !== 'accepted' && (
-                    <View style={styles.journeyStatusBadge}>
-                      <Text style={styles.journeyStatusText}>
-                        {getJourneyStatusText(application.journeyStatus)}
-                      </Text>
-                    </View>
-                  )}
+      <AppHeader
+        title={t.applications}
+        onBack={() => { setShowJobSelector(true); setApplications([]); }}
+        left={`← ${t.selectJob}`}
+      />
 
-                  {/* Payment Status */}
-                  {application.paymentStatus && (
-                    <View style={[
-                      styles.paymentStatusBadge,
-                      application.paymentStatus === 'paid' ? styles.paymentStatusPaid : styles.paymentStatusPending,
-                    ]}>
-                      <Text style={styles.paymentStatusText}>
-                        {application.paymentStatus === 'paid'
-                          ? (locale === 'hi' ? '💰 भुगतान हुआ' : '💰 Paid')
-                          : (locale === 'hi' ? '⏳ भुगतान लंबित' : '⏳ Payment Pending')}
-                      </Text>
-                    </View>
-                  )}
+      {/* Summary strip */}
+      <View style={styles.summaryStrip}>
+        <Text style={styles.summaryTitle}>
+          {applications[0]?.jobTitle || t.applications}
+        </Text>
+        <Text style={styles.summaryCount}>
+          {applications.length} {applications.length === 1 ? 'applicant' : 'applicants'}
+        </Text>
+      </View>
 
-                  {/* Pending actions */}
-                  {application.status === 'pending' && (
-                    <View style={styles.actionButtons}>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.acceptButton, processingApplication === application.id && styles.disabledButton]}
-                        onPress={() => handleAcceptApplication(application)}
-                        disabled={processingApplication === application.id}
-                      >
-                        {processingApplication === application.id ? (
-                          <ActivityIndicator size="small" color={colors.white} />
-                        ) : (
-                          <Text style={styles.actionButtonText}>✅ {tr.accept}</Text>
-                        )}
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.rejectButton]}
-                        onPress={() => handleRejectApplication(application.id)}
-                      >
-                        <Text style={styles.actionButtonText}>❌ {tr.reject}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
+      {/* Tab bar */}
+      <View style={styles.tabBarWrap}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBar}>
+          {TAB_KEYS.map(key => {
+            const count = tabCount(key);
+            const active = activeTab === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[styles.tab, active && styles.tabActive]}
+                onPress={() => setActiveTab(key)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+                  {tabLabels[key]}
+                </Text>
+                {count > 0 && (
+                  <View style={[styles.tabBubble, active && styles.tabBubbleActive]}>
+                    <Text style={[styles.tabBubbleText, active && styles.tabBubbleTextActive]}>{count}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
-                  {/* Accepted / Awaiting Payment */}
-                  {(application.status === 'accepted' || application.status === 'awaiting_payment') && (
-                    <View style={styles.acceptedActions}>
-                      <Text style={styles.acceptedTitle}>
-                        {application.status === 'accepted'
-                          ? (locale === 'hi' ? '✅ आवेदन स्वीकृत' : '✅ Application Accepted')
-                          : (locale === 'hi' ? '💰 भुगतान आवश्यक' : '💰 Payment Required')}
-                      </Text>
-
-                      <TouchableOpacity style={[styles.actionButton, styles.trackButton]} onPress={() => handleTrackJob(application)}>
-                        <Text style={styles.actionButtonText}>📊 {tr.trackJobProgress}</Text>
-                      </TouchableOpacity>
-
-                      {application.status === 'awaiting_payment' && (
-                        <TouchableOpacity style={[styles.actionButton, styles.paymentButton]} onPress={() => handleProcessPayment(application)}>
-                          <Text style={styles.actionButtonText}>💳 {tr.processPayment}</Text>
-                        </TouchableOpacity>
-                      )}
-
-                      {application.locationShared && (
-                        <TouchableOpacity style={[styles.actionButton, styles.locationButton]} onPress={() => handleViewLocation(application)}>
-                          <Text style={styles.actionButtonText}>📍 {tr.viewSharedLocation}</Text>
-                        </TouchableOpacity>
-                      )}
-
-                      {application.chatEnabled && (
-                        <TouchableOpacity style={[styles.actionButton, styles.chatButton]} onPress={() => handleOpenChat(application)}>
-                          <Text style={styles.actionButtonText}>💬 {tr.openChat}</Text>
-                        </TouchableOpacity>
-                      )}
-
-                      <View style={styles.contactInfo}>
-                        <Text style={styles.contactTitle}>{tr.workerContactInfo}:</Text>
-                        <Text style={styles.contactDetail}>👤 {tr.name}: {application.workerName}</Text>
-                        <Text style={styles.contactDetail}>📞 {tr.phone}: {application.workerPhone}</Text>
-                        <Text style={styles.contactNote}>{tr.contactNote}</Text>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Completed */}
-                  {application.status === 'completed' && (
-                    <View style={styles.completedActions}>
-                      <Text style={styles.completedTitle}>✅ {tr.jobCompleted}</Text>
-
-                      <TouchableOpacity style={[styles.actionButton, styles.trackButton]} onPress={() => handleTrackJob(application)}>
-                        <Text style={styles.actionButtonText}>📊 {tr.viewJobDetails}</Text>
-                      </TouchableOpacity>
-
-                      {!application.hasRating && (
-                        <TouchableOpacity style={[styles.actionButton, styles.rateButton]} onPress={() => handleRateWorker(application)}>
-                          <Text style={styles.actionButtonText}>⭐ {tr.rateWorker}</Text>
-                        </TouchableOpacity>
-                      )}
-
-                      {application.paymentStatus && (
-                        <View style={styles.paymentInfo}>
-                          <Text style={styles.paymentInfoText}>
-                            {tr.payment}: {application.paymentStatus === 'paid'
-                              ? (locale === 'hi' ? '✅ पूर्ण' : '✅ Completed')
-                              : (locale === 'hi' ? '⏳ लंबित' : '⏳ Pending')}
-                          </Text>
-                          {application.paymentAmount && (
-                            <Text style={styles.paymentAmount}>{tr.amount}: ₹{application.paymentAmount}</Text>
-                          )}
-                        </View>
-                      )}
-
-                      {application.hasRating && (
-                        <View style={styles.ratingInfo}>
-                          <Text style={styles.ratingInfoText}>
-                            ⭐ {tr.youRated}: {application.employerRating}/5 {tr.stars}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-
-                  {/* Rejected */}
-                  {application.status === 'rejected' && (
-                    <View style={styles.rejectedInfo}>
-                      <Text style={styles.rejectedText}>
-                        ❌ {locale === 'hi' ? 'आवेदन अस्वीकृत' : 'Application Rejected'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              ))
-            )}
-          </>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {visibleApps.length === 0 ? (
+          <EmptyState icon="👥" title={t.noApplicationsYet} sub={t.noApplicationsDesc} />
+        ) : (
+          visibleApps.map(app => (
+            <ApplicationCard
+              key={app.id}
+              app={app}
+              locale={locale}
+              t={t}
+              processingId={processingId}
+              getStatusMeta={getStatusMeta}
+              getJourneyLabel={getJourneyLabel}
+              formatDate={formatDate}
+              onAccept={() => handleAccept(app)}
+              onReject={() => handleReject(app.id)}
+              onTrack={() => navigation.navigate('EmployerJobTracking', { applicationId: app.id })}
+              onPayment={() => navigation.navigate('PaymentProcessing', { applicationId: app.id })}
+              onLocation={() => app.employerLocation && navigation.navigate('JobLocation', { application: app, isEmployer: true })}
+              onChat={() => app.chatEnabled && navigation.navigate('ChatScreen', { applicationId: app.id, otherUser: app.workerId, jobTitle: app.jobTitle, otherUserName: app.workerName })}
+              onRate={() => navigation.navigate('CompleteJob', { applicationId: app.id, jobId: app.jobId, workerId: app.workerId, workerName: app.workerName })}
+            />
+          ))
         )}
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
 };
 
+// ─── Application Card ─────────────────────────────────────────────────────────
+const ApplicationCard = ({
+  app, locale, t, processingId,
+  getStatusMeta, getJourneyLabel, formatDate,
+  onAccept, onReject, onTrack, onPayment, onLocation, onChat, onRate,
+}) => {
+  const meta   = getStatusMeta(app);
+  const jLabel = getJourneyLabel(app.journeyStatus);
+  const isPending   = app.status === 'pending';
+  const isAccepted  = app.status === 'accepted';
+  const isAwaiting  = app.status === 'awaiting_payment';
+  const isCompleted = app.status === 'completed';
+  const isRejected  = app.status === 'rejected';
+  const isProcessing = processingId === app.id;
+
+  return (
+    <View style={styles.card}>
+      {/* Card header */}
+      <View style={styles.cardHeader}>
+        <View style={styles.avatarCircle}>
+          <Text style={styles.avatarText}>{(app.workerName || '?')[0].toUpperCase()}</Text>
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.workerName}>{app.workerName}</Text>
+          <Text style={styles.workerPhone}>📞 {app.workerPhone}</Text>
+        </View>
+        <View style={[styles.statusTag, { backgroundColor: meta.bg }]}>
+          <Text style={[styles.statusTagText, { color: meta.text }]}>{meta.label}</Text>
+        </View>
+      </View>
+
+      {/* Job + date row */}
+      <View style={styles.cardMeta}>
+        <Text style={styles.cardMetaText}>💼 {app.jobTitle}</Text>
+        <Text style={styles.cardMetaText}>📅 {formatDate(app.appliedAt)}</Text>
+      </View>
+
+      {/* Journey pill */}
+      {jLabel !== '' && !isRejected && (
+        <View style={styles.journeyPill}>
+          <Text style={styles.journeyPillText}>{jLabel}</Text>
+        </View>
+      )}
+
+      {/* Payment badge */}
+      {app.paymentStatus && (
+        <View style={[styles.payBadge, app.paymentStatus === 'paid' ? styles.payBadgePaid : styles.payBadgePending]}>
+          <Text style={styles.payBadgeText}>
+            {app.paymentStatus === 'paid'
+              ? (locale === 'hi' ? '💰 भुगतान हुआ' : '💰 Paid')
+              : (locale === 'hi' ? '⏳ भुगतान बाकी' : '⏳ Payment Pending')}
+          </Text>
+        </View>
+      )}
+
+      {/* ── PENDING actions ─────────────────────────────────── */}
+      {isPending && (
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnAccept, isProcessing && styles.btnDisabled]}
+            onPress={onAccept}
+            disabled={isProcessing}
+            activeOpacity={0.85}
+          >
+            {isProcessing
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={styles.btnText}>✅ {t.accept}</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnReject]}
+            onPress={onReject}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.btnText}>❌ {t.reject}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ── ACCEPTED / AWAITING PAYMENT actions ─────────────── */}
+      {(isAccepted || isAwaiting) && (
+        <View style={styles.actionBlock}>
+          <Divider />
+          <View style={styles.actionGrid}>
+            <GridBtn icon="📊" label={t.trackJob}      onPress={onTrack}    color={C.primary} />
+            {isAwaiting && <GridBtn icon="💳" label={t.processPayment} onPress={onPayment}  color={C.success} />}
+            {app.locationShared && <GridBtn icon="📍" label={t.viewLocation}  onPress={onLocation} color="#7C3AED" />}
+            {app.chatEnabled    && <GridBtn icon="💬" label={t.openChat}      onPress={onChat}     color={C.primary} />}
+          </View>
+          <View style={styles.contactBox}>
+            <Text style={styles.contactTitle}>{t.workerContact}</Text>
+            <Text style={styles.contactRow}>👤 {t.name}: <Text style={styles.contactVal}>{app.workerName}</Text></Text>
+            <Text style={styles.contactRow}>📞 {t.phone}: <Text style={styles.contactVal}>{app.workerPhone}</Text></Text>
+            <Text style={styles.contactNote}>{t.contactNote}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── COMPLETED actions ────────────────────────────────── */}
+      {isCompleted && (
+        <View style={styles.actionBlock}>
+          <Divider />
+          <View style={styles.completedBanner}>
+            <Text style={styles.completedBannerText}>🏁 {t.jobCompleted}</Text>
+          </View>
+          <View style={styles.actionGrid}>
+            <GridBtn icon="📊" label={locale === 'hi' ? 'विवरण देखें' : 'View Details'} onPress={onTrack} color={C.primary} />
+            {!app.hasRating && <GridBtn icon="⭐" label={t.rateWorker} onPress={onRate} color={C.warning} />}
+          </View>
+          {app.paymentAmount && (
+            <View style={styles.paymentSummary}>
+              <Text style={styles.paymentSummaryLabel}>{t.amount}</Text>
+              <Text style={styles.paymentSummaryValue}>₹{app.paymentAmount}</Text>
+            </View>
+          )}
+          {app.hasRating && (
+            <View style={styles.ratingRow}>
+              <Text style={styles.ratingText}>
+                ⭐ {t.youRated} {app.employerRating}/5 {t.stars}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* ── REJECTED ─────────────────────────────────────────── */}
+      {isRejected && (
+        <View style={styles.rejectedBanner}>
+          <Text style={styles.rejectedText}>❌ {locale === 'hi' ? 'आवेदन अस्वीकृत कर दिया गया' : 'Application was rejected'}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+const AppHeader = ({ title, onBack, left }) => (
+  <View style={styles.header}>
+    <TouchableOpacity onPress={onBack} style={styles.headerBack}>
+      <Text style={styles.headerBackText}>{left}</Text>
+    </TouchableOpacity>
+    <Text style={styles.headerTitle}>{title}</Text>
+    <View style={{ width: 80 }} />
+  </View>
+);
+
+const Badge = ({ label, color }) => (
+  <View style={[styles.badge, { backgroundColor: color + '20', borderColor: color + '40' }]}>
+    <Text style={[styles.badgeText, { color }]}>{label}</Text>
+  </View>
+);
+
+const GridBtn = ({ icon, label, onPress, color }) => (
+  <TouchableOpacity style={[styles.gridBtn, { borderColor: color + '40', backgroundColor: color + '10' }]} onPress={onPress} activeOpacity={0.8}>
+    <Text style={styles.gridBtnIcon}>{icon}</Text>
+    <Text style={[styles.gridBtnText, { color }]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+const Divider = () => <View style={styles.divider} />;
+
+const EmptyState = ({ icon, title, sub }) => (
+  <View style={styles.emptyState}>
+    <Text style={styles.emptyIcon}>{icon}</Text>
+    <Text style={styles.emptyTitle}>{title}</Text>
+    <Text style={styles.emptySub}>{sub}</Text>
+  </View>
+);
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: colors.background },
-  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: 50, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.border },
-  backButton:  { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
-  content:     { flex: 1, padding: 15 },
-  centerContent:{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  loadingText: { marginTop: 12, fontSize: 16, color: colors.textSecondary },
-  sectionTitle:{ fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 15, textAlign: 'center' },
-  statsCard:   { backgroundColor: colors.primary, padding: 15, borderRadius: 12, marginBottom: 15 },
-  statsText:   { color: colors.white, fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  jobName:     { color: colors.white, fontSize: 14, textAlign: 'center', marginTop: 5, opacity: 0.9 },
-  emptyState:  { alignItems: 'center', justifyContent: 'center', padding: 40, backgroundColor: colors.white, borderRadius: 16, marginTop: 20 },
-  emptyIcon:   { fontSize: 48, marginBottom: 16, opacity: 0.5 },
-  emptyText:   { fontSize: 18, color: colors.textSecondary, textAlign: 'center', marginBottom: 8, fontWeight: '600' },
-  emptySubtext:{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', opacity: 0.7, lineHeight: 20 },
-  jobCard:     { backgroundColor: colors.white, padding: 16, borderRadius: 12, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: colors.primary, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-  jobTitle:    { fontSize: 14, color: colors.textSecondary, marginBottom: 8 },
-  jobLocation: { fontSize: 14, color: colors.textSecondary, marginBottom: 8 },
-  applicationCount: { fontSize: 14, color: colors.primary, fontWeight: '600', marginTop: 4 },
-  applicationCard:  { backgroundColor: colors.white, padding: 16, borderRadius: 12, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: colors.primary, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-  applicationHeader:{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
-  workerInfo:  { flex: 1 },
-  workerName:  { fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 4 },
-  workerPhone: { fontSize: 14, color: colors.textSecondary },
-  status:      { fontSize: 12, fontWeight: 'bold', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.background },
-  appliedDate: { fontSize: 12, color: colors.textSecondary, opacity: 0.7, marginBottom: 12 },
-  journeyStatusBadge: { backgroundColor: (colors.info || '#3b82f6') + '20', padding: 8, borderRadius: 8, marginBottom: 12, alignItems: 'center' },
-  journeyStatusText:  { fontSize: 14, fontWeight: '600', color: colors.info || '#3b82f6' },
-  paymentStatusBadge: { padding: 6, borderRadius: 6, marginBottom: 12, alignItems: 'center' },
-  paymentStatusPaid:    { backgroundColor: colors.success + '20' },
-  paymentStatusPending: { backgroundColor: colors.warning + '20' },
-  paymentStatusText:    { fontSize: 12, fontWeight: '600', color: colors.text },
-  actionButtons:  { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  actionButton:   { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center', marginHorizontal: 4, marginBottom: 8 },
-  acceptButton:   { backgroundColor: colors.success },
-  rejectButton:   { backgroundColor: colors.error },
-  trackButton:    { backgroundColor: colors.info || '#3b82f6', marginHorizontal: 0 },
-  paymentButton:  { backgroundColor: colors.warning, marginHorizontal: 0 },
-  locationButton: { backgroundColor: colors.secondary || '#7c3aed', marginHorizontal: 0 },
-  chatButton:     { backgroundColor: colors.primary, marginHorizontal: 0 },
-  rateButton:     { backgroundColor: colors.warning, marginHorizontal: 0 },
-  disabledButton: { opacity: 0.6 },
-  actionButtonText: { color: colors.white, fontSize: 14, fontWeight: '600' },
-  acceptedActions: { marginTop: 12 },
-  acceptedTitle:   { fontSize: 14, fontWeight: '600', color: colors.success, marginBottom: 12, textAlign: 'center' },
-  completedActions:{ marginTop: 12 },
-  completedTitle:  { fontSize: 14, fontWeight: '600', color: colors.success, marginBottom: 12, textAlign: 'center' },
-  contactInfo:  { marginTop: 12, padding: 12, backgroundColor: colors.background, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: colors.success },
-  contactTitle: { fontSize: 14, fontWeight: 'bold', color: colors.text, marginBottom: 8 },
-  contactDetail:{ fontSize: 14, color: colors.textSecondary, marginBottom: 4 },
-  contactNote:  { fontSize: 12, color: colors.textSecondary, fontStyle: 'italic', marginTop: 8 },
-  paymentInfo:  { marginTop: 8, padding: 8, backgroundColor: colors.background, borderRadius: 6, alignItems: 'center' },
-  paymentInfoText:{ fontSize: 12, fontWeight: '600', color: colors.text },
-  paymentAmount:  { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
-  ratingInfo:     { marginTop: 8, padding: 8, backgroundColor: colors.warning + '15', borderRadius: 6, alignItems: 'center' },
-  ratingInfoText: { fontSize: 12, fontWeight: '600', color: colors.warning },
-  rejectedInfo:   { marginTop: 12, padding: 12, backgroundColor: colors.error + '15', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: colors.error },
-  rejectedText:   { fontSize: 14, fontWeight: '600', color: colors.error, textAlign: 'center' },
+  screen:      { flex: 1, backgroundColor: C.bg },
+  scroll:      { flex: 1 },
+  scrollContent: { padding: 16 },
+  center:      { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  loadingText: { marginTop: 12, fontSize: 15, color: C.sub },
+  lockIcon:    { fontSize: 48, marginBottom: 12 },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 54 : 16,
+    paddingBottom: 14,
+    backgroundColor: C.white,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  headerBack:     { minWidth: 80 },
+  headerBackText: { color: C.primary, fontSize: 15, fontWeight: '600' },
+  headerTitle:    { fontSize: 17, fontWeight: '700', color: C.text },
+
+  // Summary strip
+  summaryStrip: {
+    flexDirection:    'row',
+    justifyContent:   'space-between',
+    alignItems:       'center',
+    backgroundColor:  C.primary,
+    paddingHorizontal: 18,
+    paddingVertical:   12,
+  },
+  summaryTitle: { color: '#fff', fontSize: 14, fontWeight: '700', flex: 1, marginRight: 8 },
+  summaryCount: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600' },
+
+  // Tab bar
+  tabBarWrap: {
+    backgroundColor: C.white,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  tabBar: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: C.bg,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    gap: 5,
+  },
+  tabActive:         { backgroundColor: C.primary, borderColor: C.primary },
+  tabLabel:          { fontSize: 13, fontWeight: '600', color: C.sub },
+  tabLabelActive:    { color: '#fff' },
+  tabBubble:         { backgroundColor: C.border, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 },
+  tabBubbleActive:   { backgroundColor: 'rgba(255,255,255,0.25)' },
+  tabBubbleText:     { fontSize: 11, fontWeight: '700', color: C.sub },
+  tabBubbleTextActive: { color: '#fff' },
+
+  // Section heading
+  sectionHeading: { fontSize: 16, fontWeight: '600', color: C.sub, textAlign: 'center', marginBottom: 18, marginTop: 4 },
+
+  // Job cards (selector)
+  jobCard: {
+    backgroundColor: C.white,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: C.primary,
+    ...SHADOW,
+  },
+  jobCardLeft:       { flex: 1 },
+  jobCardTitle:      { fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 4 },
+  jobCardLocation:   { fontSize: 13, color: C.sub, marginBottom: 8 },
+  jobCardBadgeRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  jobCardArrow:      { fontSize: 26, color: C.muted, marginLeft: 10 },
+
+  // Badge (pill)
+  badge:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+
+  // Application card
+  card: {
+    backgroundColor: C.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    ...SHADOW,
+  },
+  cardHeader:   { flexDirection: 'row', alignItems: 'center' },
+  avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primary + '20', alignItems: 'center', justifyContent: 'center' },
+  avatarText:   { fontSize: 18, fontWeight: '800', color: C.primary },
+  workerName:   { fontSize: 16, fontWeight: '700', color: C.text },
+  workerPhone:  { fontSize: 13, color: C.sub, marginTop: 2 },
+  statusTag:    { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  statusTagText:{ fontSize: 11, fontWeight: '700' },
+
+  cardMeta:     { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.border },
+  cardMetaText: { fontSize: 12, color: C.sub },
+
+  journeyPill:  { alignSelf: 'flex-start', marginTop: 10, backgroundColor: '#EFF6FF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  journeyPillText: { fontSize: 12, fontWeight: '700', color: '#2563EB' },
+
+  payBadge:        { marginTop: 8, alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  payBadgePaid:    { backgroundColor: '#D1FAE5' },
+  payBadgePending: { backgroundColor: '#FEF3C7' },
+  payBadgeText:    { fontSize: 12, fontWeight: '700', color: C.text },
+
+  // Actions
+  actionRow:    { flexDirection: 'row', gap: 10, marginTop: 14 },
+  btn:          { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+  btnAccept:    { backgroundColor: C.success },
+  btnReject:    { backgroundColor: C.error },
+  btnDisabled:  { opacity: 0.6 },
+  btnText:      { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  actionBlock: { marginTop: 4 },
+  divider:     { height: 1, backgroundColor: C.border, marginVertical: 14 },
+
+  actionGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  gridBtn: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius:   10,
+    borderWidth:    1.5,
+    gap: 6,
+  },
+  gridBtnIcon: { fontSize: 14 },
+  gridBtnText: { fontSize: 12, fontWeight: '700' },
+
+  contactBox:    { backgroundColor: C.bg, borderRadius: 10, padding: 12 },
+  contactTitle:  { fontSize: 13, fontWeight: '700', color: C.text, marginBottom: 6 },
+  contactRow:    { fontSize: 13, color: C.sub, marginBottom: 3 },
+  contactVal:    { fontWeight: '700', color: C.text },
+  contactNote:   { fontSize: 11, color: C.muted, marginTop: 6, fontStyle: 'italic' },
+
+  completedBanner:     { backgroundColor: '#D1FAE5', borderRadius: 10, padding: 10, alignItems: 'center', marginBottom: 12 },
+  completedBannerText: { fontSize: 14, fontWeight: '700', color: C.success },
+
+  paymentSummary:      { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: C.bg, borderRadius: 10, padding: 12, marginTop: 4 },
+  paymentSummaryLabel: { fontSize: 13, color: C.sub, fontWeight: '600' },
+  paymentSummaryValue: { fontSize: 16, fontWeight: '800', color: C.primary },
+
+  ratingRow:   { marginTop: 10, alignItems: 'center' },
+  ratingText:  { fontSize: 13, color: C.warning, fontWeight: '700' },
+
+  rejectedBanner: { marginTop: 12, backgroundColor: '#FEE2E2', borderRadius: 10, padding: 12, alignItems: 'center' },
+  rejectedText:   { fontSize: 13, fontWeight: '700', color: C.error },
+
+  // Empty state
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 24 },
+  emptyIcon:  { fontSize: 52, marginBottom: 16, opacity: 0.5 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: C.sub, textAlign: 'center', marginBottom: 8 },
+  emptySub:   { fontSize: 14, color: C.muted, textAlign: 'center', lineHeight: 20 },
 });
 
 export default ApplicationsScreen;

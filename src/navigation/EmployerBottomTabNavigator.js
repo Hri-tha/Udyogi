@@ -1,9 +1,11 @@
 // src/navigation/EmployerBottomTabNavigator.js
-// FIXED: notification badge count + InAppNotificationBanner properly layered
+// FIXED: safe area insets so tab bar clears the Android system nav bar / iPhone home indicator
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import EmployerHomeScreen from '../screens/employer/EmployerHomeScreen';
 import PostJobScreen from '../screens/employer/PostJobScreen';
 import ApplicationsScreen from '../screens/employer/ApplicationsScreen';
@@ -25,7 +27,7 @@ import InAppNotificationBanner from '../components/InAppNotificationBanner';
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-// Tab icon with optional badge
+// ─── Tab icon with optional badge ────────────────────────────────────────────
 const TabIcon = ({ name, focused, badgeCount }) => {
   const getIconChar = (iconName) => {
     const iconMap = {
@@ -75,7 +77,7 @@ const TabIcon = ({ name, focused, badgeCount }) => {
   );
 };
 
-// ─── Stack navigators ──────────────────────────────────────────────────────────
+// ─── Stack navigators ─────────────────────────────────────────────────────────
 function HomeStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -134,9 +136,17 @@ function NotificationsStack() {
   );
 }
 
-// ─── Main Tab Navigator (reads badge from context) ────────────────────────────
+// ─── Main Tab Navigator ───────────────────────────────────────────────────────
+// useSafeAreaInsets() returns the bottom inset (Android nav bar / iPhone home
+// indicator height). We add it to paddingBottom and height so the tab bar
+// always sits above the system navigation zone — exactly like Zomato/Swiggy do.
 function MainTabNavigator() {
   const { unreadCount } = useNotification();
+  const insets = useSafeAreaInsets();
+
+  // Base tab bar height is 60. Grow it by the bottom inset so icons are never
+  // hidden under the gesture bar or 3-button nav bar.
+  const tabBarHeight = 60 + insets.bottom;
 
   return (
     <Tab.Navigator
@@ -146,8 +156,10 @@ function MainTabNavigator() {
           backgroundColor: colors.white,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 8,
+          height: tabBarHeight,
+          // Push icons/labels up by the inset so they're centred in the
+          // visible 60 px region, not half-hidden behind the system bar.
+          paddingBottom: insets.bottom + 8,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
@@ -209,9 +221,9 @@ const TabNavigatorWithBanner = () => {
   return (
     <View style={{ flex: 1 }}>
       <MainTabNavigator />
-      {/* Job tracking banner - sits above the tab bar at the bottom */}
+      {/* Job tracking banner – sits above the tab bar at the bottom */}
       <EmployerJobTrackingBanner />
-      {/* In-app push notification banner - slides from the top */}
+      {/* In-app push notification banner – slides in from the top */}
       <InAppNotificationBanner />
     </View>
   );

@@ -1,541 +1,470 @@
-// src/screens/employer/PostJobSuccessScreen.js - HINDI VERSION
-import React, { useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+// src/screens/employer/PostJobSuccessScreen.js
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   ScrollView,
   Alert,
-  Image
+  Animated,
+  Platform,
 } from 'react-native';
 import { colors } from '../../constants/colors';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useLanguage } from '../../context/LanguageContext';
+import { LinearGradient } from 'expo-linear-gradient';
+
+// ─── Theme ──────────────────────────────────────────────────────────────────
+const PRIMARY   = '#4F63D2';
+const SUCCESS   = '#22C55E';
+const WARNING   = '#F59E0B';
+const BG        = '#F7F8FC';
+const WHITE     = '#FFFFFF';
+const BORDER    = '#ECEEF5';
+const TEXT      = '#1A1D2E';
+const MUTED     = '#8A8FA8';
+const CARD_SH   = {
+  shadowColor: '#1A1D2E',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.07,
+  shadowRadius: 8,
+  elevation: 3,
+};
 
 export default function PostJobSuccessScreen() {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const { locale, t } = useLanguage();
+  const navigation  = useNavigation();
+  const route       = useRoute();
+  const { locale }  = useLanguage();
   const { jobData, isPaid = true } = route.params || {};
 
-  // Translations for this screen
-  const translations = {
-    en: {
-      jobPostedSuccessfully: "Job Posted Successfully! 🎉",
-      jobPosted: "Job Posted!",
-      successTitle: "Success!",
-      successText: "Your job has been posted successfully.",
-      successTextDetailed: "Your job has been posted successfully and is now visible to workers.",
-      platformFeePaid: "Platform fee paid",
-      jobDetails: "Job Details",
-      jobTitle: "Job Title:",
-      description: "Description:",
-      date: "Date:",
-      time: "Time:",
-      duration: "Duration:",
-      hourlyRate: "Hourly Rate:",
-      totalPayment: "Total Payment:",
-      platformFee: "Platform Fee:",
-      paid: "(Paid)",
-      pending: "(Pending)",
-      location: "Location:",
-      whatsNext: "What's Next?",
-      waitForApplications: "Wait for Applications",
-      waitForApplicationsDesc: "Workers will see your job and start applying. You'll receive notifications when applications come in.",
-      reviewApplications: "Review Applications",
-      reviewApplicationsDesc: "Go to \"Applications\" tab to review worker profiles, ratings, and experience.",
-      selectWorker: "Select Worker",
-      selectWorkerDesc: "Choose the best worker for your job and send them a confirmation.",
-      trackJobProgress: "Track Job Progress",
-      trackJobProgressDesc: "Monitor the job status and communicate with the worker through chat.",
-      viewMyJobs: "View My Jobs",
-      postAnotherJob: "Post Another Job",
-      shareThisJob: "Share This Job",
-      shareFeature: "Share Feature",
-      shareFeatureMessage: "Job sharing feature will be added soon!",
-      proTip: "💡 Pro Tip: Check your job post regularly and respond quickly to applications to find the best workers!",
-      noDescription: "No description provided",
-      notAvailable: "N/A",
-      hours: "hours",
-      perHour: "/hour",
-      loading: "Loading...",
-      filter: "Filter",
-      sort: "Sort",
-      search: "Search",
-    },
-    hi: {
-      jobPostedSuccessfully: "नौकरी सफलतापूर्वक पोस्ट की गई! 🎉",
-      jobPosted: "नौकरी पोस्ट की गई!",
-      successTitle: "सफलता!",
-      successText: "आपकी नौकरी सफलतापूर्वक पोस्ट की गई है।",
-      successTextDetailed: "आपकी नौकरी सफलतापूर्वक पोस्ट की गई है और अब कर्मचारियों को दिखाई दे रही है।",
-      platformFeePaid: "प्लेटफॉर्म शुल्क चुकाया गया",
-      jobDetails: "नौकरी विवरण",
-      jobTitle: "नौकरी शीर्षक:",
-      description: "विवरण:",
-      date: "तारीख:",
-      time: "समय:",
-      duration: "अवधि:",
-      hourlyRate: "प्रति घंटा दर:",
-      totalPayment: "कुल भुगतान:",
-      platformFee: "प्लेटफॉर्म शुल्क:",
-      paid: "(चुकाया गया)",
-      pending: "(लंबित)",
-      location: "स्थान:",
-      whatsNext: "अगले कदम क्या हैं?",
-      waitForApplications: "आवेदनों की प्रतीक्षा करें",
-      waitForApplicationsDesc: "कर्मचारी आपकी नौकरी देखेंगे और आवेदन करना शुरू कर देंगे। आवेदन आने पर आपको सूचनाएं मिलेंगी।",
-      reviewApplications: "आवेदनों की समीक्षा करें",
-      reviewApplicationsDesc: "कर्मचारी प्रोफाइल, रेटिंग और अनुभव की समीक्षा करने के लिए \"आवेदन\" टैब पर जाएं।",
-      selectWorker: "कर्मचारी चुनें",
-      selectWorkerDesc: "अपनी नौकरी के लिए सर्वश्रेष्ठ कर्मचारी चुनें और उन्हें पुष्टि भेजें।",
-      trackJobProgress: "नौकरी प्रगति ट्रैक करें",
-      trackJobProgressDesc: "नौकरी की स्थिति की निगरानी करें और चैट के माध्यम से कर्मचारी से संवाद करें।",
-      viewMyJobs: "मेरी नौकरियां देखें",
-      postAnotherJob: "एक और नौकरी पोस्ट करें",
-      shareThisJob: "इस नौकरी को साझा करें",
-      shareFeature: "साझा करें सुविधा",
-      shareFeatureMessage: "नौकरी साझा करने की सुविधा जल्द ही जोड़ी जाएगी!",
-      proTip: "💡 पेशेवर सुझाव: सर्वश्रेष्ठ कर्मचारियों को खोजने के लिए नियमित रूप से अपनी नौकरी पोस्ट की जांच करें और आवेदनों का त्वरित जवाब दें!",
-      noDescription: "कोई विवरण प्रदान नहीं किया गया",
-      notAvailable: "उपलब्ध नहीं",
-      hours: "घंटे",
-      perHour: "/घंटा",
-      loading: "लोड हो रहा है...",
-      filter: "फ़िल्टर",
-      sort: "क्रमबद्ध करें",
-      search: "खोजें",
-    }
-  };
+  // ── Animations ──────────────────────────────────────────────────────────
+  const checkScale  = useRef(new Animated.Value(0)).current;
+  const fadeIn      = useRef(new Animated.Value(0)).current;
+  const slideUp     = useRef(new Animated.Value(40)).current;
 
-  const tr = translations[locale] || translations.en;
-
-  // Optional: Log the received data for debugging
   useEffect(() => {
-    console.log('🎉 PostJobSuccessScreen mounted with data:', jobData);
+    Animated.sequence([
+      Animated.spring(checkScale, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.timing(fadeIn,  { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(slideUp, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]),
+    ]).start();
   }, []);
 
-  const handleViewJobs = () => {
-    navigation.replace('EmployerMain', { screen: 'EmployerHome' });
-  };
+  // ── Translations ─────────────────────────────────────────────────────────
+  const tr = {
+    en: {
+      title: 'Job Posted!',
+      subtitle: 'Your job is now live and visible to workers nearby.',
+      platformFeePaid: 'Platform fee paid',
+      jobDetails: 'Job Details',
+      jobTitle: 'Job Title',
+      description: 'Description',
+      date: 'Date',
+      time: 'Time',
+      duration: 'Duration',
+      hourlyRate: 'Hourly Rate',
+      totalPayment: 'Total Payment',
+      platformFee: 'Platform Fee',
+      paid: 'Paid',
+      pending: 'Pending',
+      location: 'Location',
+      whatsNext: "What's Next?",
+      step1Title: 'Wait for Applications',
+      step1Desc: 'Workers will apply once they see your listing.',
+      step2Title: 'Review & Select',
+      step2Desc: 'Check worker profiles, ratings and experience.',
+      step3Title: 'Confirm Worker',
+      step3Desc: 'Send confirmation to your preferred worker.',
+      step4Title: 'Track Progress',
+      step4Desc: 'Monitor the job and chat with your worker.',
+      viewMyJobs: 'View My Jobs',
+      postAnotherJob: 'Post Another Job',
+      shareThisJob: 'Share This Job',
+      shareFeature: 'Share Feature',
+      shareFeatureMessage: 'Job sharing feature will be added soon!',
+      proTip: '💡 Respond quickly to applications to find the best workers!',
+      noDescription: 'No description provided',
+      notAvailable: 'N/A',
+      hours: 'hrs',
+      perHour: '/hr',
+    },
+    hi: {
+      title: 'नौकरी पोस्ट हो गई!',
+      subtitle: 'आपकी नौकरी अब लाइव है और आस-पास के कर्मचारियों को दिख रही है।',
+      platformFeePaid: 'प्लेटफॉर्म शुल्क चुकाया गया',
+      jobDetails: 'नौकरी विवरण',
+      jobTitle: 'नौकरी शीर्षक',
+      description: 'विवरण',
+      date: 'तारीख',
+      time: 'समय',
+      duration: 'अवधि',
+      hourlyRate: 'प्रति घंटा दर',
+      totalPayment: 'कुल भुगतान',
+      platformFee: 'प्लेटफॉर्म शुल्क',
+      paid: 'चुकाया गया',
+      pending: 'लंबित',
+      location: 'स्थान',
+      whatsNext: 'अगले कदम',
+      step1Title: 'आवेदनों की प्रतीक्षा करें',
+      step1Desc: 'कर्मचारी आपकी नौकरी देखकर आवेदन करेंगे।',
+      step2Title: 'समीक्षा करें और चुनें',
+      step2Desc: 'प्रोफाइल, रेटिंग और अनुभव जांचें।',
+      step3Title: 'कर्मचारी की पुष्टि करें',
+      step3Desc: 'अपने पसंदीदा कर्मचारी को पुष्टि भेजें।',
+      step4Title: 'प्रगति ट्रैक करें',
+      step4Desc: 'नौकरी की स्थिति देखें और कर्मचारी से चैट करें।',
+      viewMyJobs: 'मेरी नौकरियां देखें',
+      postAnotherJob: 'एक और नौकरी पोस्ट करें',
+      shareThisJob: 'इस नौकरी को साझा करें',
+      shareFeature: 'साझा करें',
+      shareFeatureMessage: 'नौकरी साझा करने की सुविधा जल्द आएगी!',
+      proTip: '💡 सर्वश्रेष्ठ कर्मचारी पाने के लिए आवेदनों का जल्दी जवाब दें!',
+      noDescription: 'कोई विवरण नहीं',
+      notAvailable: 'उपलब्ध नहीं',
+      hours: 'घंटे',
+      perHour: '/घंटा',
+    },
+  }[locale] || {};
 
-  const handlePostAnother = () => {
-    navigation.replace('PostJob');
-  };
+  const handleViewJobs    = () => navigation.replace('EmployerMain', { screen: 'EmployerHome' });
+  const handlePostAnother = () => navigation.replace('PostJob');
 
+  const STEPS = [
+    { num: 1, title: tr.step1Title, desc: tr.step1Desc, icon: '📬', color: PRIMARY },
+    { num: 2, title: tr.step2Title, desc: tr.step2Desc, icon: '🔍', color: '#8B5CF6' },
+    { num: 3, title: tr.step3Title, desc: tr.step3Desc, icon: '✅', color: SUCCESS },
+    { num: 4, title: tr.step4Title, desc: tr.step4Desc, icon: '📍', color: WARNING },
+  ];
+
+  // ── Minimal fallback (no jobData) ────────────────────────────────────────
   if (!jobData) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{tr.jobPosted}</Text>
-        </View>
-        <View style={styles.content}>
-          <View style={styles.successCard}>
-            <Text style={styles.successIcon}>✅</Text>
-            <Text style={styles.successTitle}>{tr.successTitle}</Text>
-            <Text style={styles.successText}>
-              {tr.successText}
-            </Text>
-          </View>
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.viewJobsButton}
-              onPress={handleViewJobs}
-            >
-              <Text style={styles.viewJobsButtonText}>{tr.viewMyJobs}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.postAnotherButton}
-              onPress={handlePostAnother}
-            >
-              <Text style={styles.postAnotherButtonText}>{tr.postAnotherJob}</Text>
-            </TouchableOpacity>
-          </View>
+      <View style={s.screen}>
+        <View style={s.fallbackCenter}>
+          <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+            <LinearGradient colors={[SUCCESS, '#16a34a']} style={s.bigCheck}>
+              <Text style={s.bigCheckText}>✓</Text>
+            </LinearGradient>
+          </Animated.View>
+          <Text style={s.fallbackTitle}>{tr.title}</Text>
+          <Text style={s.fallbackSub}>{tr.subtitle}</Text>
+          <TouchableOpacity style={s.primaryBtn} onPress={handleViewJobs} activeOpacity={0.85}>
+            <Text style={s.primaryBtnText}>{tr.viewMyJobs}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.ghostBtn} onPress={handlePostAnother} activeOpacity={0.8}>
+            <Text style={s.ghostBtnText}>{tr.postAnotherJob}</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
   }
 
+  // ── Full screen ──────────────────────────────────────────────────────────
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{tr.jobPostedSuccessfully}</Text>
-      </View>
+    <View style={s.screen}>
+      {/* ── Hero gradient header ── */}
+      <LinearGradient colors={['#4F63D2', '#6B7FE3']} style={s.hero}>
+        <Animated.View style={{ transform: [{ scale: checkScale }] }}>
+          <View style={s.checkRing}>
+            <View style={s.checkInner}>
+              <Text style={s.checkMark}>✓</Text>
+            </View>
+          </View>
+        </Animated.View>
 
-      <ScrollView style={styles.content}>
-        {/* Success Banner */}
-        <View style={styles.successCard}>
-          <Text style={styles.successIcon}>✅</Text>
-          <Text style={styles.successTitle}>{tr.jobPosted}</Text>
-          <Text style={styles.successText}>
-            {tr.successTextDetailed}
-          </Text>
-          
+        <Animated.View style={{ opacity: fadeIn, transform: [{ translateY: slideUp }] }}>
+          <Text style={s.heroTitle}>{tr.title}</Text>
+          <Text style={s.heroSub}>{tr.subtitle}</Text>
           {isPaid && (
-            <View style={styles.paymentStatus}>
-              <Text style={styles.paymentStatusIcon}>💰</Text>
-              <Text style={styles.paymentStatusText}>{tr.platformFeePaid}</Text>
+            <View style={s.feeBadge}>
+              <Text style={s.feeBadgeText}>💰 {tr.platformFeePaid}</Text>
             </View>
           )}
-        </View>
+        </Animated.View>
+      </LinearGradient>
 
-        {/* Job Details Card */}
-        <View style={styles.detailsCard}>
-          <Text style={styles.detailsTitle}>{tr.jobDetails}</Text>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{tr.jobTitle}</Text>
-            <Text style={styles.detailValue}>{jobData.title}</Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{tr.description}</Text>
-            <Text style={styles.detailValue} numberOfLines={2}>
-              {jobData.description || tr.noDescription}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{tr.date}</Text>
-            <Text style={styles.detailValue}>{jobData.jobDate}</Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{tr.time}</Text>
-            <Text style={styles.detailValue}>
-              {jobData.startTime} - {jobData.endTime}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{tr.duration}</Text>
-            <Text style={styles.detailValue}>
-              {jobData.duration || tr.notAvailable} {tr.hours}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{tr.hourlyRate}</Text>
-            <Text style={styles.detailValue}>
-              ₹{jobData.rate || tr.notAvailable}{tr.perHour}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{tr.totalPayment}</Text>
-            <Text style={styles.detailValue}>
-              ₹{jobData.totalPayment || tr.notAvailable}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{tr.platformFee}</Text>
-            <Text style={[styles.detailValue, { color: isPaid ? colors.success : colors.warning }]}>
-              ₹{jobData.platformFee || '0'} {isPaid ? tr.paid : tr.pending}
-            </Text>
-          </View>
-          
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{tr.location}</Text>
-            <Text style={styles.detailValue}>{jobData.location || tr.notAvailable}</Text>
-          </View>
-        </View>
+      <Animated.ScrollView
+        style={{ opacity: fadeIn }}
+        contentContainerStyle={s.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Job Details card ── */}
+        <View style={s.card}>
+          <Text style={s.sectionLabel}>{tr.jobDetails}</Text>
 
-        {/* Next Steps */}
-        <View style={styles.nextStepsCard}>
-          <Text style={styles.nextStepsTitle}>{tr.whatsNext}</Text>
-          
-          <View style={styles.step}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>1</Text>
-            </View>
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>{tr.waitForApplications}</Text>
-              <Text style={styles.stepText}>
-                {tr.waitForApplicationsDesc}
+          <DetailRow label={tr.jobTitle}     value={jobData.title} bold />
+          {jobData.description ? (
+            <DetailRow label={tr.description} value={jobData.description} lines={2} />
+          ) : null}
+          <DetailRow label={tr.date}         value={jobData.jobDate} />
+          <DetailRow label={tr.time}         value={`${jobData.startTime} – ${jobData.endTime}`} />
+          {jobData.duration ? (
+            <DetailRow label={tr.duration}   value={`${jobData.duration} ${tr.hours}`} />
+          ) : null}
+          <DetailRow label={tr.hourlyRate}   value={`₹${jobData.rate || tr.notAvailable}${tr.perHour}`} accent />
+          <DetailRow label={tr.totalPayment} value={`₹${jobData.totalPayment || tr.notAvailable}`} bold />
+          <View style={s.divider} />
+          <View style={s.feeRow}>
+            <Text style={s.feeLabel}>{tr.platformFee}</Text>
+            <View style={[s.feePill, isPaid ? s.feePillPaid : s.feePillPending]}>
+              <Text style={[s.feePillText, { color: isPaid ? SUCCESS : WARNING }]}>
+                ₹{jobData.platformFee || '0'} · {isPaid ? tr.paid : tr.pending}
               </Text>
             </View>
           </View>
-          
-          <View style={styles.step}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>2</Text>
-            </View>
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>{tr.reviewApplications}</Text>
-              <Text style={styles.stepText}>
-                {tr.reviewApplicationsDesc}
-              </Text>
-            </View>
-          </View>
-          
-          <View style={styles.step}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>3</Text>
-            </View>
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>{tr.selectWorker}</Text>
-              <Text style={styles.stepText}>
-                {tr.selectWorkerDesc}
-              </Text>
-            </View>
-          </View>
-          
-          <View style={styles.step}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>4</Text>
-            </View>
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>{tr.trackJobProgress}</Text>
-              <Text style={styles.stepText}>
-                {tr.trackJobProgressDesc}
-              </Text>
-            </View>
-          </View>
+          {jobData.location ? (
+            <DetailRow label={tr.location} value={jobData.location} />
+          ) : null}
         </View>
 
-        {/* Action Buttons */}
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.viewJobsButton}
-            onPress={handleViewJobs}
-          >
-            <Text style={styles.viewJobsButtonText}>{tr.viewMyJobs}</Text>
-          </TouchableOpacity>
+        {/* ── What's Next ── */}
+        <Text style={s.sectionHeader}>{tr.whatsNext}</Text>
+        {STEPS.map((step, idx) => (
+          <View key={step.num} style={s.stepCard}>
+            <View style={[s.stepIconWrap, { backgroundColor: step.color + '18' }]}>
+              <Text style={s.stepIconText}>{step.icon}</Text>
+            </View>
+            <View style={s.stepBody}>
+              <Text style={s.stepNum}>Step {step.num}</Text>
+              <Text style={s.stepTitle}>{step.title}</Text>
+              <Text style={s.stepDesc}>{step.desc}</Text>
+            </View>
+            {idx < STEPS.length - 1 && <View style={s.stepConnector} />}
+          </View>
+        ))}
 
-          <TouchableOpacity
-            style={styles.postAnotherButton}
-            onPress={handlePostAnother}
-          >
-            <Text style={styles.postAnotherButtonText}>{tr.postAnotherJob}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.shareButton}
-            onPress={() => {
-              Alert.alert(tr.shareFeature, tr.shareFeatureMessage);
-            }}
-          >
-            <Text style={styles.shareButtonText}>{tr.shareThisJob}</Text>
-          </TouchableOpacity>
+        {/* ── Tip ── */}
+        <View style={s.tipCard}>
+          <Text style={s.tipText}>{tr.proTip}</Text>
         </View>
 
-        <Text style={styles.tipText}>
-          {tr.proTip}
-        </Text>
-      </ScrollView>
+        {/* ── Actions ── */}
+        <TouchableOpacity style={s.primaryBtn} onPress={handleViewJobs} activeOpacity={0.85}>
+          <LinearGradient colors={['#4F63D2', '#6B7FE3']} style={s.primaryBtnGrad}>
+            <Text style={s.primaryBtnText}>{tr.viewMyJobs}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={s.ghostBtn} onPress={handlePostAnother} activeOpacity={0.8}>
+          <Text style={s.ghostBtnText}>{tr.postAnotherJob}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={s.shareBtn}
+          onPress={() => Alert.alert(tr.shareFeature, tr.shareFeatureMessage)}
+          activeOpacity={0.8}
+        >
+          <Text style={s.shareBtnText}>🔗 {tr.shareThisJob}</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
+      </Animated.ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    backgroundColor: colors.white,
-    paddingTop: 50,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+// ── Sub-component ────────────────────────────────────────────────────────────
+const DetailRow = ({ label, value, bold, accent, lines }) => (
+  <View style={s.detailRow}>
+    <Text style={s.detailLabel}>{label}</Text>
+    <Text
+      style={[s.detailValue, bold && s.detailBold, accent && s.detailAccent]}
+      numberOfLines={lines || 1}
+    >
+      {value}
+    </Text>
+  </View>
+);
+
+// ── Styles ───────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: BG },
+
+  // Hero
+  hero: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 36,
+    paddingHorizontal: 24,
     alignItems: 'center',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  successCard: {
-    backgroundColor: colors.success + '20',
-    padding: 24,
-    borderRadius: 16,
+  checkRing: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.success,
   },
-  successIcon: {
-    fontSize: 48,
-    marginBottom: 16,
+  checkInner: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: WHITE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.success,
+  checkMark: { fontSize: 34, color: SUCCESS },
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: WHITE,
+    textAlign: 'center',
+    letterSpacing: 0.3,
     marginBottom: 8,
   },
-  successText: {
-    fontSize: 16,
-    color: colors.text,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  paymentStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.success + '40',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginTop: 8,
-  },
-  paymentStatusIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  paymentStatusText: {
+  heroSub: {
     fontSize: 14,
-    fontWeight: '600',
-    color: colors.success,
+    color: 'rgba(255,255,255,0.82)',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 14,
   },
-  detailsCard: {
-    backgroundColor: colors.white,
+  feeBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  feeBadgeText: { color: WHITE, fontSize: 13, fontWeight: '600' },
+
+  // Fallback
+  fallbackCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+  bigCheck: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  bigCheckText: { fontSize: 44, color: WHITE, fontWeight: '800' },
+  fallbackTitle: { fontSize: 24, fontWeight: '800', color: TEXT, marginBottom: 8, textAlign: 'center' },
+  fallbackSub: { fontSize: 15, color: MUTED, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
+
+  // Content
+  content: { paddingHorizontal: 16, paddingTop: 20 },
+
+  // Card
+  card: {
+    backgroundColor: WHITE,
+    borderRadius: 18,
     padding: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: 16,
+    ...CARD_SH,
   },
-  detailsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: MUTED,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
     marginBottom: 16,
   },
+
+  // Detail rows
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    alignItems: 'center',
+    paddingVertical: 9,
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
+    borderBottomColor: BORDER,
   },
-  detailLabel: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    flex: 1,
+  detailLabel: { fontSize: 14, color: MUTED, flex: 1 },
+  detailValue: { fontSize: 14, color: TEXT, fontWeight: '500', textAlign: 'right', flex: 2 },
+  detailBold:  { fontWeight: '700', color: TEXT },
+  detailAccent:{ fontWeight: '700', color: PRIMARY },
+
+  divider: { height: 1, backgroundColor: BORDER, marginVertical: 12 },
+  feeRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  feeLabel:{ fontSize: 14, color: MUTED },
+  feePill: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5 },
+  feePillPaid:    { backgroundColor: SUCCESS + '18' },
+  feePillPending: { backgroundColor: WARNING + '18' },
+  feePillText: { fontSize: 13, fontWeight: '600' },
+
+  // Steps
+  sectionHeader: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: TEXT,
+    marginBottom: 14,
+    marginTop: 4,
   },
-  detailValue: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    flex: 1,
-    textAlign: 'right',
-  },
-  nextStepsCard: {
-    backgroundColor: colors.info + '15',
-    padding: 20,
+  stepCard: {
+    backgroundColor: WHITE,
     borderRadius: 16,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.info,
-  },
-  nextStepsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 16,
-  },
-  step: {
+    padding: 16,
     flexDirection: 'row',
-    marginBottom: 16,
+    alignItems: 'flex-start',
+    marginBottom: 10,
+    ...CARD_SH,
   },
-  stepNumber: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.info,
+  stepIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    marginTop: 2,
+    marginRight: 14,
   },
-  stepNumberText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  stepContent: {
-    flex: 1,
-  },
-  stepTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  stepText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
-  actions: {
-    marginTop: 10,
+  stepIconText: { fontSize: 22 },
+  stepBody: { flex: 1 },
+  stepNum:  { fontSize: 11, color: MUTED, fontWeight: '700', letterSpacing: 0.8, marginBottom: 2 },
+  stepTitle:{ fontSize: 15, fontWeight: '700', color: TEXT, marginBottom: 3 },
+  stepDesc: { fontSize: 13, color: MUTED, lineHeight: 18 },
+  stepConnector: { display: 'none' }, // visual connector is implicit via spacing
+
+  // Tip
+  tipCard: {
+    backgroundColor: PRIMARY + '10',
+    borderRadius: 14,
+    padding: 14,
     marginBottom: 20,
+    borderLeftWidth: 3,
+    borderLeftColor: PRIMARY,
   },
-  viewJobsButton: {
-    backgroundColor: colors.primary,
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
+  tipText: { fontSize: 13, color: PRIMARY, lineHeight: 19, fontWeight: '500' },
+
+  // Buttons
+  primaryBtn: {
+    borderRadius: 16,
+    overflow: 'hidden',
     marginBottom: 12,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    ...CARD_SH,
   },
-  viewJobsButtonText: {
-    color: colors.white,
+  primaryBtnGrad: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtnText: {
+    color: WHITE,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  postAnotherButton: {
-    backgroundColor: colors.white,
-    padding: 16,
-    borderRadius: 12,
+
+  ghostBtn: {
+    borderWidth: 1.5,
+    borderColor: PRIMARY,
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 12,
+    backgroundColor: WHITE,
+  },
+  ghostBtnText: { color: PRIMARY, fontSize: 15, fontWeight: '700' },
+
+  shareBtn: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: WHITE,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: BORDER,
   },
-  postAnotherButtonText: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  shareButton: {
-    backgroundColor: colors.secondary + '20',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.secondary,
-  },
-  shareButtonText: {
-    color: colors.secondary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  tipText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginTop: 10,
-    marginBottom: 20,
-    fontStyle: 'italic',
-  },
+  shareBtnText: { color: MUTED, fontSize: 14, fontWeight: '600' },
 });

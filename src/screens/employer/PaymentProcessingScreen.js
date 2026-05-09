@@ -1,4 +1,4 @@
-// src/screens/employer/PaymentProcessingScreen.js - HINDI VERSION
+// src/screens/employer/PaymentProcessingScreen.js - FIXED NAVIGATION
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -14,10 +14,10 @@ import {
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { colors } from '../../constants/colors';
 import { useLanguage } from '../../context/LanguageContext';
-import { 
-  processPayment, 
-  processOnlinePayment, 
-  fixCompletedJobPayment 
+import {
+  processPayment,
+  processOnlinePayment,
+  fixCompletedJobPayment
 } from '../../services/database';
 import {
   initiateRazorpayPayment,
@@ -49,6 +49,19 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   const [timeoutReached, setTimeoutReached] = useState(false);
   const [showRazorpayWebView, setShowRazorpayWebView] = useState(false);
   const [webViewPaymentData, setWebViewPaymentData] = useState(null);
+
+  // ── Helper: navigate back to tracking after successful payment ───────────
+  // FIX: Instead of going to EmployerHome, go back to the tracking screen
+  // so the employer can immediately rate the worker.
+  const navigateAfterPayment = () => {
+    // If the tracking screen is already in the stack, go back to it.
+    // Otherwise navigate directly.
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('EmployerJobTracking', { applicationId });
+    }
+  };
 
   // Translations for this screen
   const translations = {
@@ -138,6 +151,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
       pleaseTryAgain: "Please try again",
       contactSupport: "Contact support",
       support: "Support",
+      rateWorkerNow: "Rate Worker Now",
     },
     hi: {
       processPayment: "भुगतान प्रक्रिया करें",
@@ -225,6 +239,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
       pleaseTryAgain: "कृपया पुनः प्रयास करें",
       contactSupport: "सहायता से संपर्क करें",
       support: "समर्थन",
+      rateWorkerNow: "कर्मचारी को रेट करें",
     }
   };
 
@@ -244,28 +259,23 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
           const updatedApp = { id: docSnap.id, ...docSnap.data() };
           console.log('Real-time application update received:', updatedApp);
           setApplication(updatedApp);
-          
-          // Recalculate payment if work completion data changes
+
           if (updatedApp.workCompletedTimestamp) {
             const calculatedActualPayment = calculateActualPayment(updatedApp);
             setActualPayment(calculatedActualPayment);
-            
             const workDurationHours = calculateWorkDurationHours(updatedApp);
             setWorkDuration(workDurationHours);
-            
-            // Update payment amount if needed
             if (!paymentAmount || paymentAmount === '0') {
               setPaymentAmount(calculatedActualPayment.toString());
             }
           }
         }
       });
-
       return () => unsubscribe();
     }
   }, [applicationId]);
 
-  // Add timeout for loading
+  // Timeout for loading
   useEffect(() => {
     const timer = setTimeout(() => {
       if (loading) {
@@ -273,8 +283,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
         setTimeoutReached(true);
         setLoading(false);
       }
-    }, 30000); // 30 second timeout
-
+    }, 30000);
     return () => clearTimeout(timer);
   }, [loading]);
 
@@ -282,7 +291,6 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
     try {
       const available = isRazorpayAvailable();
       setRazorpayEnabled(available);
-
       if (!available) {
         console.warn('Razorpay SDK not available - online payments disabled');
       } else {
@@ -295,15 +303,11 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   };
 
   const calculatePaymentFromDuration = (durationMinutes, hourlyRate) => {
-    // CORRECTED CALCULATION: Simple per-minute calculation
     const ratePerMinute = hourlyRate / 60;
     let calculatedPayment = Math.round(durationMinutes * ratePerMinute);
-    
-    // Ensure payment is at least 1 rupee
     return Math.max(1, calculatedPayment);
   };
 
-  // Helper function to calculate work duration in hours
   const calculateWorkDurationHours = (appData) => {
     if (appData.workStartedTimestamp && appData.workCompletedTimestamp) {
       const durationMs = appData.workCompletedTimestamp - appData.workStartedTimestamp;
@@ -313,7 +317,6 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
     } else if (appData.actualWorkMinutes) {
       return appData.actualWorkMinutes / 60;
     } else if (appData.journeyStatus === 'completed' && appData.workStartedTimestamp) {
-      // Fallback: calculate from start time to current time
       const currentTime = new Date().getTime();
       const durationMs = currentTime - appData.workStartedTimestamp;
       return durationMs / (1000 * 60 * 60);
@@ -323,88 +326,28 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
 
   const calculateActualPayment = (appData) => {
     try {
-      console.log('=== CALCULATE ACTUAL PAYMENT DEBUG ===');
-      console.log('All relevant data:', {
-        workStartedTimestamp: appData.workStartedTimestamp,
-        workCompletedTimestamp: appData.workCompletedTimestamp,
-        calculatedPayment: appData.calculatedPayment,
-        actualWorkDuration: appData.actualWorkDuration,
-        actualWorkMinutes: appData.actualWorkMinutes,
-        hourlyRate: appData.hourlyRate,
-        expectedPayment: appData.expectedPayment,
-        journeyStatus: appData.journeyStatus
-      });
-
-      // Priority 1: Use calculated payment from database (set by updateWorkerJourneyStatus)
       if (appData.calculatedPayment !== undefined && appData.calculatedPayment !== null && appData.calculatedPayment > 0) {
-        console.log('Using database calculated payment:', appData.calculatedPayment);
         return appData.calculatedPayment;
       }
-
-      // Priority 2: Calculate from actual work timestamps
       if (appData.workStartedTimestamp && appData.workCompletedTimestamp) {
         const durationMs = appData.workCompletedTimestamp - appData.workStartedTimestamp;
         const durationMinutes = durationMs / (1000 * 60);
-        const durationHours = durationMinutes / 60;
-
         const hourlyRate = appData.hourlyRate || 0;
-        let calculatedPayment = calculatePaymentFromDuration(durationMinutes, hourlyRate);
-
-        console.log('Calculated from timestamps:', {
-          durationMinutes,
-          durationHours,
-          hourlyRate,
-          calculatedPayment
-        });
-
-        return calculatedPayment;
+        return calculatePaymentFromDuration(durationMinutes, hourlyRate);
       }
-
-      // Priority 3: Check if we have actualWorkDuration (set by updateWorkerJourneyStatus)
       if (appData.actualWorkDuration && appData.actualWorkDuration > 0) {
-        const durationHours = appData.actualWorkDuration;
-        const durationMinutes = durationHours * 60;
+        const durationMinutes = appData.actualWorkDuration * 60;
         const hourlyRate = appData.hourlyRate || 0;
-        let calculatedPayment = calculatePaymentFromDuration(durationMinutes, hourlyRate);
-
-        console.log('Calculated from actualWorkDuration:', {
-          durationHours,
-          durationMinutes,
-          hourlyRate,
-          calculatedPayment
-        });
-
-        return calculatedPayment;
+        return calculatePaymentFromDuration(durationMinutes, hourlyRate);
       }
-
-      // Priority 4: Check if job is marked as completed but missing completion timestamp
-      // This is a fallback for existing jobs that were completed before the fix
       if (appData.journeyStatus === 'completed' && appData.workStartedTimestamp && !appData.workCompletedTimestamp) {
-        console.log('Job completed but missing completion timestamp. Using fallback calculation.');
-
-        // Use current time as completion time for calculation
         const currentTime = new Date().getTime();
         const durationMs = currentTime - appData.workStartedTimestamp;
         const durationMinutes = durationMs / (1000 * 60);
-        const durationHours = durationMinutes / 60;
-
         const hourlyRate = appData.hourlyRate || 0;
-        let calculatedPayment = calculatePaymentFromDuration(durationMinutes, hourlyRate);
-
-        console.log('Fallback calculation (current time as completion):', {
-          durationMinutes,
-          durationHours,
-          hourlyRate,
-          calculatedPayment
-        });
-
-        return calculatedPayment;
+        return calculatePaymentFromDuration(durationMinutes, hourlyRate);
       }
-
-      // Final fallback: Expected payment
-      console.log('Using expected payment as fallback:', appData.expectedPayment);
       return appData.expectedPayment || 0;
-
     } catch (error) {
       console.error('Payment calculation error:', error);
       return appData.expectedPayment || 0;
@@ -414,79 +357,43 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   const loadData = async () => {
     try {
       setError(null);
-      console.log('=== STARTING LOAD DATA ===');
-      console.log('Application ID:', applicationId);
-
-      if (!applicationId) {
-        throw new Error('No application ID provided');
-      }
+      if (!applicationId) throw new Error('No application ID provided');
 
       const appRef = doc(db, 'applications', applicationId);
-      console.log('Firestore document reference created');
-
       const appSnap = await getDoc(appRef);
-      console.log('Firestore document fetched:', appSnap.exists());
 
       if (appSnap.exists()) {
         const appData = { id: appSnap.id, ...appSnap.data() };
-        console.log('Application data loaded successfully');
         setApplication(appData);
 
-        // Check if this job needs fixing (completed but missing completion timestamp)
         const shouldFix = appData.journeyStatus === 'completed' &&
           appData.workStartedTimestamp &&
           !appData.workCompletedTimestamp;
-
         setNeedsFix(shouldFix);
 
-        if (shouldFix) {
-          console.log('Job needs fixing - missing completion timestamp');
-        }
-
-        // Calculate actual payment based on work hours
         const calculatedActualPayment = calculateActualPayment(appData);
-        console.log('Calculated actual payment:', calculatedActualPayment);
         setActualPayment(calculatedActualPayment);
 
-        // Calculate work duration for display
         let workDurationHours = calculateWorkDurationHours(appData);
         setWorkDuration(workDurationHours);
 
-        console.log('=== FINAL PAYMENT DETAILS ===');
-        console.log('Expected Payment:', appData.expectedPayment);
-        console.log('Calculated Payment:', appData.calculatedPayment);
-        console.log('Actual Payment (calculated):', calculatedActualPayment);
-        console.log('Work Duration (hours):', workDurationHours);
-        console.log('Hourly Rate:', appData.hourlyRate);
-        console.log('Journey Status:', appData.journeyStatus);
-        console.log('Work Started:', appData.workStartedTimestamp);
-        console.log('Work Completed:', appData.workCompletedTimestamp);
-        console.log('Needs Fix:', shouldFix);
-        console.log('========================');
-
-        // Set actual payment as default amount
-        const paymentAmountValue = calculatedActualPayment > 0 ? calculatedActualPayment.toString() : (appData.expectedPayment || '').toString();
+        const paymentAmountValue = calculatedActualPayment > 0
+          ? calculatedActualPayment.toString()
+          : (appData.expectedPayment || '').toString();
         setPaymentAmount(paymentAmountValue);
-        console.log('Payment amount set to:', paymentAmountValue);
 
-        // Load job data
         const jobRef = doc(db, 'jobs', appData.jobId);
         const jobSnap = await getDoc(jobRef);
         if (jobSnap.exists()) {
           setJob({ id: jobSnap.id, ...jobSnap.data() });
-          console.log('Job data loaded successfully');
-        } else {
-          console.log('Job not found');
         }
       } else {
-        console.log('Application not found in Firestore');
         setError(tr.paymentDetailsNotFound);
       }
     } catch (error) {
       console.error('Error loading data:', error);
       setError(error.message);
     } finally {
-      console.log('Setting loading to false');
       setLoading(false);
     }
   };
@@ -505,9 +412,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
       id: 'online',
       icon: '📱',
       label: tr.onlinePayment,
-      description: razorpayEnabled
-        ? tr.onlineEnabled
-        : tr.onlineDisabled,
+      description: razorpayEnabled ? tr.onlineEnabled : tr.onlineDisabled,
       color: '#2196F3',
       gradient: ['#2196F3', '#1976D2'],
       disabled: !razorpayEnabled
@@ -533,22 +438,12 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   ];
 
   const handleProcessPayment = async () => {
-    // Use calculated payment as the default and force it
-    const amount = parseFloat(paymentAmount) || actualPayment; // Allow user override
-
+    const amount = parseFloat(paymentAmount) || actualPayment;
     if (amount <= 0 || isNaN(amount)) {
       Alert.alert(tr.invalidAmount, tr.invalidAmountDesc);
       return;
     }
 
-    console.log('Processing payment with amount:', {
-      enteredAmount: paymentAmount,
-      calculatedAmount: actualPayment,
-      workDuration: workDuration,
-      hourlyRate: application?.hourlyRate
-    });
-
-    // Show confirmation with actual work details
     Alert.alert(
       tr.confirmPayment,
       tr.confirmPaymentMessage
@@ -556,10 +451,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
         .replace('{duration}', formatDuration(workDuration)),
       [
         { text: tr.cancel, style: 'cancel' },
-        {
-          text: tr.confirmPayment,
-          onPress: () => confirmPayment(amount)
-        }
+        { text: tr.confirmPayment, onPress: () => confirmPayment(amount) }
       ]
     );
   };
@@ -567,11 +459,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   const confirmPayment = async (amount) => {
     if (selectedMethod === 'online') {
       if (!razorpayEnabled) {
-        Alert.alert(
-          tr.onlinePaymentUnavailable,
-          tr.onlinePaymentUnavailableDesc,
-          [{ text: tr.ok }]
-        );
+        Alert.alert(tr.onlinePaymentUnavailable, tr.onlinePaymentUnavailableDesc, [{ text: tr.ok }]);
         return;
       }
       await handleOnlinePayment(amount);
@@ -582,12 +470,9 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
 
   const handleOnlinePayment = async (amount) => {
     setProcessing(true);
-
     try {
-      console.log('Initiating online payment for amount:', amount);
-
       const paymentData = {
-        amount: Math.round(amount * 100), // Convert to paise for Razorpay
+        amount: Math.round(amount * 100),
         description: `Payment for job: ${job?.title || tr.job}`,
         employerName: application?.employerName || 'Employer',
         employerId: application?.employerId,
@@ -600,26 +485,14 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
 
       const razorpayResult = await initiateRazorpayPayment(paymentData);
 
-      console.log('Razorpay result:', razorpayResult);
-
       if (razorpayResult.success && razorpayResult.useWebView) {
-        // Show WebView modal
         const webViewData = {
           ...razorpayResult.webViewConfig,
           htmlContent: razorpayResult.htmlContent,
           onSuccess: async (paymentResult) => {
-            console.log('✅ Payment success received:', paymentResult);
-            
             try {
-              // Verify payment
-              console.log('🔍 Verifying payment...');
               const verificationResult = await verifyRazorpayPayment(paymentResult);
-              console.log('🔍 Verification result:', verificationResult);
-
               if (verificationResult.success && verificationResult.verified) {
-                console.log('✅ Payment verified, processing application:', applicationId);
-                
-                // Process successful online payment
                 const processResult = await processOnlinePayment(applicationId, {
                   ...paymentResult,
                   verified: true,
@@ -629,26 +502,24 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
                 });
 
                 if (processResult.success) {
+                  // ── FIX: Navigate back to tracking screen so employer can rate ──
                   Alert.alert(
                     tr.paymentSuccessful,
                     tr.paymentSuccessfulDesc.replace('{amount}', amount),
                     [{
-                      text: tr.done,
-                      onPress: () => navigation.navigate('EmployerHome')
+                      text: tr.rateWorkerNow,
+                      onPress: () => navigateAfterPayment()
                     }]
                   );
                 } else {
                   Alert.alert(
                     tr.paymentIssue,
                     tr.paymentIssueDesc.replace('{id}', paymentResult.paymentId),
-                    [{ text: tr.ok, onPress: () => navigation.goBack() }]
+                    [{ text: tr.ok, onPress: () => navigateAfterPayment() }]
                   );
                 }
               } else {
-                Alert.alert(
-                  tr.verificationFailed,
-                  verificationResult.error || 'Could not verify payment. Please contact support.'
-                );
+                Alert.alert(tr.verificationFailed, verificationResult.error || 'Could not verify payment. Please contact support.');
               }
             } catch (verificationError) {
               console.error('❌ Verification error:', verificationError);
@@ -660,8 +531,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             Alert.alert(tr.paymentFailed, error.error || tr.paymentFailed);
           }
         };
-        
-        console.log('🌐 Setting WebView data');
+
         setWebViewPaymentData(webViewData);
         setShowRazorpayWebView(true);
         setProcessing(false);
@@ -680,7 +550,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
     const methodName = paymentMethods.find(m => m.id === selectedMethod)?.label || selectedMethod;
 
     Alert.alert(
-      `${tr.confirmPayment} ${methodName}`,
+      `${tr.confirmPayment} — ${methodName}`,
       `Are you sure you want to record ${methodName.toLowerCase()} of ₹${amount} to ${application?.workerName}?\n\n⚠️ Make sure you have completed the payment before confirming.`,
       [
         { text: tr.cancel, style: 'cancel' },
@@ -696,18 +566,18 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             };
 
             const result = await processPayment(applicationId, paymentData);
-
             setProcessing(false);
 
             if (result.success) {
+              // ── FIX: Navigate back to tracking screen so employer can rate ──
               Alert.alert(
                 tr.paymentRecorded,
                 tr.paymentRecordedDesc
                   .replace('{method}', methodName)
                   .replace('{amount}', amount),
                 [{
-                  text: tr.done,
-                  onPress: () => navigation.navigate('EmployerHome')
+                  text: tr.rateWorkerNow,
+                  onPress: () => navigateAfterPayment()
                 }]
               );
             } else {
@@ -740,10 +610,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
         }
         style={styles.methodIconContainer}
       >
-        <Text style={[
-          styles.methodIcon,
-          method.disabled && styles.methodIconDisabled
-        ]}>
+        <Text style={[styles.methodIcon, method.disabled && styles.methodIconDisabled]}>
           {method.icon}
         </Text>
       </LinearGradient>
@@ -766,18 +633,14 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
         {method.id === 'online' && isSelected && !method.disabled && (
           <View style={styles.onlinePaymentInfo}>
             <Feather name="shield" size={12} color="#2196F3" />
-            <Text style={styles.onlinePaymentText}>
-              {tr.securedByRazorpay}
-            </Text>
+            <Text style={styles.onlinePaymentText}>{tr.securedByRazorpay}</Text>
           </View>
         )}
 
         {method.disabled && method.id === 'online' && (
           <View style={styles.disabledInfo}>
             <MaterialIcons name="info-outline" size={12} color={colors.textSecondary} />
-            <Text style={styles.disabledInfoText}>
-              {tr.requiresAppUpdate}
-            </Text>
+            <Text style={styles.disabledInfoText}>{tr.requiresAppUpdate}</Text>
           </View>
         )}
       </View>
@@ -796,7 +659,6 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
 
   const formatDuration = (hours) => {
     if (!hours || hours === 0) {
-      // Check if we have actual work minutes
       if (application?.actualWorkMinutes && application.actualWorkMinutes > 0) {
         const minutes = application.actualWorkMinutes;
         return `${minutes} ${locale === 'hi' ? 'मिनट' : 'minute'}${minutes !== 1 ? (locale === 'hi' ? '' : 's') : ''}`;
@@ -817,6 +679,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
     }
   };
 
+  // ── Loading ──────────────────────────────────────────────────────────────
   if (loading && !timeoutReached) {
     return (
       <View style={styles.loadingContainer}>
@@ -832,15 +695,9 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   if (timeoutReached || error) {
     return (
       <View style={styles.container}>
-        <LinearGradient
-          colors={[colors.primary, '#4A90E2']}
-          style={styles.gradientHeader}
-        >
+        <LinearGradient colors={[colors.primary, '#4A90E2']} style={styles.gradientHeader}>
           <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.headerBackButton}
-            >
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackButton}>
               <Ionicons name="chevron-back" size={24} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>{tr.processPayment}</Text>
@@ -853,10 +710,9 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             {timeoutReached ? tr.loadingTimeout : tr.errorLoadingData}
           </Text>
           <Text style={styles.errorText}>
-            {timeoutReached 
+            {timeoutReached
               ? tr.timeoutMessage
-              : error || `${tr.failed} ${tr.loadingPaymentDetails}`
-            }
+              : error || `${tr.failed} ${tr.loadingPaymentDetails}`}
           </Text>
           <View style={styles.errorButtons}>
             <TouchableOpacity
@@ -870,10 +726,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             >
               <Text style={styles.retryButtonText}>{tr.retry}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Text style={styles.backButtonText}>{tr.goBack}</Text>
             </TouchableOpacity>
           </View>
@@ -885,15 +738,9 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   if (!application || !job) {
     return (
       <View style={styles.container}>
-        <LinearGradient
-          colors={[colors.primary, '#4A90E2']}
-          style={styles.gradientHeader}
-        >
+        <LinearGradient colors={[colors.primary, '#4A90E2']} style={styles.gradientHeader}>
           <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.headerBackButton}
-            >
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackButton}>
               <Ionicons name="chevron-back" size={24} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>{tr.processPayment}</Text>
@@ -903,10 +750,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
         <View style={styles.errorContainer}>
           <MaterialIcons name="error-outline" size={64} color={colors.textSecondary} />
           <Text style={styles.errorText}>{tr.paymentDetailsNotFound}</Text>
-          <TouchableOpacity
-            style={styles.errorBackButton}
-            onPress={() => navigation.goBack()}
-          >
+          <TouchableOpacity style={styles.errorBackButton} onPress={() => navigation.goBack()}>
             <Text style={styles.errorBackButtonText}>{tr.goBack}</Text>
           </TouchableOpacity>
         </View>
@@ -937,17 +781,11 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
           webViewPaymentData?.onError(error);
         }}
       />
-      
+
       {/* Header */}
-      <LinearGradient
-        colors={[colors.primary, '#4A90E2']}
-        style={styles.gradientHeader}
-      >
+      <LinearGradient colors={[colors.primary, '#4A90E2']} style={styles.gradientHeader}>
         <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.headerBackButton}
-          >
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackButton}>
             <Ionicons name="chevron-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{tr.processPayment}</Text>
@@ -962,12 +800,8 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             <MaterialIcons name="person" size={20} color={colors.primary} />
             <Text style={styles.cardTitle}>{tr.paymentTo}</Text>
           </View>
-
           <View style={styles.workerInfo}>
-            <LinearGradient
-              colors={['#667eea', '#764ba2']}
-              style={styles.workerAvatar}
-            >
+            <LinearGradient colors={['#667eea', '#764ba2']} style={styles.workerAvatar}>
               <Text style={styles.workerAvatarText}>
                 {application.workerName?.charAt(0)?.toUpperCase() || 'W'}
               </Text>
@@ -986,7 +820,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
           </View>
         </View>
 
-        {/* Fix Job Data Card - Show only for jobs that need fixing */}
+        {/* Fix Job Data Card */}
         {needsFix && (
           <View style={styles.fixCard}>
             <View style={styles.cardHeader}>
@@ -996,13 +830,12 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             <Text style={styles.infoText}>
               {tr.fixJobDataDesc.replace('{amount}', actualPayment)}
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.fixButton}
               onPress={async () => {
                 setProcessing(true);
                 const result = await fixCompletedJobPayment(applicationId);
                 setProcessing(false);
-                
                 if (result.success) {
                   Alert.alert(
                     tr.jobDataFixed,
@@ -1023,7 +856,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Work Summary Card - UPDATED WITH ACTUAL CALCULATION */}
+        {/* Work Summary Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <MaterialIcons name="payments" size={20} color={colors.primary} />
@@ -1037,7 +870,6 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
                   .replace('{amount}', actualPayment)
                   .replace('{duration}', formatDuration(workDuration))}
               </Text>
-
               <View style={styles.paymentSummary}>
                 <View style={styles.paymentRow}>
                   <Text style={styles.paymentLabel}>{tr.workDuration}:</Text>
@@ -1062,10 +894,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
           <View style={styles.infoBox}>
             <Feather name="info" size={16} color={colors.info} />
             <Text style={styles.infoText}>
-              {hasActualWorkData
-                ? tr.paymentInfo
-                : tr.expectedPaymentInfo
-              }
+              {hasActualWorkData ? tr.paymentInfo : tr.expectedPaymentInfo}
             </Text>
           </View>
         </View>
@@ -1080,8 +909,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
           <Text style={styles.recommendedAmount}>
             {hasActualWorkData
               ? tr.recommended.replace('{amount}', actualPayment)
-              : tr.expected.replace('{amount}', application.expectedPayment || 0)
-            }
+              : tr.expected.replace('{amount}', application.expectedPayment || 0)}
           </Text>
 
           <View style={styles.amountInputContainer}>
@@ -1096,7 +924,6 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             />
           </View>
 
-          {/* Show warning if amount differs from calculated */}
           {paymentAmount && actualPayment > 0 && Math.abs(parseFloat(paymentAmount) - actualPayment) > 10 && (
             <View style={styles.warningBox}>
               <MaterialIcons name="warning" size={20} color={colors.warning} />
@@ -1109,14 +936,10 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             </View>
           )}
 
-          {/* Info about payment calculation */}
           <View style={styles.infoBox}>
             <Feather name="info" size={16} color={colors.info} />
             <Text style={styles.infoText}>
-              {hasActualWorkData
-                ? tr.paymentInfo
-                : tr.expectedPaymentInfo
-              }
+              {hasActualWorkData ? tr.paymentInfo : tr.expectedPaymentInfo}
             </Text>
           </View>
         </View>
@@ -1127,7 +950,6 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             <MaterialIcons name="payment" size={20} color={colors.primary} />
             <Text style={styles.cardTitle}>{tr.paymentMethod}</Text>
           </View>
-
           {paymentMethods.map((method) => (
             <PaymentMethodCard
               key={method.id}
@@ -1183,9 +1005,9 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
                 <MaterialIcons
                   name={
                     selectedMethod === 'online' ? "credit-card" :
-                      selectedMethod === 'cash' ? "attach-money" :
-                        selectedMethod === 'upi' ? "smartphone" :
-                          "account-balance"
+                    selectedMethod === 'cash'   ? "attach-money" :
+                    selectedMethod === 'upi'    ? "smartphone" :
+                    "account-balance"
                   }
                   size={22}
                   color="#fff"
@@ -1207,9 +1029,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
               <Feather name="shield" size={18} color="#4CAF50" />
               <Text style={styles.securityTitle}>{tr.secureOnlinePayment}</Text>
             </View>
-            <Text style={styles.securityDescription}>
-              {tr.securePaymentDesc}
-            </Text>
+            <Text style={styles.securityDescription}>{tr.securePaymentDesc}</Text>
           </View>
         )}
 
@@ -1218,9 +1038,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
           <MaterialIcons name="info" size={20} color={colors.info} />
           <View style={styles.noteContent}>
             <Text style={styles.noteTitle}>{tr.important}</Text>
-            <Text style={styles.noteText}>
-              {tr.importantNote}
-            </Text>
+            <Text style={styles.noteText}>{tr.importantNote}</Text>
           </View>
         </View>
 
@@ -1230,7 +1048,6 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   );
 };
 
-// Styles remain exactly the same
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1588,13 +1405,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: 4,
     fontStyle: 'italic',
-  },
-  amountInputDisabled: {
-    backgroundColor: '#f0f0f0',
-    borderColor: colors.border,
-  },
-  lockIcon: {
-    marginLeft: 8,
   },
   radioButton: {
     width: 24,

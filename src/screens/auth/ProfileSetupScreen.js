@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useAuth } from '../../context/AuthContext';
 import { updateUserProfile, fetchUserProfile } from '../../services/database';
@@ -77,7 +78,6 @@ export default function ProfileSetupScreen({ navigation, route }) {
         console.log('📋 Checking existing profile for uid:', uid);
 
         if (!uid) {
-          // No uid available yet — wait for AuthContext to hydrate
           console.warn('⚠️ No uid yet, skipping profile check');
           setCheckingProfile(false);
           getCurrentLocation();
@@ -179,8 +179,6 @@ export default function ProfileSetupScreen({ navigation, route }) {
     }
 
     if (!uid) {
-      // uid can be briefly undefined if AuthContext is still hydrating from
-      // AsyncStorage. Wait 1 second and retry before showing an error.
       await new Promise(resolve => setTimeout(resolve, 1000));
       const retryUid = user?.uid || userProfile?.uid;
       if (!retryUid) {
@@ -333,7 +331,7 @@ export default function ProfileSetupScreen({ navigation, route }) {
                     editable={!user?.phoneNumber}
                   />
                   {phoneNumber.length === 10 && isValidIndianPhone(phoneNumber) && (
-                    <Text style={styles.validIcon}>✅</Text>
+                    <Ionicons name="checkmark-circle" size={20} color="#34C759" style={styles.validIcon} />
                   )}
                 </View>
                 {phoneError ? (
@@ -360,7 +358,7 @@ export default function ProfileSetupScreen({ navigation, route }) {
                 <Text style={styles.label}>Location <Text style={styles.required}>*</Text></Text>
                 <View style={styles.locationRow}>
                   <View style={[styles.inputWrapper, { flex: 1, marginRight: 10 }]}>
-                    <Text style={styles.inputIcon}>📍</Text>
+                    <Ionicons name="location-outline" size={18} color="#9E9E9E" style={styles.ionIcon} />
                     <TextInput
                       style={styles.input}
                       placeholder="City, State"
@@ -369,20 +367,32 @@ export default function ProfileSetupScreen({ navigation, route }) {
                       onChangeText={setLocation}
                     />
                   </View>
+
+                  {/* Detect location button — matches Swiggy/Zomato style */}
                   <TouchableOpacity
-                    style={styles.detectBtn}
+                    style={[styles.detectBtn, locationLoading && styles.detectBtnLoading]}
                     onPress={getCurrentLocation}
-                    disabled={locationLoading}>
-                    {locationLoading
-                      ? <ActivityIndicator size="small" color="#007AFF" />
-                      : <Text style={styles.detectBtnIcon}>🎯</Text>}
+                    disabled={locationLoading}
+                    activeOpacity={0.75}>
+                    {locationLoading ? (
+                      <ActivityIndicator size="small" color="#007AFF" />
+                    ) : (
+                      <Ionicons name="navigate" size={20} color="#007AFF" />
+                    )}
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.hint}>
-                  {permissionDenied
-                    ? '⚠️ Location access denied — enter manually'
-                    : 'Tap 🎯 to detect automatically'}
-                </Text>
+
+                {permissionDenied ? (
+                  <View style={styles.hintRow}>
+                    <Ionicons name="warning-outline" size={13} color="#FF9500" />
+                    <Text style={[styles.hint, styles.hintWarning]}>Location access denied — enter manually</Text>
+                  </View>
+                ) : (
+                  <View style={styles.hintRow}>
+                    <Ionicons name="navigate-outline" size={13} color="#9E9E9E" />
+                    <Text style={styles.hint}>Tap to use your current location</Text>
+                  </View>
+                )}
               </View>
 
               {/* Worker: Skills */}
@@ -540,8 +550,10 @@ const styles = StyleSheet.create({
   inputError: { borderColor: '#FF3B30' },
 
   inputIcon:   { fontSize: 17, marginRight: 10 },
+  // For Ionicons used inline (location pin inside text field)
+  ionIcon:     { marginRight: 10 },
   phonePrefix: { fontSize: 15, fontWeight: '600', color: '#444', marginRight: 6 },
-  validIcon:   { fontSize: 16, marginLeft: 6 },
+  validIcon:   { marginLeft: 6 },
 
   input: {
     flex: 1, fontSize: 15, color: '#1A1A2E',
@@ -552,16 +564,24 @@ const styles = StyleSheet.create({
   },
 
   hint:      { fontSize: 12, color: '#9E9E9E', marginTop: 6, fontStyle: 'italic' },
+  hintWarning: { color: '#FF9500', marginLeft: 4 },
   errorText: { fontSize: 12, color: '#FF3B30', marginTop: 6, fontWeight: '500' },
 
+  hintRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+
   locationRow: { flexDirection: 'row', alignItems: 'center' },
+
+  // Detect location button — clean, icon-only, like Swiggy/Zomato
   detectBtn: {
     width: 52, height: 52, borderRadius: 14,
-    backgroundColor: '#F0F4FF',
-    borderWidth: 1.5, borderColor: '#E0E8FF',
+    backgroundColor: '#EEF3FF',
+    borderWidth: 1.5, borderColor: '#C7D7FF',
     alignItems: 'center', justifyContent: 'center',
   },
-  detectBtnIcon: { fontSize: 22 },
+  detectBtnLoading: {
+    backgroundColor: '#F7F9FF',
+    borderColor: '#E0E8FF',
+  },
 
   // ── Skill chips ──
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 8 },
