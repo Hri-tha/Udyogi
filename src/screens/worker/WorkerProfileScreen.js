@@ -23,7 +23,6 @@ import {
 const { width } = Dimensions.get('window');
 
 const WorkerProfileScreen = ({ navigation }) => {
-  // ── FIX: use resolvedUid — works in both Firebase and AsyncStorage-only mode
   const { user, userProfile, logout, resolvedUid } = useAuth();
   const { locale, changeLanguage } = useLanguage();
 
@@ -94,11 +93,10 @@ const WorkerProfileScreen = ({ navigation }) => {
 
   useEffect(() => {
     loadProfileData();
-  }, [resolvedUid]);  // re-run when resolvedUid becomes available
+  }, [resolvedUid]);
 
   const loadProfileData = async () => {
     try {
-      // ── FIX: guard on resolvedUid instead of user?.uid
       if (!resolvedUid) return;
 
       const [ratingsResult, appsResult] = await Promise.all([
@@ -158,7 +156,6 @@ const WorkerProfileScreen = ({ navigation }) => {
     }));
   };
 
-  // ── Logout ─────────────────────────────────────────────────────────────────
   const handleLogout = () => {
     Alert.alert(
       tr.logout, tr.logoutConfirm,
@@ -484,7 +481,10 @@ const WorkerProfileScreen = ({ navigation }) => {
         {/* Account Settings */}
         <Text style={styles.sectionTitle}>{tr.accountSettings}</Text>
         <View style={styles.actionsCard}>
-          <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('EditProfile')}>
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={() => navigation.navigate('EditProfile')}
+          >
             <Text style={styles.actionIcon}>✏️</Text>
             <Text style={styles.actionText}>{tr.editProfile}</Text>
             <Text style={styles.actionArrow}>›</Text>
@@ -502,7 +502,12 @@ const WorkerProfileScreen = ({ navigation }) => {
             <Text style={styles.actionArrow}>›</Text>
           </TouchableOpacity>
           <View style={styles.separator} />
-          <TouchableOpacity style={styles.actionItem}>
+
+          {/* ── UPDATED: navigates to HelpSupport screen ── */}
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={() => navigation.navigate('HelpSupport')}
+          >
             <Text style={styles.actionIcon}>❓</Text>
             <Text style={styles.actionText}>{tr.helpSupport}</Text>
             <Text style={styles.actionArrow}>›</Text>

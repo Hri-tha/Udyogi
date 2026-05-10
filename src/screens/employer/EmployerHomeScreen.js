@@ -1,5 +1,6 @@
-// src/screens/employer/EmployerHomeScreen.js - FIXED VERSION
-// SAFE AREA FIX: floating button and scroll content now respect bottom inset
+// src/screens/employer/EmployerHomeScreen.js
+// FIXED: All Alert.alert() replaced with in-app toast notifications (Swiggy/Zomato style)
+// SAFE AREA FIX: floating button and scroll content respect bottom inset
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -10,7 +11,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   StatusBar,
-  Alert,
   Dimensions,
   Modal,
   Image,
@@ -31,6 +31,7 @@ import {
 import { colors } from '../../constants/colors';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useToast } from '../../components/Toast'; // ← NEW
 
 const { width, height } = Dimensions.get('window');
 
@@ -40,6 +41,7 @@ export default function EmployerHomeScreen({ navigation }) {
   const { user, userProfile, refreshUserProfile } = useAuth();
   const { locale, t } = useLanguage();
   const insets = useSafeAreaInsets();
+  const toast = useToast(); // ← NEW
 
   const [futureJobs, setFutureJobs] = useState([]);
   const [pastJobs, setPastJobs] = useState([]);
@@ -51,7 +53,6 @@ export default function EmployerHomeScreen({ navigation }) {
   const [postingStats, setPostingStats] = useState(null);
   const [showAllJobs, setShowAllJobs] = useState(false);
 
-  // ── Resolve the real employer UID ──────────────────────────────────────────
   const resolvedUid = user?.uid || userProfile?.uid || null;
 
   const translations = {
@@ -282,7 +283,8 @@ export default function EmployerHomeScreen({ navigation }) {
         setFutureJobs(futureJobsWithApps);
         setPastJobs(pastJobsWithApps);
       } else {
-        Alert.alert(
+        // ✅ REPLACED Alert.alert → in-app toast
+        toast.error(
           locale === 'hi' ? 'त्रुटि' : 'Error',
           locale === 'hi' ? 'नौकरियां लोड करने में विफल' : 'Failed to load jobs'
         );
@@ -360,35 +362,43 @@ export default function EmployerHomeScreen({ navigation }) {
     }
   };
 
+  // ✅ REPLACED Alert.alert chain → ConfirmSheet pattern using in-app toast
+  // We use a two-step approach: first toast.warning as a confirmation prompt,
+  // then if the user taps a visible "Confirm delete" button we proceed.
+  // For simplicity and to match Swiggy/Zomato patterns, we keep a minimal
+  // confirm modal (not a system Alert) — see DeleteConfirmModal below.
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
   const handleDeletePastJob = (job) => {
-    Alert.alert(
-      `🗑️ ${locale === 'hi' ? 'पिछली नौकरी हटाएं' : 'Delete Past Job'}`,
-      `${locale === 'hi' ? 'क्या आप निश्चित रूप से हटाना चाहते हैं' : 'Are you sure you want to delete'} "${job.title}"?`,
-      [
-        { text: locale === 'hi' ? 'रद्द करें' : 'Cancel', style: 'cancel' },
-        {
-          text: locale === 'hi' ? 'हटाएं' : 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const result = await deletePastJob(job.id, resolvedUid);
-              if (result.success) {
-                Alert.alert('✅ ' + (locale === 'hi' ? 'सफल' : 'Success'), result.message);
-                loadData();
-              } else {
-                Alert.alert('❌ ' + (locale === 'hi' ? 'त्रुटि' : 'Error'), result.error);
-              }
-            } catch (error) {
-              console.error('Error deleting past job:', error);
-            }
-          }
-        }
-      ]
-    );
+    setDeleteTarget(job); // triggers the in-app confirm modal
+  };
+
+  const confirmDelete = async () => {
+    const job = deleteTarget;
+    setDeleteTarget(null);
+    try {
+      const result = await deletePastJob(job.id, resolvedUid);
+      if (result.success) {
+        // ✅ REPLACED Alert.alert → in-app toast
+        toast.success(
+          locale === 'hi' ? '✅ सफल' : '✅ Deleted',
+          result.message || (locale === 'hi' ? 'नौकरी सफलतापूर्वक हटाई गई' : 'Job deleted successfully')
+        );
+        loadData();
+      } else {
+        toast.error(
+          locale === 'hi' ? 'त्रुटि' : 'Error',
+          result.error || (locale === 'hi' ? 'नौकरी हटाने में विफल' : 'Failed to delete job')
+        );
+      }
+    } catch (error) {
+      console.error('Error deleting past job:', error);
+      toast.error('Error', error.message || 'Something went wrong');
+    }
   };
 
   const handleJobCardPress = (job) => { setSelectedJob(job); setShowJobDetails(true); };
-  const handleViewAllJobs = () => setShowAllJobs(!showAllJobs);
+  const handleViewAllJobs  = () => setShowAllJobs(!showAllJobs);
 
   const quickActions = [
     {
@@ -416,19 +426,15 @@ export default function EmployerHomeScreen({ navigation }) {
   ];
 
   const statsData = [
-    { id: '1', title: tr.upcomingJobs, value: futureJobs.length, subtitle: tr.futureDates, icon: 'event', color: colors.primary },
-    { id: '2', title: tr.totalHires, value: pastJobs.reduce((sum, job) => sum + (job.applications?.filter(app => app.status === 'completed').length || 0), 0), subtitle: tr.completedWork, icon: 'work', color: colors.success },
-    { id: '3', title: tr.applications, value: futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0), subtitle: tr.totalReceived, icon: 'description', color: colors.info },
-    { id: '4', title: tr.responseRate, value: '92%', subtitle: '24h response', icon: 'trending-up', color: colors.warning },
+    { id: '1', title: tr.upcomingJobs,  value: futureJobs.length, subtitle: tr.futureDates, icon: 'event', color: colors.primary },
+    { id: '2', title: tr.totalHires,    value: pastJobs.reduce((sum, job) => sum + (job.applications?.filter(app => app.status === 'completed').length || 0), 0), subtitle: tr.completedWork, icon: 'work', color: colors.success },
+    { id: '3', title: tr.applications,  value: futureJobs.reduce((sum, job) => sum + (job.applications?.length || 0), 0), subtitle: tr.totalReceived, icon: 'description', color: colors.info },
+    { id: '4', title: tr.responseRate,  value: '92%', subtitle: '24h response', icon: 'trending-up', color: colors.warning },
   ];
 
   const jobsToShow = showAllJobs ? futureJobs : futureJobs.slice(0, 3);
 
-  // ── The FAB bottom offset must clear the tab bar (60) + system inset.
-  // We add a small extra gap (16) so it floats visibly above the tab bar.
   const fabBottom = insets.bottom + 60 + 16;
-
-  // ── Scroll content bottom padding: enough to clear FAB + tab bar + inset
   const scrollPaddingBottom = insets.bottom + 60 + 80;
 
   if (loading && !refreshing) {
@@ -712,9 +718,7 @@ export default function EmployerHomeScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* Floating Post Job Button
-          bottom is dynamic: tab bar height (60) + system inset + gap (16)
-          so it always floats visibly above the tab bar on every device. */}
+      {/* Floating Post Job Button */}
       <TouchableOpacity
         style={[styles.floatingButton, { bottom: fabBottom }]}
         onPress={() => navigation.navigate('PostJob')}
@@ -736,6 +740,46 @@ export default function EmployerHomeScreen({ navigation }) {
           </Text>
         </GradientView>
       </TouchableOpacity>
+
+      {/* ✅ NEW: In-app Delete Confirm Modal (replaces Alert.alert chain) */}
+      <Modal
+        visible={!!deleteTarget}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setDeleteTarget(null)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmBox}>
+            <Text style={styles.confirmIcon}>🗑️</Text>
+            <Text style={styles.confirmTitle}>
+              {locale === 'hi' ? 'नौकरी हटाएं?' : 'Delete Job?'}
+            </Text>
+            <Text style={styles.confirmMsg}>
+              {locale === 'hi'
+                ? `क्या आप "${deleteTarget?.title}" हटाना चाहते हैं? यह पूर्ववत नहीं किया जा सकता।`
+                : `Are you sure you want to delete "${deleteTarget?.title}"? This cannot be undone.`}
+            </Text>
+            <View style={styles.confirmBtns}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setDeleteTarget(null)}
+              >
+                <Text style={styles.confirmCancelText}>
+                  {locale === 'hi' ? 'रद्द करें' : 'Cancel'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmDeleteBtn}
+                onPress={confirmDelete}
+              >
+                <Text style={styles.confirmDeleteText}>
+                  {locale === 'hi' ? 'हटाएं' : 'Delete'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Job Details Modal */}
       <Modal
@@ -905,7 +949,6 @@ const styles = StyleSheet.create({
   upgradeGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   upgradeButtonText: { fontSize: 14, fontWeight: '600', color: colors.white, marginLeft: 8 },
   scrollView: { flex: 1 },
-  // NOTE: paddingBottom is applied dynamically via inline style using insets
   scrollContent: { paddingTop: 20 },
   statsSection: { paddingHorizontal: 20, marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
@@ -963,10 +1006,22 @@ const styles = StyleSheet.create({
   viewMoreJobs: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: colors.white, borderRadius: 16, borderWidth: 1, borderColor: colors.borderLight, borderStyle: 'dashed' },
   viewMoreIconContainer: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary + '10', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   viewMoreText: { fontSize: 14, fontWeight: '600', color: colors.primary },
-  // bottom is set dynamically via inline style — do NOT set it here
   floatingButton: { position: 'absolute', right: 20, borderRadius: 25, overflow: 'hidden', shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
   floatingButtonGradient: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
   floatingButtonText: { color: colors.white, fontSize: 14, fontWeight: '600', marginLeft: 8 },
+
+  // ✅ NEW: In-app confirm modal styles
+  confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
+  confirmBox: { backgroundColor: '#ffffff', borderRadius: 24, padding: 28, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.2, shadowRadius: 24, elevation: 16 },
+  confirmIcon: { fontSize: 40, marginBottom: 12 },
+  confirmTitle: { fontSize: 20, fontWeight: '800', color: '#1e293b', marginBottom: 10, textAlign: 'center' },
+  confirmMsg: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  confirmBtns: { flexDirection: 'row', gap: 12, width: '100%' },
+  confirmCancelBtn: { flex: 1, backgroundColor: '#f1f5f9', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  confirmCancelText: { fontSize: 15, fontWeight: '700', color: '#64748b' },
+  confirmDeleteBtn: { flex: 1, backgroundColor: '#ef4444', borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  confirmDeleteText: { fontSize: 15, fontWeight: '700', color: '#ffffff' },
+
   jobDetailsModal: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
   jobDetailsContent: { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: height * 0.9 },
   jobDetailsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.borderLight },

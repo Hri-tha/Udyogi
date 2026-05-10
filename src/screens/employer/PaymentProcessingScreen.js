@@ -1,4 +1,4 @@
-// src/screens/employer/PaymentProcessingScreen.js - FIXED NAVIGATION
+// src/screens/employer/PaymentProcessingScreen.js - FIXED NAVIGATION + TOAST
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -28,12 +28,15 @@ import RazorpayWebView from '../../components/RazorpayWebView';
 import { db } from '../../services/firebase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
+import { useToast } from '../../components/Toast'; // ← ADDED
 
 const { width } = Dimensions.get('window');
 
 const PaymentProcessingScreen = ({ route, navigation }) => {
   const { applicationId } = route.params;
   const { locale, t } = useLanguage();
+  const toast = useToast(); // ← ADDED
+
   const [application, setApplication] = useState(null);
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -51,11 +54,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   const [webViewPaymentData, setWebViewPaymentData] = useState(null);
 
   // ── Helper: navigate back to tracking after successful payment ───────────
-  // FIX: Instead of going to EmployerHome, go back to the tracking screen
-  // so the employer can immediately rate the worker.
   const navigateAfterPayment = () => {
-    // If the tracking screen is already in the stack, go back to it.
-    // Otherwise navigate directly.
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
@@ -119,10 +118,10 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
       onlinePaymentUnavailable: "Online Payment Unavailable",
       onlinePaymentUnavailableDesc: "Online payments are currently not available. Please use cash payment.",
       paymentSuccessful: "🎉 Payment Successful",
-      paymentSuccessfulDesc: "Online payment of ₹{amount} processed successfully!\n\nThe worker has been notified.",
+      paymentSuccessfulDesc: "Online payment of ₹{amount} processed successfully! The worker has been notified.",
       done: "Done",
       paymentIssue: "Payment Issue",
-      paymentIssueDesc: "Payment was processed by Razorpay but failed to update in our system.\n\nPlease contact support with Payment ID: {id}",
+      paymentIssueDesc: "Payment was processed by Razorpay but failed to update in our system. Please contact support with Payment ID: {id}",
       verificationFailed: "Payment Verification Failed",
       paymentFailed: "Payment Failed",
       jobDataFixed: "✅ Job Data Fixed",
@@ -134,7 +133,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
       processBeforeCompleting: "Please process the payment before completing the job.",
       yesPaid: "Yes, I have paid",
       paymentRecorded: "✅ Payment Recorded",
-      paymentRecordedDesc: "{method} of ₹{amount} has been successfully recorded.\n\nThe worker has been notified and the job is marked as completed.",
+      paymentRecordedDesc: "{method} of ₹{amount} has been successfully recorded. The worker has been notified and the job is marked as completed.",
       invalidAmount: "Invalid Amount",
       invalidAmountDesc: "Cannot process payment with invalid amount",
       minutes: "minutes",
@@ -207,10 +206,10 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
       onlinePaymentUnavailable: "ऑनलाइन भुगतान उपलब्ध नहीं",
       onlinePaymentUnavailableDesc: "ऑनलाइन भुगतान वर्तमान में उपलब्ध नहीं हैं। कृपया नकद भुगतान का उपयोग करें।",
       paymentSuccessful: "🎉 भुगतान सफल",
-      paymentSuccessfulDesc: "₹{amount} का ऑनलाइन भुगतान सफलतापूर्वक प्रोसेस हुआ!\n\nकर्मचारी को सूचित कर दिया गया है।",
+      paymentSuccessfulDesc: "₹{amount} का ऑनलाइन भुगतान सफलतापूर्वक प्रोसेस हुआ! कर्मचारी को सूचित कर दिया गया है।",
       done: "हो गया",
       paymentIssue: "भुगतान समस्या",
-      paymentIssueDesc: "भुगतान Razorpay द्वारा प्रोसेस किया गया लेकिन हमारे सिस्टम में अपडेट करने में विफल रहा।\n\nकृपया पेमेंट आईडी के साथ सपोर्ट से संपर्क करें: {id}",
+      paymentIssueDesc: "भुगतान Razorpay द्वारा प्रोसेस किया गया लेकिन हमारे सिस्टम में अपडेट करने में विफल रहा। पेमेंट आईडी के साथ सपोर्ट से संपर्क करें: {id}",
       verificationFailed: "भुगतान सत्यापन विफल",
       paymentFailed: "भुगतान विफल",
       jobDataFixed: "✅ नौकरी डेटा ठीक किया गया",
@@ -222,7 +221,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
       processBeforeCompleting: "कृपया नौकरी पूर्ण करने से पहले भुगतान प्रक्रिया करें।",
       yesPaid: "हां, मैंने भुगतान कर दिया है",
       paymentRecorded: "✅ भुगतान दर्ज किया गया",
-      paymentRecordedDesc: "{method} के ₹{amount} का भुगतान सफलतापूर्वक दर्ज किया गया।\n\nकर्मचारी को सूचित कर दिया गया है और नौकरी को पूर्ण के रूप में चिह्नित किया गया है।",
+      paymentRecordedDesc: "{method} के ₹{amount} का भुगतान सफलतापूर्वक दर्ज किया गया। कर्मचारी को सूचित कर दिया गया है और नौकरी को पूर्ण के रूप में चिह्नित किया गया है।",
       invalidAmount: "अमान्य राशि",
       invalidAmountDesc: "अमान्य राशि के साथ भुगतान प्रक्रिया नहीं कर सकते",
       minutes: "मिनट",
@@ -257,9 +256,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
       const unsubscribe = onSnapshot(appRef, (docSnap) => {
         if (docSnap.exists()) {
           const updatedApp = { id: docSnap.id, ...docSnap.data() };
-          console.log('Real-time application update received:', updatedApp);
           setApplication(updatedApp);
-
           if (updatedApp.workCompletedTimestamp) {
             const calculatedActualPayment = calculateActualPayment(updatedApp);
             setActualPayment(calculatedActualPayment);
@@ -279,7 +276,6 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (loading) {
-        console.log('Loading timeout reached - 30 seconds');
         setTimeoutReached(true);
         setLoading(false);
       }
@@ -291,11 +287,6 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
     try {
       const available = isRazorpayAvailable();
       setRazorpayEnabled(available);
-      if (!available) {
-        console.warn('Razorpay SDK not available - online payments disabled');
-      } else {
-        console.log('Razorpay SDK is available');
-      }
     } catch (error) {
       console.error('Error checking Razorpay availability:', error);
       setRazorpayEnabled(false);
@@ -440,10 +431,12 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   const handleProcessPayment = async () => {
     const amount = parseFloat(paymentAmount) || actualPayment;
     if (amount <= 0 || isNaN(amount)) {
-      Alert.alert(tr.invalidAmount, tr.invalidAmountDesc);
+      // ✅ REPLACED Alert → toast
+      toast.error(tr.invalidAmount, tr.invalidAmountDesc);
       return;
     }
 
+    // Keep Alert for confirmation dialogs that need user action buttons
     Alert.alert(
       tr.confirmPayment,
       tr.confirmPaymentMessage
@@ -459,7 +452,8 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   const confirmPayment = async (amount) => {
     if (selectedMethod === 'online') {
       if (!razorpayEnabled) {
-        Alert.alert(tr.onlinePaymentUnavailable, tr.onlinePaymentUnavailableDesc, [{ text: tr.ok }]);
+        // ✅ REPLACED Alert → toast
+        toast.warning(tr.onlinePaymentUnavailable, tr.onlinePaymentUnavailableDesc);
         return;
       }
       await handleOnlinePayment(amount);
@@ -502,33 +496,37 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
                 });
 
                 if (processResult.success) {
-                  // ── FIX: Navigate back to tracking screen so employer can rate ──
-                  Alert.alert(
+                  // ✅ REPLACED Alert → toast, then navigate
+                  toast.success(
                     tr.paymentSuccessful,
-                    tr.paymentSuccessfulDesc.replace('{amount}', amount),
-                    [{
-                      text: tr.rateWorkerNow,
-                      onPress: () => navigateAfterPayment()
-                    }]
+                    tr.paymentSuccessfulDesc.replace('{amount}', amount)
                   );
+                  setTimeout(() => navigateAfterPayment(), 1200);
                 } else {
-                  Alert.alert(
+                  // ✅ REPLACED Alert → toast
+                  toast.warning(
                     tr.paymentIssue,
-                    tr.paymentIssueDesc.replace('{id}', paymentResult.paymentId),
-                    [{ text: tr.ok, onPress: () => navigateAfterPayment() }]
+                    tr.paymentIssueDesc.replace('{id}', paymentResult.paymentId)
                   );
+                  setTimeout(() => navigateAfterPayment(), 2500);
                 }
               } else {
-                Alert.alert(tr.verificationFailed, verificationResult.error || 'Could not verify payment. Please contact support.');
+                // ✅ REPLACED Alert → toast
+                toast.error(
+                  tr.verificationFailed,
+                  verificationResult.error || 'Could not verify payment. Please contact support.'
+                );
               }
             } catch (verificationError) {
               console.error('❌ Verification error:', verificationError);
-              Alert.alert(tr.error, tr.verificationFailed + '. ' + tr.pleaseTryAgain);
+              // ✅ REPLACED Alert → toast
+              toast.error(tr.error, `${tr.verificationFailed}. ${tr.pleaseTryAgain}`);
             }
           },
           onError: (error) => {
             console.error('❌ Payment error:', error);
-            Alert.alert(tr.paymentFailed, error.error || tr.paymentFailed);
+            // ✅ REPLACED Alert → toast
+            toast.error(tr.paymentFailed, error.error || tr.paymentFailed);
           }
         };
 
@@ -536,12 +534,14 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
         setShowRazorpayWebView(true);
         setProcessing(false);
       } else if (!razorpayResult.success) {
-        Alert.alert(tr.paymentFailed, razorpayResult.error || tr.paymentFailed);
+        // ✅ REPLACED Alert → toast
+        toast.error(tr.paymentFailed, razorpayResult.error || tr.paymentFailed);
         setProcessing(false);
       }
     } catch (error) {
       console.error('❌ Online payment error:', error);
-      Alert.alert(tr.error, `${tr.paymentFailed}: ${error.message}`);
+      // ✅ REPLACED Alert → toast
+      toast.error(tr.error, `${tr.paymentFailed}: ${error.message}`);
       setProcessing(false);
     }
   };
@@ -549,6 +549,7 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
   const handleOfflinePayment = async (amount) => {
     const methodName = paymentMethods.find(m => m.id === selectedMethod)?.label || selectedMethod;
 
+    // Keep Alert for confirmation dialogs that need user action buttons
     Alert.alert(
       `${tr.confirmPayment} — ${methodName}`,
       `Are you sure you want to record ${methodName.toLowerCase()} of ₹${amount} to ${application?.workerName}?\n\n⚠️ Make sure you have completed the payment before confirming.`,
@@ -569,19 +570,17 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
             setProcessing(false);
 
             if (result.success) {
-              // ── FIX: Navigate back to tracking screen so employer can rate ──
-              Alert.alert(
+              // ✅ REPLACED Alert → toast, then navigate
+              toast.success(
                 tr.paymentRecorded,
                 tr.paymentRecordedDesc
                   .replace('{method}', methodName)
-                  .replace('{amount}', amount),
-                [{
-                  text: tr.rateWorkerNow,
-                  onPress: () => navigateAfterPayment()
-                }]
+                  .replace('{amount}', amount)
               );
+              setTimeout(() => navigateAfterPayment(), 1200);
             } else {
-              Alert.alert(tr.error, result.error || tr.failed + '. ' + tr.pleaseTryAgain);
+              // ✅ REPLACED Alert → toast
+              toast.error(tr.error, result.error || `${tr.failed}. ${tr.pleaseTryAgain}`);
             }
           }
         }
@@ -771,12 +770,10 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
         }}
         paymentData={webViewPaymentData}
         onPaymentSuccess={(result) => {
-          console.log('✅ WebView payment success:', result);
           setShowRazorpayWebView(false);
           webViewPaymentData?.onSuccess(result);
         }}
         onPaymentFailed={(error) => {
-          console.log('❌ WebView payment failed:', error);
           setShowRazorpayWebView(false);
           webViewPaymentData?.onError(error);
         }}
@@ -837,15 +834,17 @@ const PaymentProcessingScreen = ({ route, navigation }) => {
                 const result = await fixCompletedJobPayment(applicationId);
                 setProcessing(false);
                 if (result.success) {
-                  Alert.alert(
+                  // ✅ REPLACED Alert → toast
+                  toast.success(
                     tr.jobDataFixed,
                     tr.jobDataFixedDesc
                       .replace('{amount}', result.calculatedPayment)
-                      .replace('{hours}', result.workDuration.toFixed(2)),
-                    [{ text: tr.ok, onPress: () => loadData() }]
+                      .replace('{hours}', result.workDuration.toFixed(2))
                   );
+                  loadData();
                 } else {
-                  Alert.alert(tr.error, result.error || tr.failed);
+                  // ✅ REPLACED Alert → toast
+                  toast.error(tr.error, result.error || tr.failed);
                 }
               }}
             >

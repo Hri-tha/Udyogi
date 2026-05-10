@@ -1,5 +1,6 @@
 // App.js – COMPLETE FIXED VERSION
-// KEY FIX: SafeAreaProvider added so useSafeAreaInsets works in navigators
+// KEY FIX 1: SafeAreaProvider added so useSafeAreaInsets works in navigators
+// KEY FIX 2: ToastProvider added so toast notifications work throughout the app
 import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -15,6 +16,7 @@ import { NotificationProvider, useNotification } from './src/context/Notificatio
 // Components
 import NotificationSync from './src/components/NotificationSync';
 import NotificationToast from './src/components/NotificationToast';
+import { ToastProvider } from './src/components/Toast';
 
 // Screens
 import LoadingScreen from './src/screens/LoadingScreen';
@@ -45,6 +47,9 @@ import SubscriptionScreen from './src/screens/employer/SubscriptionScreen';
 import JobLocationScreen from './src/screens/shared/JobLocationScreen';
 import ChatScreen from './src/screens/shared/ChatScreen';
 import NotificationsScreen from './src/screens/common/NotificationsScreen';
+
+// ── NEW: Help & Support screen (shared by both employer and worker) ────────────
+import HelpSupportScreen from './src/screens/common/HelpSupportScreen';
 
 // Navigators
 import WorkerBottomTabNavigator from './src/navigation/WorkerBottomTabNavigator';
@@ -112,26 +117,32 @@ function AppNavigator() {
         <Stack.Screen name="PlatformFeePayment" component={PlatformFeePaymentScreen} />
         <Stack.Screen name="PostJobSuccess" component={PostJobSuccessScreen} />
         <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+
+        {/* Common — accessible from both worker and employer profiles */}
+        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+
       </Stack.Navigator>
     </>
   );
 }
 
-// ─── App Wrapper (needs NotificationProvider to be an ancestor) ───────────────
+// ─── App Wrapper ──────────────────────────────────────────────────────────────
 function AppWrapper() {
   const { toastNotification, hideToast } = useNotification();
 
   return (
-    <View style={styles.container}>
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>
+    <ToastProvider>
+      <View style={styles.container}>
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
 
-      <NotificationToast
-        notification={toastNotification}
-        onHide={hideToast}
-      />
-    </View>
+        <NotificationToast
+          notification={toastNotification}
+          onHide={hideToast}
+        />
+      </View>
+    </ToastProvider>
   );
 }
 
@@ -164,8 +175,6 @@ export default function App() {
   }
 
   return (
-    // SafeAreaProvider MUST be the outermost wrapper so useSafeAreaInsets
-    // works anywhere in the tree (including inside the tab navigators).
     <SafeAreaProvider>
       <LanguageProvider>
         <AuthProvider>

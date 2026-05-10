@@ -19,7 +19,6 @@ import { updateEmployerProfile, fetchEmployerJobs } from '../../services/databas
 import { colors } from '../../constants/colors';
 
 export default function EmployerProfileScreen({ navigation }) {
-  // ✅ logout comes from context — no more signOut from auth.js
   const { user, userProfile, refreshUserProfile, logout } = useAuth();
   const { locale, changeLanguage } = useLanguage();
   const [loading, setLoading]           = useState(false);
@@ -243,7 +242,6 @@ export default function EmployerProfileScreen({ navigation }) {
     setEditMode(false);
   };
 
-  // ✅ FIXED: uses context logout + navigation.reset
   const handleLogout = () => {
     Alert.alert(
       tr.logout,
@@ -259,7 +257,6 @@ export default function EmployerProfileScreen({ navigation }) {
             } catch (e) {
               console.warn('logout error (non-fatal):', e.message);
             } finally {
-              // Always navigate to Welcome regardless of logout errors
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'Welcome' }],
@@ -567,11 +564,16 @@ export default function EmployerProfileScreen({ navigation }) {
             <Text style={styles.menuText}>🔄 {tr.subscription}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.menuItem}>
+
+          {/* ── UPDATED: navigates to HelpSupport screen ── */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('HelpSupport')}
+          >
             <Text style={styles.menuText}>❓ {tr.helpSupport}</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
-          {/* ✅ Logout button calls handleLogout which uses context logout + navigation.reset */}
+
           <TouchableOpacity
             style={[styles.menuItem, styles.logoutItem]}
             onPress={handleLogout}
@@ -725,7 +727,6 @@ const styles = StyleSheet.create({
   editButtonText:  { color: colors.primary, fontSize: 16, fontWeight: '600' },
   scrollContent:   { flex: 1, padding: 15 },
 
-  // Profile card
   profileCard:     { backgroundColor: colors.white, padding: 20, borderRadius: 16, marginBottom: 20, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
   avatarSection:   { position: 'relative', marginBottom: 15 },
   avatar:          { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' },
@@ -745,17 +746,14 @@ const styles = StyleSheet.create({
   statLabel:       { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
   statDivider:     { width: 1, backgroundColor: colors.border },
 
-  // Section
   sectionTitle:    { fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 12, marginTop: 8 },
 
-  // Stats grid
   statsGrid:       { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
   statCard:        { backgroundColor: colors.white, padding: 16, borderRadius: 12, flex: 1, minWidth: '47%', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   statValue:       { fontSize: 24, fontWeight: 'bold', marginBottom: 4 },
   statTitle:       { fontSize: 14, fontWeight: '600', color: colors.text, textAlign: 'center' },
   statSubtitle:    { fontSize: 11, color: colors.textSecondary, textAlign: 'center', marginTop: 2 },
 
-  // Info card
   infoCard:           { backgroundColor: colors.white, padding: 20, borderRadius: 12, marginBottom: 20 },
   infoRow:            { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border + '50' },
   infoIcon:           { fontSize: 20, marginRight: 12, width: 24 },
@@ -766,7 +764,6 @@ const styles = StyleSheet.create({
   descriptionLabel:   { fontSize: 14, color: colors.textSecondary, marginBottom: 8, fontWeight: '600' },
   descriptionText:    { fontSize: 14, color: colors.text, lineHeight: 20 },
 
-  // Settings
   settingsCard:        { backgroundColor: colors.white, borderRadius: 12, marginBottom: 20, overflow: 'hidden' },
   settingRow:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border + '50' },
   settingInfo:         { flex: 1 },
@@ -776,7 +773,6 @@ const styles = StyleSheet.create({
   currentLanguageText: { fontSize: 14, color: colors.primary, fontWeight: '600', marginRight: 8 },
   languageArrow:       { fontSize: 16, color: colors.textSecondary },
 
-  // Action buttons
   actionButtons:      { flexDirection: 'row', gap: 12, marginBottom: 20 },
   actionButton:       { flex: 1, padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   primaryButton:      { backgroundColor: colors.primary },
@@ -788,7 +784,6 @@ const styles = StyleSheet.create({
   saveButtonText:     { color: colors.white, fontSize: 16, fontWeight: '600' },
   cancelButtonText:   { color: colors.error, fontSize: 16, fontWeight: '600' },
 
-  // Account
   accountCard: { backgroundColor: colors.white, borderRadius: 12, marginBottom: 20, overflow: 'hidden' },
   menuItem:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border + '50' },
   menuText:    { fontSize: 16, color: colors.text },
@@ -796,11 +791,9 @@ const styles = StyleSheet.create({
   logoutItem:  { borderBottomWidth: 0 },
   logoutText:  { fontSize: 16, color: colors.error, fontWeight: '600' },
 
-  // Footer
   footer:     { alignItems: 'center', paddingVertical: 20 },
   footerText: { fontSize: 12, color: colors.textSecondary },
 
-  // Edit form
   editForm:    { width: '100%' },
   input:       { backgroundColor: colors.background, padding: 12, borderRadius: 8, fontSize: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
   textArea:    { height: 100, textAlignVertical: 'top' },
@@ -811,7 +804,6 @@ const styles = StyleSheet.create({
   pickerText:  { fontSize: 16, color: colors.text },
   pickerArrow: { color: colors.textSecondary, fontSize: 12 },
 
-  // Modals
   modalContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   modalContent:   { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '60%' },
   modalTitle:     { fontSize: 18, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
@@ -821,7 +813,6 @@ const styles = StyleSheet.create({
   modalClose:     { padding: 15, marginTop: 10, alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border },
   modalCloseText: { color: colors.error, fontSize: 16, fontWeight: '600' },
 
-  // Language modal
   languageOptionContent: { flexDirection: 'row', alignItems: 'center' },
   languageFlag:          { fontSize: 24, marginRight: 12 },
   languageOptionTexts:   { flex: 1 },

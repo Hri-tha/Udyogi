@@ -1,12 +1,12 @@
 // src/screens/worker/WorkerHomeScreen.js
+// FIXED: All Alert.alert() replaced with in-app toast notifications (Swiggy/Zomato style)
 // FIX 1: getDefaultAvatar() uses real user name instead of hardcoded "Worker"
 // FIX 2: BackHandler blocks Android back-press ONLY when this screen is focused
 //         AND the navigation stack has no screens behind it (i.e. truly at root).
-//         This prevents accidental app exit but still allows normal in-app back navigation.
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  ActivityIndicator, RefreshControl, StatusBar, Alert,
+  ActivityIndicator, RefreshControl, StatusBar,
   Dimensions, Modal, Image, Platform, TextInput, BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,10 +16,10 @@ import { useLanguage } from '../../context/LanguageContext';
 import { colors } from '../../constants/colors';
 import { fetchFutureJobs, fetchWorkerApplications, createApplication, createNotification } from '../../services/database';
 import { useFocusEffect } from '@react-navigation/native';
+import { useToast } from '../../components/Toast'; // ← NEW
 
 const { width, height } = Dimensions.get('window');
 
-// FIX: Dynamic avatar using the actual user's name for correct initials
 const getDefaultAvatar = (name) => {
   const encoded = name ? encodeURIComponent(name.trim()) : 'U';
   return `https://ui-avatars.com/api/?name=${encoded}&background=1a56db&color=fff&size=128`;
@@ -41,7 +41,7 @@ const translations = {
     moreJobs: 'more jobs', browseAllJobs: '🔍 Browse All Jobs',
     noAvailableJobs: 'No Jobs Right Now', noJobsDesc: 'New jobs will show here.\nCheck back soon!',
     loading: 'Loading...', applyTitle: 'Apply for Job?', applyMsg: 'Do you want to apply for',
-    cancel: 'Cancel', apply: 'Apply', success: '✅ Success', applySuccess: 'Application submitted!',
+    cancel: 'Cancel', apply: 'Apply', success: '✅ Application Sent!', applySuccess: 'Application submitted successfully!',
     error: '❌ Error', applyError: 'Could not apply. Try again.',
     jobDetails: 'Job Details', description: 'About this Job', requirements: 'Requirements',
     location: 'Location', date: 'Date & Time', close: 'Close', perHour: '/hr', hours: 'hours',
@@ -68,7 +68,7 @@ const translations = {
     noAvailableJobs: 'अभी कोई नौकरी नहीं', noJobsDesc: 'नई नौकरियां यहाँ दिखेंगी।\nबाद में देखें!',
     loading: 'लोड हो रहा है...', applyTitle: 'आवेदन करें?',
     applyMsg: 'क्या आप इस नौकरी के लिए आवेदन करना चाहते हैं?',
-    cancel: 'रद्द करें', apply: 'आवेदन करें', success: '✅ सफल', applySuccess: 'आवेदन हो गया!',
+    cancel: 'रद्द करें', apply: 'आवेदन करें', success: '✅ आवेदन हो गया!', applySuccess: 'आवेदन सफलतापूर्वक हो गया!',
     error: '❌ त्रुटि', applyError: 'आवेदन नहीं हुआ। फिर कोशिश करें।',
     jobDetails: 'नौकरी विवरण', description: 'नौकरी के बारे में', requirements: 'आवश्यकताएं',
     location: 'जगह', date: 'तारीख और समय', close: 'बंद करें', perHour: '/घंटा', hours: 'घंटे',
@@ -109,6 +109,7 @@ export default function WorkerHomeScreen({ navigation }) {
   const { currentLocation, setCurrentLocation } = useJob();
   const { locale } = useLanguage();
   const insets = useSafeAreaInsets();
+  const toast  = useToast(); // ← NEW
 
   const [availableJobs, setAvailableJobs]   = useState([]);
   const [myApplications, setMyApplications] = useState([]);
@@ -123,28 +124,18 @@ export default function WorkerHomeScreen({ navigation }) {
   const [showLocationFilter, setShowLocationFilter]     = useState(false);
   const [locationSearch, setLocationSearch]             = useState('');
   const [activeLocationFilter, setActiveLocationFilter] = useState('');
+  // ✅ NEW: In-app apply confirm modal state (replaces Alert.alert)
+  const [applyTarget, setApplyTarget] = useState(null);
 
   const tr = translations[lang] || translations.en;
 
-  // FIX: Block Android hardware back ONLY when this is the root/home screen
-  // (i.e. the user has no screens to go back to in the stack). This prevents
-  // the app from doing anything unexpected when the user presses back on the
-  // home tab, without interfering with back navigation on deeper screens.
+  // ── BackHandler ────────────────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        // canGoBack() returns false when we are at the root of the stack,
-        // meaning pressing back would exit the app. We simply block that here
-        // so the user stays on the home screen (standard behavior for most apps).
-        // When canGoBack() is true (e.g. user came from a push notification deep
-        // link into a nested screen), we return false so React Navigation handles
-        // it normally.
-        if (!navigation.canGoBack()) {
-          return true; // block — we're at the root, nothing to go back to
-        }
-        return false; // allow normal back navigation
+        if (!navigation.canGoBack()) return true;
+        return false;
       };
-
       const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => sub.remove();
     }, [navigation])
@@ -228,53 +219,60 @@ export default function WorkerHomeScreen({ navigation }) {
     return startTime ? `${label}, ${startTime}` : label;
   };
 
+  // ✅ REPLACED Alert.alert chain → set applyTarget to open in-app confirm modal
   const handleApply = (job) => {
-    if (!resolvedUid) { Alert.alert(tr.error, 'Please log in to apply'); return; }
-    const workerName  = userProfile?.name;
-    const workerPhone = userProfile?.phoneNumber || userProfile?.phone || '';
-    if (!workerName) {
-      Alert.alert(tr.profileIncomplete, tr.profileIncompleteMsg, [
-        { text: tr.cancel, style: 'cancel' },
-        { text: tr.goToProfile, onPress: () => navigation.navigate('WorkerProfile') },
-      ]);
+    if (!resolvedUid) {
+      toast.error(tr.error, 'Please log in to apply');
       return;
     }
-    Alert.alert(tr.applyTitle, `${tr.applyMsg}\n\n${job.title}`, [
-      { text: tr.cancel, style: 'cancel' },
-      {
-        text: tr.apply,
-        onPress: async () => {
-          setApplyingJobId(job.id);
-          try {
-            const applicationData = {
-              jobId: job.id, workerId: resolvedUid,
-              workerName: workerName || 'Worker', workerPhone: workerPhone || '',
-              workerEmail: userProfile?.email || user?.email || '',
-              employerId: job.employerId, jobTitle: job.title,
-              companyName: job.companyName || job.company || 'Company', status: 'pending',
-            };
-            const result = await createApplication(applicationData);
-            if (result.success) {
-              setAppliedLocally(prev => [...prev, job.id]);
-              Alert.alert(tr.success, tr.applySuccess);
-              createNotification(job.employerId, {
-                title: '📥 New Application Received',
-                message: `${workerName} has applied for your "${job.title}" position.`,
-                type: 'new_application', actionType: 'view_applications', actionId: job.id,
-              }).catch(() => {});
-              await loadApplications();
-            } else {
-              Alert.alert(tr.error, result.error || tr.applyError);
-            }
-          } catch (err) {
-            console.error('Apply error:', err);
-            Alert.alert(tr.error, err.message || tr.applyError);
-          } finally {
-            setApplyingJobId(null);
-          }
-        },
-      },
-    ]);
+    const workerName = userProfile?.name;
+    if (!workerName) {
+      // ✅ REPLACED Alert.alert → in-app warning toast + navigate on tap
+      toast.warning(tr.profileIncomplete, tr.profileIncompleteMsg);
+      setTimeout(() => navigation.navigate('WorkerProfile'), 1200);
+      return;
+    }
+    setApplyTarget(job); // opens the in-app confirm sheet
+  };
+
+  const confirmApply = async () => {
+    const job = applyTarget;
+    setApplyTarget(null);
+    if (!job) return;
+
+    setApplyingJobId(job.id);
+    const workerName  = userProfile?.name || 'Worker';
+    const workerPhone = userProfile?.phoneNumber || userProfile?.phone || '';
+
+    try {
+      const applicationData = {
+        jobId: job.id, workerId: resolvedUid,
+        workerName, workerPhone,
+        workerEmail: userProfile?.email || user?.email || '',
+        employerId: job.employerId, jobTitle: job.title,
+        companyName: job.companyName || job.company || 'Company', status: 'pending',
+      };
+      const result = await createApplication(applicationData);
+      if (result.success) {
+        setAppliedLocally(prev => [...prev, job.id]);
+        // ✅ REPLACED Alert.alert → in-app success toast
+        toast.success(tr.success, tr.applySuccess);
+        createNotification(job.employerId, {
+          title: '📥 New Application Received',
+          message: `${workerName} has applied for your "${job.title}" position.`,
+          type: 'new_application', actionType: 'view_applications', actionId: job.id,
+        }).catch(() => {});
+        await loadApplications();
+      } else {
+        // ✅ REPLACED Alert.alert → in-app error toast
+        toast.error(tr.error, result.error || tr.applyError);
+      }
+    } catch (err) {
+      console.error('Apply error:', err);
+      toast.error(tr.error, err.message || tr.applyError);
+    } finally {
+      setApplyingJobId(null);
+    }
   };
 
   const stats = [
@@ -292,7 +290,14 @@ export default function WorkerHomeScreen({ navigation }) {
     { emoji: '👤', title: tr.myProfile, sub: tr.editInfo, iconBg: '#f0fdf4',
       action: () => navigation.navigate('WorkerProfile') },
     { emoji: '🙋', title: tr.help, sub: tr.support, iconBg: '#fefce8',
-      action: () => { try { navigation.navigate('HelpSupport'); } catch { Alert.alert('Help', 'Contact us at support@udyogi.com'); } } },
+      action: () => {
+        try { navigation.navigate('HelpSupport'); }
+        catch {
+          // ✅ REPLACED Alert.alert → in-app info toast
+          toast.info('Help & Support', 'Contact: support@udyogi.com');
+        }
+      }
+    },
   ];
 
   const popularCities = [
@@ -366,7 +371,6 @@ export default function WorkerHomeScreen({ navigation }) {
               <Text style={s.locationFilterPillChevron}>▾</Text>
             </TouchableOpacity>
           </View>
-          {/* FIX: Real user name used for avatar initials */}
           <TouchableOpacity style={s.avatarWrap} onPress={() => navigation.navigate('WorkerProfile')}>
             <Image
               source={{ uri: userProfile?.photoURL || getDefaultAvatar(userProfile?.name) }}
@@ -580,6 +584,45 @@ export default function WorkerHomeScreen({ navigation }) {
           <Text style={s.fabText}>{tr.browseAllJobs}</Text>
         </View>
       </TouchableOpacity>
+
+      {/* ✅ NEW: In-app Apply Confirm Modal (replaces Alert.alert chain) */}
+      <Modal
+        visible={!!applyTarget}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setApplyTarget(null)}
+      >
+        <View style={s.confirmOverlay}>
+          <View style={s.confirmBox}>
+            {/* Drag handle */}
+            <View style={s.confirmHandle} />
+
+            <Text style={s.confirmEmoji}>{getJobEmoji(applyTarget?.title)}</Text>
+            <Text style={s.confirmTitle}>{tr.applyTitle}</Text>
+            <Text style={s.confirmJobName}>{applyTarget?.title}</Text>
+
+            <View style={s.confirmMeta}>
+              <View style={s.confirmMetaRow}>
+                <Text style={s.confirmMetaIcon}>📍</Text>
+                <Text style={s.confirmMetaText}>{applyTarget?.location}</Text>
+              </View>
+              <View style={s.confirmMetaRow}>
+                <Text style={s.confirmMetaIcon}>💰</Text>
+                <Text style={s.confirmMetaText}>₹{applyTarget?.rate}{tr.perHour}</Text>
+              </View>
+            </View>
+
+            <View style={s.confirmBtns}>
+              <TouchableOpacity style={s.confirmCancelBtn} onPress={() => setApplyTarget(null)}>
+                <Text style={s.confirmCancelText}>{tr.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.confirmApplyBtn} onPress={confirmApply}>
+                <Text style={s.confirmApplyText}>✋ {tr.apply}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Location Filter Modal */}
       <Modal visible={showLocationFilter} animationType="slide" transparent onRequestClose={() => setShowLocationFilter(false)}>
@@ -836,6 +879,24 @@ const s = StyleSheet.create({
   fab:           { position: 'absolute', alignSelf: 'center', left: 0, right: 0, alignItems: 'center', borderRadius: 30, shadowColor: '#1a56db', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 10 },
   fabGradient:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 28, paddingVertical: 15, backgroundColor: '#1a56db', borderRadius: 30 },
   fabText:       { fontSize: 15, fontWeight: '800', color: '#ffffff' },
+
+  // ✅ NEW: In-app apply confirm bottom sheet
+  confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  confirmBox: { backgroundColor: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 36, alignItems: 'center' },
+  confirmHandle: { width: 40, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, marginBottom: 20 },
+  confirmEmoji: { fontSize: 44, marginBottom: 10 },
+  confirmTitle: { fontSize: 20, fontWeight: '800', color: '#1e293b', marginBottom: 6 },
+  confirmJobName: { fontSize: 16, fontWeight: '600', color: '#1a56db', marginBottom: 16, textAlign: 'center' },
+  confirmMeta: { width: '100%', backgroundColor: '#f8fafc', borderRadius: 14, padding: 14, marginBottom: 24, gap: 8 },
+  confirmMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  confirmMetaIcon: { fontSize: 15, width: 20, textAlign: 'center' },
+  confirmMetaText: { fontSize: 14, color: '#475569', fontWeight: '500' },
+  confirmBtns: { flexDirection: 'row', gap: 12, width: '100%' },
+  confirmCancelBtn: { flex: 1, backgroundColor: '#f1f5f9', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  confirmCancelText: { fontSize: 15, fontWeight: '700', color: '#64748b' },
+  confirmApplyBtn: { flex: 2, backgroundColor: '#1a56db', borderRadius: 14, paddingVertical: 15, alignItems: 'center', shadowColor: '#1a56db', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 },
+  confirmApplyText: { fontSize: 15, fontWeight: '800', color: '#ffffff' },
+
   modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBox:      { backgroundColor: '#f0f4ff', borderTopLeftRadius: 26, borderTopRightRadius: 26, maxHeight: height * 0.88 },
   modalHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },

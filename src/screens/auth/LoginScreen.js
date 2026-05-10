@@ -1,4 +1,5 @@
 // src/screens/auth/LoginScreen.js
+// FIXED: All Alert.alert() replaced with in-app toast notifications (Swiggy/Zomato style)
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -6,7 +7,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   StatusBar,
   KeyboardAvoidingView,
@@ -25,6 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Animatable from 'react-native-animatable';
 import { getFirebaseDb } from '../../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { useToast } from '../../components/Toast'; // ← NEW
 
 const { width, height } = Dimensions.get('window');
 
@@ -53,6 +54,7 @@ export default function LoginScreen({ navigation, route }) {
   const { userType = 'worker' } = route.params || {};
   const { locale } = useLanguage();
   const { signInWithCustomToken, setUserProfile } = useAuth();
+  const toast = useToast(); // ← NEW
 
   const [email, setEmail]               = useState('');
   const [otp, setOtp]                   = useState('');
@@ -87,12 +89,14 @@ export default function LoginScreen({ navigation, route }) {
       contactSupport:      'Contact support',
       invalidEmailMessage: 'Please enter a valid email address',
       invalidOtpMessage:   'Please enter the 6-digit code',
-      otpSentTitle:        'Code sent!',
+      otpSentTitle:        'Code sent! 📨',
       otpSentMessage:      'Check your inbox for the verification code',
       enterOtp:            'Verification code',
       worker:              'Worker',
       employer:            'Employer',
       signingIn:           'Signing you in…',
+      helpTitle:           'Help',
+      helpBody:            'Email: udyogitechnology@gmail.com\nPhone: +91 9137-532-150',
     },
     hi: {
       title:               otpSent ? 'इनबॉक्स जांचें' : 'वापस स्वागत है',
@@ -110,12 +114,14 @@ export default function LoginScreen({ navigation, route }) {
       contactSupport:      'सहायता से संपर्क करें',
       invalidEmailMessage: 'कृपया वैध ईमेल पता दर्ज करें',
       invalidOtpMessage:   'कृपया 6-अंकीय कोड दर्ज करें',
-      otpSentTitle:        'कोड भेजा गया!',
+      otpSentTitle:        'कोड भेजा गया! 📨',
       otpSentMessage:      'सत्यापन कोड के लिए इनबॉक्स देखें',
       enterOtp:            'सत्यापन कोड',
       worker:              'मजदूर',
       employer:            'नियोक्ता',
       signingIn:           'साइन इन हो रहा है…',
+      helpTitle:           'मदद',
+      helpBody:            'ईमेल: udyogitechnology@gmail.com\nफोन: +91 9137-532-150',
     },
   }[locale] || {});
 
@@ -179,21 +185,26 @@ export default function LoginScreen({ navigation, route }) {
       if (result.success) {
         setOtpSent(true);
         startResendTimer();
-        setTimeout(() => Alert.alert(tr.otpSentTitle, tr.otpSentMessage), 300);
+        // ✅ REPLACED Alert.alert → in-app toast
+        toast.success(tr.otpSentTitle, tr.otpSentMessage);
         setOtp('');
         otpInputRefs.current.forEach(ref => ref?.clear());
       } else {
-        setErrorMessage(result.error || 'Failed to send verification code');
+        // ✅ REPLACED Alert.alert → inline error + toast
+        const msg = result.error || 'Failed to send verification code';
+        setErrorMessage(msg);
+        toast.error('Could not send code', msg);
       }
     } catch (error) {
-      setErrorMessage(error.message || 'Failed to send verification code');
+      const msg = error.message || 'Failed to send verification code';
+      setErrorMessage(msg);
+      toast.error('Error', msg);
     } finally {
       setLoading(false);
     }
   };
 
   const handleVerifyOTP = async (otpValue) => {
-    // Use passed otpValue or current state
     const currentOtp = otpValue !== undefined ? otpValue : otp;
     if (currentOtp.length !== 6) {
       setErrorMessage(tr.invalidOtpMessage);
@@ -232,39 +243,47 @@ export default function LoginScreen({ navigation, route }) {
             !profileData.profileComplete ||
             !profileData.name;
 
-          if (isProfileSetupNeeded) {
-            navigation.replace('ProfileSetup', {
-              userType: profileData.userType,
-              email:    profileData.email,
-            });
-          } else {
-            navigation.replace(
-              profileData.userType === 'worker' ? 'WorkerMain' : 'EmployerMain'
-            );
-          }
+          // ✅ Brief success toast before navigation — no blocking popup
+          toast.success('Welcome! 🎉', `Signed in as ${profileData.email}`);
+
+          setTimeout(() => {
+            if (isProfileSetupNeeded) {
+              navigation.replace('ProfileSetup', {
+                userType: profileData.userType,
+                email:    profileData.email,
+              });
+            } else {
+              navigation.replace(
+                profileData.userType === 'worker' ? 'WorkerMain' : 'EmployerMain'
+              );
+            }
+          }, 800);
         } else {
-          setErrorMessage('Failed to sign in');
+          const msg = 'Failed to sign in. Please try again.';
+          setErrorMessage(msg);
+          toast.error('Sign In Failed', msg);
         }
       } else {
-        setErrorMessage(result.error || 'Verification failed');
+        const msg = result.error || 'Verification failed. Check the code and retry.';
+        setErrorMessage(msg);
+        toast.error('Invalid Code', msg);
       }
     } catch (error) {
-      setErrorMessage(error.message || 'Verification failed');
+      const msg = error.message || 'Verification failed';
+      setErrorMessage(msg);
+      toast.error('Error', msg);
     } finally {
       setLoading(false);
     }
   };
 
   const handleOtpChange = (text, index) => {
-    // Clear any previous error when user starts typing
     setErrorMessage('');
-
     const arr = otp.split('');
     arr[index] = text;
     const next = arr.join('');
     setOtp(next);
     if (text && index < 5) otpInputRefs.current[index + 1]?.focus();
-    // Auto-submit only when all 6 are filled
     if (next.length === 6 && index === 5) {
       setTimeout(() => handleVerifyOTP(next), 300);
     }
@@ -277,8 +296,6 @@ export default function LoginScreen({ navigation, route }) {
   };
 
   // ── Render helpers ─────────────────────────────────────────────────────────
-  // FIX: Role badge is now rendered OUTSIDE the card (below the header),
-  // so it floats between the header and card without being clipped by overflow:hidden.
   const renderRoleBadge = () => (
     <View style={styles.roleBadgeWrapper}>
       <View style={styles.roleBadge}>
@@ -370,8 +387,6 @@ export default function LoginScreen({ navigation, route }) {
             style={[
               styles.otpBox,
               otp[i] && styles.otpBoxFilled,
-              // FIX: Only show error border if there's an error AND otp is incomplete
-              // Do NOT show red border just because all 6 are filled
               !!errorMessage && otp.length < 6 && styles.otpBoxError,
             ]}
             value={otp[i] || ''}
@@ -439,7 +454,6 @@ export default function LoginScreen({ navigation, route }) {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.brandDark} />
 
-      {/* FIX: Removed overflow:'hidden' from header so the badge doesn't get clipped */}
       <GradientView
         colors={[C.brandDark, C.brand]}
         style={[styles.header, keyboardVisible && styles.headerCollapsed]}
@@ -474,7 +488,6 @@ export default function LoginScreen({ navigation, route }) {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-          {/* FIX: Role badge is now OUTSIDE the card, rendered between header and card */}
           {renderRoleBadge()}
 
           <Animated.View
@@ -501,9 +514,10 @@ export default function LoginScreen({ navigation, route }) {
               style={styles.helpRow}
               activeOpacity={0.7}
               onPress={() =>
-                Alert.alert(
-                  locale === 'hi' ? 'मदद' : 'Help',
-                  'Email: udyogitechnology@gmail.com\nPhone: +91 9137-532-150'
+                // ✅ REPLACED Alert.alert → in-app info toast
+                toast.info(
+                  locale === 'hi' ? 'मदद' : 'Need Help?',
+                  'udyogitechnology@gmail.com  •  +91 9137-532-150'
                 )
               }
             >
@@ -528,7 +542,6 @@ const styles = StyleSheet.create({
     height: height * 0.28,
     paddingTop: Platform.OS === 'ios' ? 54 : 36,
     paddingHorizontal: 28,
-    // FIX: Removed overflow: 'hidden' — it was cutting off the role badge
     position: 'relative',
   },
   headerCollapsed: { height: height * 0.15 },
@@ -556,10 +569,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)', top: 20, left: width * 0.3,
   },
 
-  // ── Role Badge (now outside card, floats between header and card) ──────────
+  // ── Role Badge ──────────────────────────────────────────────────────────────
   roleBadgeWrapper: {
     alignItems: 'center',
-    marginTop: 5,   // Pulls it up over the header bottom edge
+    marginTop: 5,
     marginBottom: 0,
     zIndex: 20,
   },
@@ -590,7 +603,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     borderRadius: 28,
     padding: 26,
-    marginTop: 12,   // Space after the floating badge
+    marginTop: 12,
     shadowColor: C.shadow,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 1,
@@ -750,7 +763,6 @@ const styles = StyleSheet.create({
     backgroundColor: C.brandLight,
     color: C.brand,
   },
-  // FIX: error border only applies when there's an error and digits are incomplete
   otpBoxError: {
     borderColor: C.error,
     backgroundColor: C.errorBg,
